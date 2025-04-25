@@ -1,0 +1,17 @@
+{
+  "tokens": [
+    {
+      "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
+      "symbol": "MUV",
+      "decimals": 18,
+      "minBalance": 100
+    }
+  ],
+  "nfts": [
+    {
+      "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0",
+      "name": "Mu Pups",
+      "minBalance": 1
+    }
+  ]
+}

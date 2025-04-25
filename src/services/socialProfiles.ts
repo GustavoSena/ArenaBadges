@@ -1,0 +1,85 @@
+import * as fs from 'fs';
+import { ArenabookUserResponse, TwitterHandlesOutput } from '../types/interfaces';
+import { fetchArenabookSocial } from '../api/arenabook';
+import { sleep, saveToJsonFile } from '../utils/helpers';
+
+/**
+ * Process holders and fetch their social profiles
+ */
+export async function processHoldersWithSocials<T extends { address: string }>(
+  holders: T[],
+  outputPath: string,
+  processingName: string,
+  transformFn: (holder: T, social: ArenabookUserResponse | null) => any
+): Promise<Map<string, string | null>> {
+  console.log(`\nProcessing ${processingName}...`);
+  
+  const holdersWithSocials: any[] = [];
+  let socialCount = 0;
+  const addressToTwitterHandle = new Map<string, string | null>();
+  const batchSize = 10;
+  
+  for (let i = 0; i < holders.length; i += batchSize) {
+    const batch = holders.slice(i, i + batchSize);
+    const promises = batch.map(async (holder) => {
+      console.log(`\n[${i + batch.indexOf(holder) + 1}/${holders.length}] Checking social profile for ${holder.address}...`);
+      
+      // Check if we already have this address's social profile
+      let social: ArenabookUserResponse | null = null;
+      
+      if (addressToTwitterHandle.has(holder.address.toLowerCase())) {
+        const twitterHandle = addressToTwitterHandle.get(holder.address.toLowerCase());
+        if (twitterHandle) {
+          social = { twitter_handle: twitterHandle, twitter_username: null };
+          console.log(`Using cached Twitter handle: ${twitterHandle}`);
+        } else {
+          console.log(`Using cached result: No social profile found`);
+        }
+      } else {
+        social = await fetchArenabookSocial(holder.address);
+        
+        if (social) {
+          socialCount++;
+          console.log(`Found Twitter handle: ${social.twitter_handle || 'None'}`);
+        } else {
+          console.log(`No social profile found`);
+        }
+        
+        // Cache the result
+        addressToTwitterHandle.set(holder.address.toLowerCase(), social?.twitter_handle || null);
+      }
+      
+      const holderWithSocial = transformFn(holder, social);
+      return holderWithSocial;
+    });
+    
+    const batchResults = await Promise.all(promises);
+    holdersWithSocials.push(...batchResults);
+    
+    // Save intermediate results every batch
+    const holdersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
+    const twitterHandles = holdersWithTwitter.map(h => h.twitter_handle);
+    const outputData: TwitterHandlesOutput = { handles: twitterHandles };
+    saveToJsonFile(outputPath, outputData);
+    console.log(`Saved intermediate results after ${i + batchSize} addresses (${holdersWithTwitter.length} with Twitter handles)`);
+    
+    // Delay before next batch
+    if (i + batchSize < holders.length) {
+      await sleep(500);
+    }
+  }
+  
+  // Final processing
+  const finalHoldersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
+  const finalTwitterHandles = finalHoldersWithTwitter.map(h => h.twitter_handle);
+  const finalOutputData: TwitterHandlesOutput = { handles: finalTwitterHandles };
+  saveToJsonFile(outputPath, finalOutputData);
+  
+  // Log statistics
+  console.log(`\nFinal statistics for ${processingName}:`);
+  console.log(`Total holders processed: ${holders.length}`);
+  console.log(`Holders with social profiles: ${socialCount}`);
+  console.log(`Holders with Twitter handles: ${finalHoldersWithTwitter.length}`);
+  
+  return addressToTwitterHandle;
+}
