@@ -3,16 +3,18 @@ import { TokenHolder, NftHolder, ArenabookUserResponse, HolderWithSocial, NftHol
 import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
 import { fetchNftHoldersFromEthers } from '../api/blockchain';
 import { processHoldersWithSocials } from './socialProfiles';
-import { loadConfig, ensureOutputDirectory, saveToJsonFile } from '../utils/helpers';
+import { loadConfig } from '../utils/helpers';
 
-// File paths
-const NFT_HOLDERS_PATH = path.join(__dirname, '../../files/nft_holders.json');
-const COMBINED_HOLDERS_PATH = path.join(__dirname, '../../files/combined_holders.json');
+export interface HolderResults {
+  nftHolders: string[];
+  combinedHolders: string[];
+}
 
 /**
  * Main function to fetch token holders and their social profiles
+ * Returns the Twitter handles for both NFT-only holders and combined holders
  */
-export async function fetchTokenHolderProfiles(): Promise<void> {
+export async function fetchTokenHolderProfiles(): Promise<HolderResults> {
   try {
     // Load configuration
     const config = loadConfig();
@@ -24,10 +26,6 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     console.log('Starting to fetch token holders and their social profiles...');
     console.log(`Token address to check: ${tokenConfig.symbol} (${tokenConfig.address}) (min balance: ${tokenConfig.minBalance})`);
     console.log(`NFT to check: ${nftConfig.name} (${nftConfig.address}) (min balance: ${nftConfig.minBalance})`);
-    
-    // Create output directory if it doesn't exist
-    const outputDir = path.dirname(NFT_HOLDERS_PATH);
-    ensureOutputDirectory(outputDir);
     
     // Fetch token holders
     console.log('\nFetching token holders...');
@@ -65,7 +63,7 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     
     const combinedAddressToTwitter = await processHoldersWithSocials<NftHolder>(
       combinedNftHolders,
-      COMBINED_HOLDERS_PATH,
+      '', // No need to specify path as we're not saving directly
       'combined holders',
       (holder, social) => ({
         ...holder,
@@ -77,10 +75,7 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     const combinedHandles = Array.from(combinedAddressToTwitter.values())
       .filter(handle => handle !== null && handle !== undefined) as string[];
     
-    // Save combined results
-    const combinedOutputData = { handles: combinedHandles };
-    saveToJsonFile(COMBINED_HOLDERS_PATH, combinedOutputData);
-    console.log(`\nSaved ${combinedHandles.length} Twitter handles of holders with both tokens and NFTs`);
+    console.log(`\nFound ${combinedHandles.length} Twitter handles of holders with both tokens and NFTs`);
     
     // Filter NFT holders to exclude those in the combined list
     console.log('\nProcessing exclusive NFT holders (NFT only)...');
@@ -92,7 +87,7 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     // Process exclusive NFT holders
     const nftAddressToTwitter = await processHoldersWithSocials<NftHolder>(
       exclusiveNftHolders,
-      NFT_HOLDERS_PATH,
+      '', // No need to specify path as we're not saving directly
       'exclusive NFT holders',
       (holder, social) => ({
         ...holder,
@@ -104,12 +99,16 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     const nftHandles = Array.from(nftAddressToTwitter.values())
       .filter(handle => handle !== null && handle !== undefined) as string[];
     
-    // Save NFT results
-    const nftOutputData = { handles: nftHandles };
-    saveToJsonFile(NFT_HOLDERS_PATH, nftOutputData);
-    console.log(`\nSaved ${nftHandles.length} Twitter handles of exclusive NFT holders`);
+    console.log(`\nFound ${nftHandles.length} Twitter handles of exclusive NFT holders`);
+    
+    // Return the results
+    return {
+      nftHolders: nftHandles,
+      combinedHolders: combinedHandles
+    };
     
   } catch (error) {
     console.error('Error in fetchTokenHolderProfiles:', error);
+    throw error; // Re-throw to allow caller to handle
   }
 }

@@ -15,10 +15,10 @@ async function runAndSendResults(apiKey: string | undefined): Promise<void> {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
     // Run the main process to fetch token holder profiles
-    await fetchTokenHolderProfiles();
+    const results = await fetchTokenHolderProfiles();
     
     // Send the results to the API
-    await sendResultsToApi(apiKey);
+    await sendResultsToApi(apiKey, results);
     
     console.log(`Completed scheduled run at ${new Date().toISOString()}`);
   } catch (error) {

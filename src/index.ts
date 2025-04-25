@@ -1,16 +1,27 @@
-// Entry point file that ensures the output directory exists before running the main script
-import * as fs from 'fs';
-import * as path from 'path';
-import { fetchTokenHolderProfiles } from './services/holderService';
+// Entry point for the MuBadges application
+import * as dotenv from 'dotenv';
+import { fetchAndSaveHolderProfiles } from './holderProfileManager';
+import { startScheduler } from './services/schedulerService';
 
-// Ensure output directory exists
-const outputDir = path.join(__dirname, '../files');
-if (!fs.existsSync(outputDir)) {
-  console.log(`Creating output directory: ${outputDir}`);
-  fs.mkdirSync(outputDir, { recursive: true });
+// Load environment variables
+dotenv.config();
+
+/**
+ * Main entry point for the application
+ * Starts the scheduler to periodically fetch and send holder profiles
+ */
+function main(): void {
+  try {
+    // Start the scheduler with default configuration
+    startScheduler();
+    console.log('MuBadges application started successfully');
+  } catch (error) {
+    console.error('Failed to start MuBadges application:', error);
+    process.exit(1);
+  }
 }
 
 // Run the main function only if this file is executed directly
 if (typeof require !== 'undefined' && require.main === module) {
-  fetchTokenHolderProfiles().catch(console.error);
+  main();
 }

@@ -2,13 +2,14 @@
   "name": "mubadges",
   "version": "1.0.0",
   "description": "Mu badges project",
-  "main": "dist/fetchTokenHolderProfiles.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
-    "scheduler": "ts-node src/scheduler.ts",
+    "scheduler": "ts-node src/index.ts",
     "send-results": "ts-node src/sendResults.ts",
+    "fetch-profiles": "ts-node src/holderProfileManager.ts",
     "test": "jest"
   },
   "author": "",

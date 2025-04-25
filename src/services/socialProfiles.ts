@@ -1,14 +1,13 @@
-import * as fs from 'fs';
-import { ArenabookUserResponse, TwitterHandlesOutput } from '../types/interfaces';
+import { ArenabookUserResponse } from '../types/interfaces';
 import { fetchArenabookSocial } from '../api/arenabook';
-import { sleep, saveToJsonFile } from '../utils/helpers';
+import { sleep } from '../utils/helpers';
 
 /**
  * Process holders and fetch their social profiles
  */
 export async function processHoldersWithSocials<T extends { address: string }>(
   holders: T[],
-  outputPath: string,
+  outputPath: string, // Kept for backward compatibility but not used for saving
   processingName: string,
   transformFn: (holder: T, social: ArenabookUserResponse | null) => any
 ): Promise<Map<string, string | null>> {
@@ -56,12 +55,9 @@ export async function processHoldersWithSocials<T extends { address: string }>(
     const batchResults = await Promise.all(promises);
     holdersWithSocials.push(...batchResults);
     
-    // Save intermediate results every batch
+    // Log progress
     const holdersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
-    const twitterHandles = holdersWithTwitter.map(h => h.twitter_handle);
-    const outputData: TwitterHandlesOutput = { handles: twitterHandles };
-    saveToJsonFile(outputPath, outputData);
-    console.log(`Saved intermediate results after ${i + batchSize} addresses (${holdersWithTwitter.length} with Twitter handles)`);
+    console.log(`Processed ${i + Math.min(batchSize, holders.length - i)} of ${holders.length} addresses (${holdersWithTwitter.length} with Twitter handles)`);
     
     // Delay before next batch
     if (i + batchSize < holders.length) {
@@ -71,9 +67,6 @@ export async function processHoldersWithSocials<T extends { address: string }>(
   
   // Final processing
   const finalHoldersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
-  const finalTwitterHandles = finalHoldersWithTwitter.map(h => h.twitter_handle);
-  const finalOutputData: TwitterHandlesOutput = { handles: finalTwitterHandles };
-  saveToJsonFile(outputPath, finalOutputData);
   
   // Log statistics
   console.log(`\nFinal statistics for ${processingName}:`);

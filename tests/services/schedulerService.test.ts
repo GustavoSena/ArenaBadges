@@ -1,5 +1,5 @@
 import { startScheduler } from '../../src/services/schedulerService';
-import { fetchTokenHolderProfiles } from '../../src/services/holderService';
+import { fetchTokenHolderProfiles, HolderResults } from '../../src/services/holderService';
 import { sendResultsToApi } from '../../src/services/apiService';
 
 // Mock the modules
@@ -18,13 +18,17 @@ describe('schedulerService', () => {
     tier1Response: { success: true },
     tier2Response: { success: true }
   };
+  const mockHolderResults: HolderResults = {
+    nftHolders: ['user1', 'user2', 'user3'],
+    combinedHolders: ['user4', 'user5']
+  };
   
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
     
     // Mock the functions
-    mockedFetchTokenHolderProfiles.mockResolvedValue(undefined);
+    mockedFetchTokenHolderProfiles.mockResolvedValue(mockHolderResults);
     mockedSendResultsToApi.mockResolvedValue(mockApiResponse);
     
     // Mock setInterval to not actually call the callback to avoid duplicate calls
@@ -58,7 +62,7 @@ describe('schedulerService', () => {
     
     // Verify sendResultsToApi was called with the correct arguments
     expect(mockedSendResultsToApi).toHaveBeenCalledTimes(1);
-    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey);
+    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey, mockHolderResults);
     
     // Verify setInterval was called with the correct interval
     expect(global.setInterval).toHaveBeenCalledWith(expect.any(Function), mockIntervalMs);
@@ -89,7 +93,7 @@ describe('schedulerService', () => {
     await new Promise(process.nextTick);
     
     // Verify sendResultsToApi was called with the correct arguments from env
-    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey);
+    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey, mockHolderResults);
     
     // Restore process.env
     process.env = originalEnv;
