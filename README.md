@@ -10,17 +10,20 @@ A TypeScript application that fetches MUV token holders and Mu Pups NFT holders,
 - Fetches Mu Pups NFT holders using ethers.js with Alchemy provider (minimum 1 NFT)
 - Retrieves Twitter handles from Arenabook API
 - Outputs two separate JSON files with Twitter handles
+- Runs on a configurable schedule
+- Only sends updates to the Arena Social Badges API if there are changes since the last run
+- Modular architecture with separation of concerns
 
 ## Configuration
 
-The application uses a configuration file (`config/tokens.json`) to configure tokens and NFTs. This makes it easy to change parameters without modifying the code.
+The application uses a configuration file (`config/tokens.json`) to configure tokens, NFTs, scheduler settings, and API endpoints. This makes it easy to change parameters without modifying the code.
 
 Example configuration:
 ```json
 {
   "tokens": [
     {
-      "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
+      "address": "0x8c1BEd5b9a0928467c9B1341Da1D7BD5e10b6549",
       "symbol": "MUV",
       "decimals": 18,
       "minBalance": 100
@@ -32,7 +35,17 @@ Example configuration:
       "name": "Mu Pups",
       "minBalance": 1
     }
-  ]
+  ],
+  "scheduler": {
+    "intervalHours": 6
+  },
+  "api": {
+    "baseUrl": "http://api.arena.social/badges",
+    "endpoints": {
+      "nftOnly": "mu-tier-1",
+      "combined": "mu-tier-2"
+    }
+  }
 }
 ```
 
@@ -42,10 +55,15 @@ Example configuration:
 - npm or yarn
 - Snowtrace API key (for token holder data)
 - Alchemy API key (for NFT holder data)
+- Arena Social Badges API key (for sending badge updates)
 
 ## Installation
 
 1. Clone the repository
+   ```
+   git clone https://github.com/GustavoSena/ArenaBadges.git
+   cd ArenaBadges
+   ```
 2. Install dependencies:
    ```
    npm install
@@ -54,24 +72,49 @@ Example configuration:
    ```
    SNOWTRACE_API_KEY=your_snowtrace_api_key_here
    ALCHEMY_API_KEY=your_alchemy_api_key_here
+   API_KEY=your_arena_social_badges_api_key_here
    ```
-4. Customize the `config.json` file if needed
+4. Customize the `config/tokens.json` file if needed
 
 ## Usage
 
-Run the application:
+### Run the Application with Scheduler
+
+Run the application with the scheduler to automatically fetch and update badge data at the configured interval:
 
 ```
 npm start
 ```
 
-This will:
-1. Fetch MUV token holders with at least 100 MUV tokens
-2. Fetch Mu Pups NFT holders with at least 1 NFT
-3. Retrieve Twitter handles for all holders
-4. Output two JSON files in the `files` directory:
-   - `nft_holders.json`: Twitter handles of NFT holders
-   - `combined_holders.json`: Twitter handles of wallets holding both MUV tokens and NFTs
+### Fetch Profiles Only
+
+To only fetch holder profiles and save them to files without sending to the API:
+
+```
+npm run fetch-profiles
+```
+
+### Send Results to API
+
+To fetch profiles and send them to the API (only if changed since last run):
+
+```
+npm run send-results
+```
+
+## Project Structure
+
+- `src/index.ts`: Main entry point that starts the scheduler
+- `src/holderProfileManager.ts`: Manages fetching and saving holder profiles
+- `src/sendResults.ts`: Script for sending results to the API
+- `src/services/`: Core services for the application
+  - `holderService.ts`: Fetches token and NFT holders
+  - `socialProfiles.ts`: Processes holders and fetches their social profiles
+  - `apiService.ts`: Handles API communication
+  - `schedulerService.ts`: Manages the scheduling of data collection and API updates
+- `src/utils/`: Utility functions
+- `config/`: Configuration files
+- `files/`: Output directory for JSON files
 
 ## Output Format
 
@@ -95,4 +138,10 @@ For development with automatic restarts:
 npm run dev
 ```
 
-The project uses ts-node directly for both start and dev scripts, eliminating the need for a separate build step before running.
+Run tests:
+
+```
+npm test
+```
+
+The project uses ts-node directly for all scripts, eliminating the need for a separate build step before running.
