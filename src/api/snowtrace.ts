@@ -6,13 +6,6 @@ import { sleep, formatTokenBalance } from '../utils/helpers';
 // Load environment variables
 dotenv.config();
 
-// Get API key from .env
-const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY;
-
-if (!SNOWTRACE_API_KEY) {
-  console.warn('SNOWTRACE_API_KEY not found in .env file. Will use API without key (rate limited).');
-}
-
 /**
  * Fetch token holders using Snowtrace API
  */
@@ -34,8 +27,8 @@ export async function fetchTokenHoldersFromSnowtrace(
       console.log(`Fetching page ${page} of token holders...`);
       
       // Construct the Snowtrace API URL
-      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${SNOWTRACE_API_KEY ? `&apikey=${SNOWTRACE_API_KEY}` : ''}`;
-      
+      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}`;
+
       try {
         const response = await axios.get(apiUrl);
         

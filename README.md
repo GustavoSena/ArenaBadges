@@ -23,7 +23,7 @@ Example configuration:
 {
   "tokens": [
     {
-      "address": "0x8c1BEd5b9a0928467c9B1341Da1D7BD5e10b6549",
+      "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
       "symbol": "MUV",
       "decimals": 18,
       "minBalance": 100
@@ -53,7 +53,6 @@ Example configuration:
 
 - Node.js (v14 or higher)
 - npm or yarn
-- Snowtrace API key (for token holder data)
 - Alchemy API key (for NFT holder data)
 - Arena Social Badges API key (for sending badge updates)
 
@@ -70,7 +69,6 @@ Example configuration:
    ```
 3. Create a `.env` file in the root directory with your API keys:
    ```
-   SNOWTRACE_API_KEY=your_snowtrace_api_key_here
    ALCHEMY_API_KEY=your_alchemy_api_key_here
    API_KEY=your_arena_social_badges_api_key_here
    ```
