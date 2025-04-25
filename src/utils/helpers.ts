@@ -1,7 +1,33 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ethers } from 'ethers';
-import { AppConfig } from '../types/interfaces';
+
+/**
+ * Application configuration interface
+ */
+export interface AppConfig {
+  tokens: {
+    symbol: string;
+    address: string;
+    minBalance: number;
+    decimals: number;
+  }[];
+  nfts: {
+    name: string;
+    address: string;
+    minBalance: number;
+  }[];
+  scheduler: {
+    intervalHours: number;
+  };
+  api: {
+    baseUrl: string;
+    endpoints: {
+      nftOnly: string;
+      combined: string;
+    };
+  };
+}
 
 /**
  * Sleep function to introduce delay between API requests
@@ -20,7 +46,7 @@ export function formatTokenBalance(balance: string, decimals: number): number {
  */
 export function loadConfig(): AppConfig {
   const configPath = path.join(__dirname, '../../config/tokens.json');
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as AppConfig;
 }
 
 /**
