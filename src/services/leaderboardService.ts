@@ -4,9 +4,9 @@ import { TokenHolder, NftHolder, ArenabookUserResponse } from '../types/interfac
 import { LeaderboardConfig, HolderPoints, LeaderboardEntry, Leaderboard } from '../types/leaderboard';
 import { loadConfig } from '../utils/helpers';
 import { fetchNftHoldersFromEthers } from '../api/blockchain';
+import { fetchTokenBalancesWithMoralis } from '../api/moralis';
 import { processHoldersWithSocials, SocialProfileInfo } from './socialProfiles';
 import { saveLeaderboardHtml } from '../utils/htmlGenerator';
-import { ethers } from 'ethers';
 import * as dotenv from 'dotenv';
 import { formatTokenBalance, sleep } from '../utils/helpers';
 
@@ -14,24 +14,11 @@ import { formatTokenBalance, sleep } from '../utils/helpers';
 dotenv.config();
 
 // Get API key from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching token balances.');
+if (!MORALIS_API_KEY) {
+  console.warn('MORALIS_API_KEY not found in .env file. Required for fetching token balances.');
 }
-
-// Avalanche RPC URL using Alchemy API key
-const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-
-// Setup ethers provider for Avalanche
-const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
-
-// ERC-20 ABI (minimal for balanceOf function)
-const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)"
-];
 
 /**
  * Load the leaderboard configuration
@@ -45,110 +32,6 @@ export function loadLeaderboardConfig(): LeaderboardConfig {
     console.error('Error loading leaderboard config:', error);
     throw new Error('Failed to load leaderboard configuration');
   }
-}
-
-/**
- * Fetch token balance for a specific address using Alchemy
- */
-async function fetchTokenBalanceWithAlchemy(
-  tokenAddress: string,
-  holderAddress: string,
-  tokenDecimals: number
-): Promise<number> {
-  try {
-    // Create contract instance
-    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-    
-    // Get balance
-    const balance = await tokenContract.balanceOf(holderAddress);
-    
-    // Convert to formatted balance
-    return Number(ethers.formatUnits(balance, tokenDecimals));
-  } catch (error) {
-    console.error(`Error fetching token balance for address ${holderAddress}:`, error);
-    return 0;
-  }
-}
-
-/**
- * Fetch token balances for multiple addresses using Alchemy
- */
-async function fetchTokenBalancesWithAlchemy(
-  tokenAddress: string,
-  tokenSymbol: string,
-  holderAddresses: string[],
-  tokenDecimals: number
-): Promise<TokenHolder[]> {
-  const holders: TokenHolder[] = [];
-  let processedCount = 0;
-  
-  console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using Alchemy...`);
-  
-  // Process in batches to avoid rate limiting
-  const batchSize = 10;
-  for (let i = 0; i < holderAddresses.length; i += batchSize) {
-    const batch = holderAddresses.slice(i, i + batchSize);
-    const batchPromises = batch.map(async (address) => {
-      // Add retry mechanism
-      const MAX_RETRIES = 3;
-      let retryCount = 0;
-      
-      while (retryCount <= MAX_RETRIES) {
-        try {
-          const balanceFormatted = await fetchTokenBalanceWithAlchemy(tokenAddress, address, tokenDecimals);
-          
-          return {
-            address,
-            balance: ethers.parseUnits(balanceFormatted.toString(), tokenDecimals).toString(),
-            balanceFormatted,
-            tokenSymbol
-          };
-        } catch (error) {
-          retryCount++;
-          if (retryCount <= MAX_RETRIES) {
-            console.log(`Error fetching balance for ${address}. Retry ${retryCount}/${MAX_RETRIES}...`);
-            // Add a small delay before retrying
-            await sleep(500);
-          } else {
-            console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
-            return {
-              address,
-              balance: "0",
-              balanceFormatted: 0,
-              tokenSymbol
-            };
-          }
-        }
-      }
-      
-      // This should never be reached but TypeScript needs it
-      return {
-        address,
-        balance: "0",
-        balanceFormatted: 0,
-        tokenSymbol
-      };
-    });
-    
-    const batchResults = await Promise.all(batchPromises);
-    holders.push(...batchResults);
-    
-    processedCount += batch.length;
-    if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
-      console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
-    }
-    
-    // Add delay between batches to avoid rate limiting
-    if (i + batchSize < holderAddresses.length) {
-      await sleep(500);
-    }
-  }
-  
-  // Count non-zero balances for logging
-  const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
-  console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
-  
-  return holders;
 }
 
 /**
@@ -243,8 +126,8 @@ export async function calculateHolderPoints(): Promise<HolderPoints[]> {
     for (const tokenWeight of leaderboardConfig.weights.tokens) {
       console.log(`\nFetching ${tokenWeight.symbol} balances for NFT holders with social profiles...`);
       
-      // Fetch token balances only for NFT holders with social profiles using Alchemy
-      const tokenHolders = await fetchTokenBalancesWithAlchemy(
+      // Fetch token balances only for NFT holders with social profiles using Moralis API
+      const tokenHolders = await fetchTokenBalancesWithMoralis(
         tokenWeight.address,
         tokenWeight.symbol,
         holderAddresses,
