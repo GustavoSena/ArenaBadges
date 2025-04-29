@@ -12,7 +12,7 @@ dotenv.config();
 export async function fetchTokenHoldersFromSnowtrace(
   tokenAddress: string, 
   tokenSymbol: string,
-  minBalance: number,
+  minBalance: number = 0,
   tokenDecimals: number
 ): Promise<TokenHolder[]> {
   try {
@@ -34,6 +34,7 @@ export async function fetchTokenHoldersFromSnowtrace(
         
         if (response.data.status === '1' && response.data.result && response.data.result.length > 0) {
           const holdersData = response.data.result;
+          let belowMinimumBalanceFound = false;
           
           // Process each holder
           for (const holderData of holdersData) {
@@ -41,7 +42,7 @@ export async function fetchTokenHoldersFromSnowtrace(
             const balance = holderData.TokenHolderQuantity;
             const balanceFormatted = formatTokenBalance(balance, tokenDecimals);
             
-            // Only include holders with balance > MIN_TOKEN_BALANCE
+            // Only include holders with balance >= minBalance
             if (balanceFormatted >= minBalance) {
               holders.push({
                 address,
@@ -49,12 +50,20 @@ export async function fetchTokenHoldersFromSnowtrace(
                 balanceFormatted,
                 tokenSymbol
               });
+            } else {
+              // Since results are ordered by balance, once we find one holder below
+              // the minimum, we can stop processing
+              belowMinimumBalanceFound = true;
+              break;
             }
           }
           
           // Check if we should fetch more pages
-          if (holdersData.length < pageSize) {
+          if (holdersData.length < pageSize || belowMinimumBalanceFound) {
             hasMorePages = false;
+            if (belowMinimumBalanceFound) {
+              console.log(`Stopped fetching at page ${page} - found holder below minimum balance of ${minBalance} ${tokenSymbol}`);
+            }
           } else {
             page++;
             // Add delay between pages to avoid rate limiting
@@ -69,10 +78,10 @@ export async function fetchTokenHoldersFromSnowtrace(
       }
     }
     
-    // Sort holders by balance (descending)
+    // Sort holders by balance (descending) - though they should already be sorted
     holders.sort((a, b) => b.balanceFormatted - a.balanceFormatted);
     
-    console.log(`Found ${holders.length} holders with balance > ${minBalance} ${tokenSymbol}`);
+    console.log(`Found ${holders.length} holders with balance >= ${minBalance} ${tokenSymbol}`);
     return holders;
   } catch (error) {
     console.error(`Error fetching token holders for ${tokenAddress}:`, error);

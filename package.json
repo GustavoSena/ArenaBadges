@@ -10,11 +10,14 @@
     "scheduler": "ts-node src/index.ts",
     "send-results": "ts-node src/sendResults.ts",
     "fetch-profiles": "ts-node src/holderProfileManager.ts",
-    "test": "jest"
+    "leaderboard": "ts-node src/generateLeaderboard.ts",
+    "test": "jest",
+    "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "alchemy-sdk": "^3.5.8",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "ethers": "^6.9.0"

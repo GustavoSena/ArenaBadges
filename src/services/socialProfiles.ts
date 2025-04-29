@@ -3,6 +3,14 @@ import { fetchArenabookSocial } from '../api/arenabook';
 import { sleep } from '../utils/helpers';
 
 /**
+ * Social profile information returned by processHoldersWithSocials
+ */
+export interface SocialProfileInfo {
+  twitter_handle: string | null;
+  twitter_pfp_url: string | null;
+}
+
+/**
  * Process holders and fetch their social profiles
  */
 export async function processHoldersWithSocials<T extends { address: string }>(
@@ -10,12 +18,12 @@ export async function processHoldersWithSocials<T extends { address: string }>(
   outputPath: string, // Kept for backward compatibility but not used for saving
   processingName: string,
   transformFn: (holder: T, social: ArenabookUserResponse | null) => any
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, SocialProfileInfo>> {
   console.log(`\nProcessing ${processingName}...`);
   
   const holdersWithSocials: any[] = [];
   let socialCount = 0;
-  const addressToTwitterHandle = new Map<string, string | null>();
+  const addressToSocialInfo = new Map<string, SocialProfileInfo>();
   const batchSize = 10;
   
   for (let i = 0; i < holders.length; i += batchSize) {
@@ -26,11 +34,15 @@ export async function processHoldersWithSocials<T extends { address: string }>(
       // Check if we already have this address's social profile
       let social: ArenabookUserResponse | null = null;
       
-      if (addressToTwitterHandle.has(holder.address.toLowerCase())) {
-        const twitterHandle = addressToTwitterHandle.get(holder.address.toLowerCase());
-        if (twitterHandle) {
-          social = { twitter_handle: twitterHandle, twitter_username: null };
-          console.log(`Using cached Twitter handle: ${twitterHandle}`);
+      if (addressToSocialInfo.has(holder.address.toLowerCase())) {
+        const socialInfo = addressToSocialInfo.get(holder.address.toLowerCase());
+        if (socialInfo?.twitter_handle) {
+          social = { 
+            twitter_handle: socialInfo.twitter_handle, 
+            twitter_username: null,
+            twitter_pfp_url: socialInfo.twitter_pfp_url
+          };
+          console.log(`Using cached Twitter handle: ${socialInfo.twitter_handle}`);
         } else {
           console.log(`Using cached result: No social profile found`);
         }
@@ -40,12 +52,21 @@ export async function processHoldersWithSocials<T extends { address: string }>(
         if (social) {
           socialCount++;
           console.log(`Found Twitter handle: ${social.twitter_handle || 'None'}`);
+          
+          // Cache the result
+          addressToSocialInfo.set(holder.address.toLowerCase(), {
+            twitter_handle: social.twitter_handle,
+            twitter_pfp_url: social.twitter_pfp_url
+          });
         } else {
           console.log(`No social profile found`);
+          
+          // Cache the empty result
+          addressToSocialInfo.set(holder.address.toLowerCase(), {
+            twitter_handle: null,
+            twitter_pfp_url: null
+          });
         }
-        
-        // Cache the result
-        addressToTwitterHandle.set(holder.address.toLowerCase(), social?.twitter_handle || null);
       }
       
       const holderWithSocial = transformFn(holder, social);
@@ -74,5 +95,5 @@ export async function processHoldersWithSocials<T extends { address: string }>(
   console.log(`Holders with social profiles: ${socialCount}`);
   console.log(`Holders with Twitter handles: ${finalHoldersWithTwitter.length}`);
   
-  return addressToTwitterHandle;
+  return addressToSocialInfo;
 }
