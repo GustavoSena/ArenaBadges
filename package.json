@@ -11,6 +11,7 @@
     "send-results": "ts-node src/sendResults.ts",
     "fetch-profiles": "ts-node src/holderProfileManager.ts",
     "leaderboard": "ts-node src/generateLeaderboard.ts",
+    "mu-leaderboard": "ts-node src/generateMuLeaderboard.ts",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"
   },

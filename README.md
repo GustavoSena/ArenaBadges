@@ -15,16 +15,38 @@ A TypeScript application that fetches MUV, MUO, MUG, and MU token holders and Mu
 - Runs on a configurable schedule
 - Only sends updates to the Arena Social Badges API if there are changes since the last run
 - Modular architecture with separation of concerns
+- **Robust Moralis API Key Rotation**: Automatically rotates between multiple API keys when quota limits are reached
+- **Extensible Leaderboard System**: Class-based architecture allowing for custom point calculation logic
 
-## New Leaderboard Feature
+## Leaderboard Features
 
-The leaderboard system ranks wallets based on their Mu Pups NFT and token holdings. Key features include:
+### Standard Leaderboard
+
+The standard leaderboard system ranks wallets based on their Mu Pups NFT and token holdings. Key features include:
 
 - **Configurable Weights**: Each token and NFT has configurable point weights
 - **Social Profile Integration**: Only includes addresses with Twitter handles
 - **Optimized Data Fetching**: First fetches NFT holders, filters for those with social profiles, then selectively queries token balances
 - **Rich HTML Output**: Includes Twitter profile images, Arena profile links, and Snowtrace wallet links
 - **Fully Configurable**: All settings are in `config/leaderboard.json`
+
+### Class-Based Leaderboard System
+
+The project now includes a class-based leaderboard system that allows for flexible and extensible point calculation logic:
+
+- **Base Leaderboard Class**: Abstract class defining the common structure and functionality
+- **Custom Implementations**: Specific implementations with different point calculation rules
+- **MU Leaderboard**: Implementation with dynamic point values based on contract-provided prices
+
+### MU Leaderboard Point Calculation
+
+The MU Leaderboard uses the following point calculation rules:
+
+- **MU Tokens**: 2 points per token
+- **MUG Tokens**: Points equal to the MUG/MU price (retrieved from contract)
+- **MUO Tokens**: 1.1x the MUG/MU price
+- **MUV Tokens**: 10x the MUO price (or 11x the MUG/MU price)
+- **Mu Pups NFTs**: 10x the MUG/MU price per NFT
 
 ## Configuration
 
@@ -114,6 +136,7 @@ The leaderboard uses a separate configuration file (`config/leaderboard.json`) t
 - npm or yarn
 - Alchemy API key (for blockchain data)
 - Arena Social Badges API key (for sending badge updates)
+- Moralis API key(s) (for token holder data)
 
 ## Installation
 
@@ -130,7 +153,11 @@ The leaderboard uses a separate configuration file (`config/leaderboard.json`) t
    ```
    ALCHEMY_API_KEY=your_alchemy_api_key_here
    API_KEY=your_arena_social_badges_api_key_here
+   MORALIS_API_KEYS=["key1", "key2", "key3"]
    ```
+   
+   **Note**: For Moralis API keys, you can specify multiple keys in a JSON array format as shown above. The system will automatically rotate between these keys if one reaches its quota limit. For backward compatibility, you can also use a single key with `MORALIS_API_KEY=your_key`.
+
 4. Customize the configuration files in the `config/` directory if needed
 
 ## Usage
@@ -159,36 +186,54 @@ To fetch profiles and send them to the API (only if changed since last run):
 npm run send-results
 ```
 
-### Generate Leaderboard
+### Generate Standard Leaderboard
 
-To generate the community leaderboard:
+To generate the standard community leaderboard:
 
 ```
 npm run leaderboard
 ```
 
-This will create both JSON and HTML versions of the leaderboard in the `files/` directory.
+### Generate MU Leaderboard
+
+To generate the MU leaderboard with dynamic point calculation:
+
+```
+npm run mu-leaderboard
+```
+
+Both leaderboard commands will create JSON and HTML versions of the leaderboard in the `files/` directory.
 
 ## Project Structure
 
 - `src/index.ts`: Main entry point that starts the scheduler
 - `src/holderProfileManager.ts`: Manages fetching and saving holder profiles
 - `src/sendResults.ts`: Script for sending results to the API
-- `src/generateLeaderboard.ts`: Script for generating the community leaderboard
+- `src/generateLeaderboard.ts`: Script for generating the standard leaderboard
+- `src/generateMuLeaderboard.ts`: Script for generating the MU leaderboard
 - `src/services/`: Core services for the application
   - `holderService.ts`: Fetches token and NFT holders
-  - `leaderboardService.ts`: Calculates points and generates leaderboard
+  - `leaderboardService.ts`: Standard leaderboard generation
+  - `leaderboardClassService.ts`: Class-based leaderboard generation
   - `socialProfiles.ts`: Processes holders and fetches their social profiles
   - `apiService.ts`: Handles API communication
   - `schedulerService.ts`: Manages the scheduling of data collection and API updates
 - `src/api/`: API integrations
   - `blockchain.ts`: Fetches NFT holders using ethers.js
+  - `moralis.ts`: Fetches token holders with API key rotation
   - `snowtrace.ts`: Fetches token holders from Snowtrace
   - `arenabook.ts`: Fetches social profiles from Arenabook
 - `src/utils/`: Utility functions
   - `htmlGenerator.ts`: Generates HTML output for the leaderboard
   - `helpers.ts`: Common helper functions
 - `src/types/`: TypeScript interfaces and types
+  - `interfaces.ts`: Common interfaces for the application
+  - `leaderboard.ts`: Interfaces for the leaderboard feature
+  - `leaderboardClasses.ts`: Class-based leaderboard system
+- `docs/`: Documentation
+  - `LEADERBOARD.md`: Documentation for the standard leaderboard
+  - `LEADERBOARD_CLASSES.md`: Documentation for the class-based leaderboard system
+  - `MORALIS_API_KEY_ROTATION.md`: Documentation for the Moralis API key rotation feature
 - `config/`: Configuration files
 - `files/`: Output directory for JSON and HTML files
 - `tests/`: Test files
