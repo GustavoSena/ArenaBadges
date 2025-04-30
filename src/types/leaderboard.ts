@@ -5,10 +5,7 @@ export interface LeaderboardConfig {
     tokens: TokenWeight[];
     nfts: NftWeight[];
   };
-  output: {
-    maxEntries: number;
-    filename: string;
-  };
+  output: LeaderboardOutput;
 }
 
 export interface TokenWeight {
@@ -16,13 +13,14 @@ export interface TokenWeight {
   address: string;
   pointsPerToken: number;
   minBalance: number;
+  decimals?: number; // Optional decimal places for the token
 }
 
 export interface NftWeight {
   name: string;
   address: string;
-  pointsPerNft: number;
   minBalance: number;
+  pointsPerToken: number;
 }
 
 export interface HolderPoints {
@@ -55,4 +53,18 @@ export interface LeaderboardEntry {
 export interface Leaderboard {
   timestamp: string;
   entries: LeaderboardEntry[];
+}
+
+export interface LeaderboardOutput {
+  maxEntries: number;
+  fileName: string;
+  title: string;
+  logoPath?: string;
+  titleLink?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  backgroundColor?: string;
+  gradientStart?: string;
+  gradientEnd?: string;
 }

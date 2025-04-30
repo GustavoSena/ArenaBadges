@@ -11,7 +11,9 @@
     "send-results": "ts-node src/sendResults.ts",
     "fetch-profiles": "ts-node src/holderProfileManager.ts",
     "leaderboard": "ts-node src/generateLeaderboard.ts",
-    "mu-leaderboard": "ts-node src/generateMuLeaderboard.ts",
+    "mu-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type mu",
+    "standard-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type standard",
+    "custom-leaderboard": "ts-node src/generateCustomLeaderboard.ts",
     "leaderboard-scheduler": "ts-node src/leaderboardScheduler.ts",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"

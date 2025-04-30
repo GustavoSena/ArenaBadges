@@ -247,40 +247,40 @@ export async function calculateHolderPoints(): Promise<HolderPoints[]> {
       profileImageUrl: string | null
     }>();
     
-    // Step 1: Fetch NFT holders
-    console.log(`\nFetching NFT holders...`);
+    // Map to store NFT holders by name
+    const nftHoldersByName = new Map<string, NftHolder[]>();
     
-    const nftHolders = await fetchNftHoldersFromEthers(
-      leaderboardConfig.weights.nfts[0].address,
-      leaderboardConfig.weights.nfts[0].name,
-      0 // Get all holders regardless of minimum balance
-    );
+    // Step 1: Fetch NFT holders for eligibility check
+    console.log('Fetching NFT holders for eligibility check...');
     
-    console.log(`Found ${nftHolders.length} NFT holders`);
+    // Fetch all eligible NFT holders first
+    const eligibleAddresses = new Set<string>();
     
-    // Add NFT holders to our tracking map
-    for (const holder of nftHolders) {
-      const address = holder.address.toLowerCase();
+    for (const nftWeight of leaderboardConfig.weights.nfts) {
+      console.log(`Fetching ${nftWeight.name} NFT holders...`);
       
-      // Check if this holder meets the minimum balance requirement for the NFT
-      const meetsMinBalance = holder.tokenCount >= leaderboardConfig.weights.nfts[0].minBalance;
+      // Fetch NFT holders (only once per NFT type)
+      const nftHolders = await fetchNftHoldersFromEthers(
+        nftWeight.address,
+        nftWeight.name,
+        nftWeight.minBalance
+      );
       
-      allAddresses.set(address, {
-        address,
-        isEligible: meetsMinBalance,
-        hasBeenCheckedForSocial: false,
-        qualifiedBy: meetsMinBalance ? [`${leaderboardConfig.weights.nfts[0].name} (${holder.tokenCount})`] : []
-      });
+      // Store NFT holders for later use
+      nftHoldersByName.set(nftWeight.name, nftHolders);
+      
+      console.log(`Found ${nftHolders.length} ${nftWeight.name} NFT holders`);
+      
+      // Add eligible addresses
+      for (const holder of nftHolders) {
+        eligibleAddresses.add(holder.address.toLowerCase());
+      }
     }
     
     // Step 2: Check social profiles for all NFT holders
-    console.log(`\nFetching social profiles for ${allAddresses.size} NFT holders...`);
+    console.log(`\nFetching social profiles for ${eligibleAddresses.size} NFT holders...`);
     
-    const holdersToCheck = Array.from(allAddresses.values())
-      .filter(info => !info.hasBeenCheckedForSocial)
-      .map(info => ({
-        address: info.address
-      }));
+    const holdersToCheck = Array.from(eligibleAddresses).map(address => ({ address }));
     
     const addressToSocialInfo = await processHoldersWithSocials(
       holdersToCheck,
@@ -436,7 +436,7 @@ export async function calculateHolderPoints(): Promise<HolderPoints[]> {
     
     console.log(`\nFound ${eligibleAddressesWithSocial.length} eligible addresses with social profiles`);
     
-    // Step 5: Calculate points for all eligible addresses with social profiles
+    // Map to store holder points by address
     const holderPointsMap = new Map<string, HolderPoints>();
     
     // Initialize holder points objects
@@ -453,48 +453,28 @@ export async function calculateHolderPoints(): Promise<HolderPoints[]> {
       });
     }
     
-    // Calculate NFT points (only if minimum balance > 1)
+    // Calculate NFT points
     for (const nftWeight of leaderboardConfig.weights.nfts) {
-      if (nftWeight.minBalance > 1) {
-        console.log(`\nCalculating points for ${nftWeight.name} NFT...`);
+      console.log(`\nCalculating points for ${nftWeight.name} NFT...`);
+      
+      // Get NFT holders with minimum balance
+      const nftHolders = nftHoldersByName.get(nftWeight.name) || [];
+      const eligibleNftHolders = nftHolders.filter(holder => holder.tokenCount >= nftWeight.minBalance);
+      
+      console.log(`Found ${eligibleNftHolders.length} eligible ${nftWeight.name} holders`);
+      
+      // Calculate points for each holder
+      for (const holder of eligibleNftHolders) {
+        const address = holder.address.toLowerCase();
         
-        // Fetch NFT holders again (we need the token counts)
-        const nftHolders = await fetchNftHoldersFromEthers(
-          nftWeight.address,
-          nftWeight.name,
-          0 // Get all holders, we'll filter by minimum balance later
-        );
-        
-        // Process NFT holders and calculate points
-        for (const holder of nftHolders) {
-          const address = holder.address.toLowerCase();
+        if (holderPointsMap.has(address)) {
+          // Calculate points for this NFT
+          const points = holder.tokenCount * nftWeight.pointsPerToken;
           
-          if (holderPointsMap.has(address) && holder.tokenCount >= nftWeight.minBalance) {
-            // Calculate points for this NFT
-            const points = holder.tokenCount * nftWeight.pointsPerNft;
-            
-            // Update holder points
-            const holderPoints = holderPointsMap.get(address)!;
-            holderPoints.nftPoints[nftWeight.name] = points;
-            holderPoints.totalPoints += points;
-          }
-        }
-      } else {
-        console.log(`\nSkipping ${nftWeight.name} NFT points calculation (minBalance = ${nftWeight.minBalance})`);
-        
-        // For NFTs with minBalance <= 1, use the holders we already have
-        for (const holder of nftHolders) {
-          const address = holder.address.toLowerCase();
-          
-          if (holderPointsMap.has(address) && holder.tokenCount >= nftWeight.minBalance) {
-            // Calculate points for this NFT
-            const points = holder.tokenCount * nftWeight.pointsPerNft;
-            
-            // Update holder points
-            const holderPoints = holderPointsMap.get(address)!;
-            holderPoints.nftPoints[nftWeight.name] = points;
-            holderPoints.totalPoints += points;
-          }
+          // Update holder points
+          const holderPoints = holderPointsMap.get(address)!;
+          holderPoints.nftPoints[nftWeight.name] = points;
+          holderPoints.totalPoints += points;
         }
       }
     }
@@ -538,13 +518,15 @@ export async function calculateHolderPoints(): Promise<HolderPoints[]> {
 /**
  * Generate a leaderboard from holder points
  */
-export function generateLeaderboard(holderPoints: HolderPoints[], maxEntries: number = 100): Leaderboard {
+export function generateLeaderboard(holderPoints: HolderPoints[], maxEntries: number = 0): Leaderboard {
   try {
     // Sort holders by total points (descending)
     const sortedHolders = holderPoints.sort((a, b) => b.totalPoints - a.totalPoints);
     
     // Generate leaderboard entries with rankings
-    const entries: LeaderboardEntry[] = sortedHolders.slice(0, maxEntries).map((holder, index) => ({
+    // If maxEntries is 0, include all entries
+    const entriesToInclude = maxEntries === 0 ? sortedHolders.length : maxEntries;
+    const entries: LeaderboardEntry[] = sortedHolders.slice(0, entriesToInclude).map((holder, index) => ({
       rank: index + 1,
       twitterHandle: holder.twitterHandle as string, // We already filtered for non-null handles
       profileImageUrl: holder.profileImageUrl,
@@ -599,17 +581,25 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     console.log('Calculating holder points...');
     const holderPoints = await calculateHolderPoints();
     
-    // Generate leaderboard
+    // Generate leaderboard - use 0 for maxEntries to include all entries
     console.log('Generating leaderboard...');
     const leaderboard = generateLeaderboard(holderPoints, config.output.maxEntries);
     
     // Save leaderboard to JSON file
-    const jsonOutputPath = path.join(__dirname, '../../files', config.output.filename);
+    const outputDir = path.join(__dirname, '../../output/leaderboards');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    const jsonOutputPath = path.join(outputDir, config.output.fileName);
     saveLeaderboard(leaderboard, jsonOutputPath);
     
     // Save leaderboard to HTML file
-    const htmlOutputPath = path.join(__dirname, '../../files', config.output.filename.replace('.json', '.html'));
-    saveLeaderboardHtml(leaderboard, htmlOutputPath);
+    const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    // Print total number of entries
+    console.log(`Total entries: ${leaderboard.entries.length}`);
     
     return leaderboard;
   } catch (error) {

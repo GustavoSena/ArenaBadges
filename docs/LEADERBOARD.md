@@ -15,13 +15,49 @@ The Mu Community Leaderboard ranks wallet addresses based on their Mu Pups NFT h
 
 The leaderboard generation follows these steps:
 
-1. **Fetch NFT holders**: Gets all Mu Pups NFT holders using ethers.js and Alchemy
+1. **Fetch NFT holders**: Gets all Mu Pups NFT holders using the sequential token ID scanning method
 2. **Get social profiles**: Fetches Twitter handles for NFT holders from Arenabook
 3. **Filter addresses**: Keeps only NFT holders who have Twitter handles
 4. **Fetch token balances**: For each token in the config, fetches balances only for these filtered addresses
-5. **Calculate points**: Applies the configured weights to NFT holdings and token balances
-6. **Generate leaderboard**: Creates a sorted leaderboard with rankings
-7. **Output files**: Saves both JSON and HTML versions of the leaderboard
+5. **Apply minimum balances**: For MU tokens, applies dynamic minimum balance requirements based on the current MUG/MU price
+6. **Calculate points**: Applies the configured weights to NFT holdings and token balances
+7. **Generate leaderboard**: Creates a sorted leaderboard with rankings
+8. **Output files**: Saves both JSON and HTML versions of the leaderboard
+
+## MU Leaderboard Specifics
+
+The MU Leaderboard has special features:
+
+### Dynamic Minimum Balances
+
+To ensure holders have a meaningful stake, minimum balances are calculated dynamically:
+
+- **MU**: Minimum 100 tokens
+- **MUG**: Minimum equivalent to 100 MU (calculated as 100 ÷ MUG/MU price)
+- **MUO**: Minimum equivalent to 100 MU (calculated as 100 ÷ (1.1 × MUG/MU price))
+- **MUV**: Minimum equivalent to 100 MU (calculated as 100 ÷ (10 × 1.1 × MUG/MU price))
+
+### Point Calculation
+
+Points are calculated using the following formulas:
+
+- **MU**: 2 × token balance
+- **MUG**: 2 × token balance × MUG/MU price
+- **MUO**: 1.1 × 2 × token balance × MUG/MU price
+- **MUV**: 10 × 1.1 × 2 × token balance × MUG/MU price
+- **Mu Pups NFTs**: 10 × 2 × NFT count × MUG/MU price
+
+### HTML Output Features
+
+The leaderboard HTML includes:
+
+- **Branded Header**: Project logo and title with gradient hover effect
+- **Profile Images**: Twitter profile images displayed at a fixed size (40×40px)
+- **Arena Profile Button**: Pill-shaped button linking to the holder's Arena profile
+- **Gradient Styling**: Header bar with gradient background, footer with gradient text
+- **Responsive Layout**: Centered table with max-width for better readability
+- **Pagination**: Gradient-styled pagination controls for large leaderboards
+- **Timestamp**: Shows when the leaderboard was last updated
 
 ## Configuration
 

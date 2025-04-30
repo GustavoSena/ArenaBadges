@@ -5,29 +5,33 @@
         "symbol": "MUV",
         "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
         "pointsPerToken": 15,
-        "minBalance": 10,
-        "decimals": 18
+        "minBalance": 0,
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically as 100 / (10 * 1.1 * mugmuprice)"
       },
       {
         "symbol": "MUO",
         "address": "0x561f2209eA45023d796bF42F0402B33bc26610ce",
         "pointsPerToken": 7,
-        "minBalance": 10,
-        "decimals": 18
+        "minBalance": 0,
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically as 100 / (1.1 * mugmuprice)"
       },
       {
         "symbol": "MUG",
         "address": "0xF7ed17f0Fb2B7C9D3DDBc9F0679b2e1098993e81",
         "pointsPerToken": 5,
-        "minBalance": 10,
-        "decimals": 18
+        "minBalance": 0,
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically as 100 / mugmuprice"
       },
       {
         "symbol": "MU",
         "address": "0xD036414fa2BCBb802691491E323BFf1348C5F4Ba",
         "pointsPerToken": 1,
         "minBalance": 100,
-        "decimals": 18
+        "decimals": 18,
+        "description": "Fixed minimum balance of 100 MU"
       }
     ],
     "nfts": [
@@ -41,12 +45,15 @@
   },
   "output": {
     "maxEntries": 0,
-    "fileName": "leaderboard.json",
-    "title": "Arena Badges Leaderboard",
-    "logoPath": "assets/arena_logo.png",
-    "primaryColor": "#3498db",
+    "fileName": "mu_leaderboard.json",
+    "title": "MU Community Leaderboard",
+    "logoPath": "assets/mu_logo.png",
+    "titleLink": "https://www.mu.money/",
+    "primaryColor": "#ff00ff",
     "secondaryColor": "#e0e0e0",
-    "accentColor": "#2c3e50",
-    "backgroundColor": "#f5f5f5"
+    "accentColor": "#3498db",
+    "backgroundColor": "#f5f5f5",
+    "gradientStart": "#ff00ff",
+    "gradientEnd": "#9900ff"
   }
 }

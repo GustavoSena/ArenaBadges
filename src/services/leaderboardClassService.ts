@@ -5,8 +5,10 @@ import * as dotenv from 'dotenv';
 
 import { TokenHolder, NftHolder } from '../types/interfaces';
 import { LeaderboardConfig, HolderPoints, Leaderboard } from '../types/leaderboard';
-import { BaseLeaderboard, MuLeaderboard } from '../types/leaderboardClasses';
-import { fetchNftHoldersFromEthers } from '../api/blockchain';
+import { BaseLeaderboard } from '../types/leaderboardClasses';
+import { MuLeaderboard } from '../implementations/leaderboards/muLeaderboard';
+import { StandardLeaderboard } from '../implementations/leaderboards/standardLeaderboard';
+import { fetchNftHoldersFromEthers, fetchNftHoldersWithoutTotalSupply } from '../api/blockchain';
 import { fetchTokenHoldersFromMoralis } from '../api/moralis';
 import { processHoldersWithSocials, SocialProfileInfo } from './socialProfiles';
 import { saveLeaderboardHtml } from '../utils/htmlGenerator';
@@ -64,8 +66,8 @@ async function fetchTokenBalanceWithEthers(
     // Get balance
     const balance = await tokenContract.balanceOf(holderAddress);
     
-    // Convert to formatted balance
-    return Number(ethers.formatUnits(balance, tokenDecimals));
+    // Convert to formatted balance using our safe formatter
+    return formatTokenBalance(balance.toString(), tokenDecimals);
   } catch (error) {
     console.error(`Error fetching token balance for address ${holderAddress}:`, error);
     return 0;
@@ -79,12 +81,13 @@ async function fetchTokenBalancesWithEthers(
   tokenAddress: string,
   tokenSymbol: string,
   holderAddresses: string[],
-  tokenDecimals: number
+  tokenDecimals: number,
+  verbose: boolean = false
 ): Promise<TokenHolder[]> {
   const holders: TokenHolder[] = [];
   let processedCount = 0;
   
-  console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
+  if (verbose) console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
   
   // Process in batches to avoid rate limiting
   const batchSize = 10;
@@ -97,22 +100,22 @@ async function fetchTokenBalancesWithEthers(
       
       while (retryCount <= MAX_RETRIES) {
         try {
-          const balanceFormatted = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals);
+          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals);
           
           return {
             address,
-            balance: ethers.parseUnits(balanceFormatted.toString(), tokenDecimals).toString(),
-            balanceFormatted,
+            balance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
+            balanceFormatted: balance,
             tokenSymbol
           };
         } catch (error) {
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
-            console.log(`Error fetching balance for ${address}. Retry ${retryCount}/${MAX_RETRIES}...`);
+            if (verbose) console.log(`Error fetching balance for ${address}. Retry ${retryCount}/${MAX_RETRIES}...`);
             // Add a small delay before retrying
             await sleep(1000);
           } else {
-            console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
+            if (verbose) console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
             return {
               address,
               balance: "0",
@@ -142,7 +145,7 @@ async function fetchTokenBalancesWithEthers(
     
     processedCount += batch.length;
     if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
-      console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
+      if (verbose) console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
     }
     
     // Add delay between batches to avoid rate limiting
@@ -153,123 +156,274 @@ async function fetchTokenBalancesWithEthers(
   
   // Count non-zero balances for logging
   const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
-  console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
+  if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
   
   return holders;
 }
 
 /**
+ * Process holders with socials
+ * @param eligibleAddressesArray Array of eligible addresses
+ * @param outputPath Path to save the output
+ * @param processingName Name of the processing
+ * @param verbose Whether to show verbose logs
+ * @returns Map of addresses to social info
+ */
+async function processHoldersWithSocialsWrapper(
+  eligibleAddressesArray: { address: string }[],
+  outputPath: string,
+  processingName: string,
+  verbose: boolean = false
+): Promise<Map<string, SocialProfileInfo>> {
+  return processHoldersWithSocials(
+    eligibleAddressesArray,
+    outputPath,
+    processingName,
+    (holder, social) => ({
+      address: holder.address,
+      twitter_handle: social?.twitter_handle || null,
+      twitter_pfp_url: social?.twitter_pfp_url || null
+    }),
+    verbose
+  );
+}
+
+/**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
+ * @param leaderboard The leaderboard implementation to use
+ * @param verbose Whether to show verbose logs
+ * @returns Array of holder points
  */
-export async function calculateHolderPoints(leaderboardImpl: BaseLeaderboard): Promise<HolderPoints[]> {
+export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbose: boolean = false): Promise<HolderPoints[]> {
   try {
-    console.log('\nFetching NFT holders...');
-    
     // Load leaderboard configuration
-    const leaderboardConfig = loadLeaderboardConfig();
+    const leaderboardConfig = leaderboard.loadConfig();
     
-    // Create maps to store holder data
+    // Map to store holder points by address
     const holderPointsMap = new Map<string, HolderPoints>();
-    let addressToSocialInfo = new Map<string, SocialProfileInfo>();
     
-    // Process NFT holders first
+    // Cache for NFT holders by name to avoid duplicate fetching
+    const nftHoldersByName = new Map<string, NftHolder[]>();
+    
+    // Step 1: Fetch NFT holders for eligibility check
+    if (verbose) console.log('\nFetching NFT holders for eligibility check...');
+    
+    // Fetch all eligible NFT holders first
+    const eligibleAddresses = new Set<string>();
+    
     for (const nftWeight of leaderboardConfig.weights.nfts) {
-      console.log(`Fetching holders for ${nftWeight.name} (${nftWeight.address}) using ethers.js...`);
+      if (verbose) console.log(`Checking ${nftWeight.name} NFT holders...`);
       
-      // Fetch NFT holders using ethers.js
-      const nftHolders = await fetchNftHoldersFromEthers(
+      // Always use the fallback method (going through NFT IDs) instead of checking total supply
+      const nftHolders = await fetchNftHoldersWithoutTotalSupply(
         nftWeight.address,
         nftWeight.name,
-        nftWeight.minBalance || 1
+        nftWeight.minBalance,
+        verbose
       );
       
-      console.log(`Found ${nftHolders.length} holders with at least ${nftWeight.minBalance || 1} ${nftWeight.name}`);
-      console.log(`Found ${nftHolders.length} NFT holders`);
+      // Store the NFT holders for later use
+      nftHoldersByName.set(nftWeight.name, nftHolders);
       
-      // Fetch social profiles for NFT holders
-      console.log(`\nFetching social profiles for ${nftHolders.length} NFT holders...\n`);
-      
-      // Process NFT holders to get their social profiles
-      const nftHolderAddresses = nftHolders.map(h => h.address);
-      addressToSocialInfo = await processHoldersWithSocials(
-        nftHolders,
-        path.join(__dirname, '../../files/nft_holders_with_socials.json'),
-        `NFT holders`,
-        (holder, social) => ({
-          address: holder.address,
-          tokenName: holder.tokenName,
-          tokenCount: holder.tokenCount,
-          twitter_handle: social?.twitter_handle || null,
-          twitter_pfp_url: social?.twitter_pfp_url || null
-        })
-      );
-      
-      // Filter to holders with social profiles
-      const nftHoldersWithSocial = nftHolders.filter(h => 
-        addressToSocialInfo.has(h.address.toLowerCase()) && 
-        addressToSocialInfo.get(h.address.toLowerCase())?.twitter_handle
-      );
-      
-      console.log(`Found ${nftHoldersWithSocial.length} NFT holders with social profiles`);
-      
-      // Initialize holder points for NFT holders with social profiles
-      for (const holder of nftHoldersWithSocial) {
-        const address = holder.address.toLowerCase();
-        const socialInfo = addressToSocialInfo.get(address);
-        
-        if (socialInfo?.twitter_handle) {
-          // Calculate NFT points using the leaderboard implementation
-          const nftPoints = await leaderboardImpl.calculateNftPoints(holder);
-          
-          holderPointsMap.set(address, {
-            address,
-            twitterHandle: socialInfo.twitter_handle,
-            profileImageUrl: socialInfo.twitter_pfp_url || '',
-            totalPoints: nftPoints,
-            tokenPoints: {},
-            nftPoints: {
-              [holder.tokenName]: nftPoints
-            }
-          });
-        }
+      // Add eligible addresses
+      for (const holder of nftHolders) {
+        eligibleAddresses.add(holder.address.toLowerCase());
       }
     }
     
-    // Get all eligible addresses with social profiles
-    const eligibleAddressesWithSocial = Array.from(holderPointsMap.keys());
-    console.log(`\nFound ${eligibleAddressesWithSocial.length} eligible addresses with social profiles`);
+    // Step 2: Fetch token holders for eligibility check
+    if (verbose) console.log('\nFetching token holders for eligibility check...');
     
-    // Process token holders
+    // Get MUG/MU price for dynamic minimum balance calculations
+    let mugMuPrice = 30; // Default fallback value
+    if (leaderboard instanceof MuLeaderboard) {
+      mugMuPrice = await leaderboard.getMugMuPrice();
+      if (verbose) console.log(`Using MUG/MU price: ${mugMuPrice} for dynamic minimum balances`);
+    }
+    
     for (const tokenWeight of leaderboardConfig.weights.tokens) {
-      console.log(`\nProcessing ${tokenWeight.symbol} token...`);
+      if (verbose) console.log(`Fetching ${tokenWeight.symbol} token holders...`);
       
-      // Fetch token balances for eligible addresses with social profiles
+      // Calculate dynamic minimum balance for this token
+      let minBalance = tokenWeight.minBalance;
+      
+      // For tokens with dynamic minimum balances, calculate the correct value
+      if (leaderboard instanceof MuLeaderboard && tokenWeight.minBalance === 0) {
+        switch (tokenWeight.symbol) {
+          case 'MU':
+            minBalance = 100;
+            break;
+          case 'MUG':
+            minBalance = 100 / mugMuPrice;
+            break;
+          case 'MUO':
+            minBalance = 100 / (1.1 * mugMuPrice);
+            break;
+          case 'MUV':
+            minBalance = 100 / (10 * 1.1 * mugMuPrice);
+            break;
+        }
+        
+        if (verbose) {
+          console.log(`Using dynamic minimum balance for ${tokenWeight.symbol}: ${minBalance}`);
+        }
+      }
+      
+      // Fetch token holders directly from Moralis with minimum balance filter
+      const tokenHolders = await fetchTokenHoldersFromMoralis(
+        tokenWeight.address,
+        tokenWeight.symbol,
+        tokenWeight.decimals || 18,
+        minBalance,
+        verbose
+      );
+      
+      if (verbose) console.log(`Found ${tokenHolders.length} ${tokenWeight.symbol} token holders with minimum balance >= ${minBalance}`);
+      
+      // Add eligible addresses
+      for (const holder of tokenHolders) {
+        eligibleAddresses.add(holder.address.toLowerCase());
+      }
+    }
+    
+    if (verbose) console.log(`\nTotal eligible addresses: ${eligibleAddresses.size}`);
+    else console.log(`Total eligible addresses: ${eligibleAddresses.size}`);
+    
+    // Step 3: Fetch social profiles for eligible addresses
+    if (verbose) console.log('\nFetching social profiles for eligible addresses...');
+    
+    // Convert eligible addresses to array
+    const eligibleAddressesArray = Array.from(eligibleAddresses);
+    
+    // Process holders with socials
+    const socialProfiles = await processHoldersWithSocialsWrapper(
+      eligibleAddressesArray.map(address => ({ address })),
+      path.join(__dirname, '../../output/social_profiles.json'),
+      'Eligible Holders',
+      verbose
+    );
+    
+    // Step 4: Filter to addresses with social profiles
+    if (verbose) console.log('\nFiltering to addresses with social profiles...');
+    
+    // Get addresses with social profiles
+    const addressesWithSocial = new Set<string>();
+    for (const [address, social] of socialProfiles.entries()) {
+      if (social.twitter_handle) {
+        addressesWithSocial.add(address.toLowerCase());
+      }
+    }
+    
+    if (verbose) console.log(`Found ${addressesWithSocial.size} addresses with social profiles`);
+    else console.log(`Addresses with social profiles: ${addressesWithSocial.size}`);
+    
+    // Step 5: Initialize holder points for addresses with social profiles
+    if (verbose) console.log('\nInitializing holder points...');
+    
+    for (const address of addressesWithSocial) {
+      const socialInfo = socialProfiles.get(address);
+      
+      if (socialInfo && socialInfo.twitter_handle) {
+        holderPointsMap.set(address, {
+          address,
+          twitterHandle: socialInfo.twitter_handle,
+          profileImageUrl: socialInfo.twitter_pfp_url || null,
+          totalPoints: 0,
+          tokenPoints: {},
+          nftPoints: {}
+        });
+      }
+    }
+    
+    // Step 6: Calculate token points
+    if (verbose) console.log('\nCalculating token points...');
+    
+    for (const tokenWeight of leaderboardConfig.weights.tokens) {
+      if (verbose) console.log(`\nCalculating points for ${tokenWeight.symbol}...`);
+      
+      // Get addresses with social profiles
+      const addressesToCheck = Array.from(addressesWithSocial);
+      
+      // Fetch token balances for addresses with social profiles
       const tokenHolders = await fetchTokenBalancesWithEthers(
         tokenWeight.address,
         tokenWeight.symbol,
-        eligibleAddressesWithSocial,
-        18 // Assuming 18 decimals for all tokens
+        addressesToCheck,
+        tokenWeight.decimals || 18,
+        verbose
       );
       
       // Process token holders and calculate points
       for (const holder of tokenHolders) {
         const address = holder.address.toLowerCase();
         
-        if (holderPointsMap.has(address) && holder.balanceFormatted > 0) {
-          // Calculate points for this token using the leaderboard implementation
-          const points = await leaderboardImpl.calculateTokenPoints(holder, tokenWeight.symbol);
+        if (holderPointsMap.has(address)) {
+          // Get holder points
+          const holderPoints = holderPointsMap.get(address)!;
+          
+          // Calculate points for this token
+          const tokenHoldings = [holder];
+          
+          // Calculate points using the leaderboard implementation
+          const points = await leaderboard.calculatePoints(tokenHoldings, []);
           
           // Update holder points
-          const holderPoints = holderPointsMap.get(address)!;
           holderPoints.tokenPoints[tokenWeight.symbol] = points;
           holderPoints.totalPoints += points;
+          
+          if (verbose) console.log(`${address}: ${tokenWeight.symbol} = ${points} points`);
         }
       }
     }
     
-    // Return holders with social profiles and points
-    return Array.from(holderPointsMap.values());
+    // Step 7: Calculate NFT points
+    if (verbose) console.log('\nCalculating NFT points...');
+    
+    for (const nftWeight of leaderboardConfig.weights.nfts) {
+      if (verbose) console.log(`\nCalculating points for ${nftWeight.name}...`);
+      
+      // Get the cached NFT holders
+      const nftHolders = nftHoldersByName.get(nftWeight.name) || [];
+      
+      // Process NFT holders and calculate points
+      for (const holder of nftHolders) {
+        const address = holder.address.toLowerCase();
+        
+        if (holderPointsMap.has(address) && holder.tokenCount >= nftWeight.minBalance) {
+          // Get holder points
+          const holderPoints = holderPointsMap.get(address)!;
+          
+          // Calculate points for this NFT using the leaderboard implementation
+          const tokenHoldings: TokenHolder[] = [];
+          const nftHoldings = [holder];
+          
+          // Check eligibility using the leaderboard implementation
+          const isEligible = await leaderboard.checkEligibility(tokenHoldings, nftHoldings);
+          
+          if (isEligible) {
+            // Calculate points using the leaderboard implementation
+            const points = await leaderboard.calculatePoints([], nftHoldings);
+            
+            // Update holder points
+            holderPoints.nftPoints[nftWeight.name] = points;
+            holderPoints.totalPoints += points;
+            
+            if (verbose) console.log(`${address}: ${nftWeight.name} = ${points} points`);
+          }
+        }
+      }
+    }
+    
+    // Step 8: Filter out holders with zero points
+    if (verbose) console.log('\nFiltering out holders with zero points...');
+    
+    const holderPoints = Array.from(holderPointsMap.values()).filter(holder => holder.totalPoints > 0);
+    
+    if (verbose) console.log(`Final holder count: ${holderPoints.length}`);
+    else console.log(`Final holder count: ${holderPoints.length}`);
+    
+    return holderPoints;
   } catch (error) {
     console.error('Error calculating holder points:', error);
     throw error;
@@ -298,30 +452,88 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
 
 /**
  * Generate and save a leaderboard using the MuLeaderboard implementation
+ * @param verbose Whether to show verbose logs
  */
-export async function generateAndSaveMuLeaderboard(): Promise<Leaderboard> {
+export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
   try {
-    // Load leaderboard configuration
-    const config = loadLeaderboardConfig();
-    
     // Create MuLeaderboard instance
-    const muLeaderboard = new MuLeaderboard(config, provider);
+    const muLeaderboard = new MuLeaderboard(provider);
     
     // Calculate holder points
     console.log('Calculating holder points using MuLeaderboard implementation...');
-    const holderPoints = await calculateHolderPoints(muLeaderboard);
+    const holderPoints = await calculateHolderPoints(muLeaderboard, verbose);
     
-    // Generate leaderboard
+    // Get the config
+    const config = muLeaderboard.loadConfig();
+    
+    // Generate leaderboard - include all entries (pass 0 for maxEntries)
     console.log('Generating leaderboard...');
-    const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, config.output.maxEntries);
+    const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, 0);
     
     // Save leaderboard to JSON file
-    const jsonOutputPath = path.join(__dirname, '../../files', config.output.filename);
+    const outputDir = path.join(__dirname, '../../output/leaderboards');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    const jsonOutputPath = path.join(outputDir, muLeaderboard.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
     // Save leaderboard to HTML file
-    const htmlOutputPath = path.join(__dirname, '../../files', config.output.filename.replace('.json', '.html'));
-    saveLeaderboardHtml(leaderboard, htmlOutputPath);
+    const htmlFileName = muLeaderboard.getOutputFileName().replace('.json', '.html');
+    const htmlOutputPath = path.join(outputDir, htmlFileName);
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    // Print total number of entries
+    console.log(`Total entries: ${leaderboard.entries.length}`);
+    console.log(`JSON saved to: ${jsonOutputPath}`);
+    console.log(`HTML saved to: ${htmlOutputPath}`);
+    
+    return leaderboard;
+  } catch (error) {
+    console.error('Error generating and saving leaderboard:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate and save a leaderboard using the StandardLeaderboard implementation
+ * @param verbose Whether to show verbose logs
+ */
+export async function generateAndSaveStandardLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
+  try {
+    // Create StandardLeaderboard instance
+    const standardLeaderboard = new StandardLeaderboard(provider);
+    
+    // Calculate holder points
+    console.log('Calculating holder points using StandardLeaderboard implementation...');
+    const holderPoints = await calculateHolderPoints(standardLeaderboard, verbose);
+    
+    // Get the config
+    const config = standardLeaderboard.loadConfig();
+    
+    // Generate leaderboard - include all entries (pass 0 for maxEntries)
+    console.log('Generating leaderboard...');
+    const leaderboard = standardLeaderboard.generateLeaderboard(holderPoints, 0);
+    
+    // Save leaderboard to JSON file
+    const outputDir = path.join(__dirname, '../../output/leaderboards');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    const jsonOutputPath = path.join(outputDir, standardLeaderboard.getOutputFileName());
+    saveLeaderboard(leaderboard, jsonOutputPath);
+    
+    // Save leaderboard to HTML file
+    const htmlFileName = standardLeaderboard.getOutputFileName().replace('.json', '.html');
+    const htmlOutputPath = path.join(outputDir, htmlFileName);
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    // Print total number of entries
+    console.log(`Total entries: ${leaderboard.entries.length}`);
+    console.log(`JSON saved to: ${jsonOutputPath}`);
+    console.log(`HTML saved to: ${htmlOutputPath}`);
     
     return leaderboard;
   } catch (error) {

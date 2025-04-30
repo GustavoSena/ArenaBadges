@@ -43,10 +43,30 @@ The project now includes a class-based leaderboard system that allows for flexib
 The MU Leaderboard uses the following point calculation rules:
 
 - **MU Tokens**: 2 points per token
-- **MUG Tokens**: Points equal to the MUG/MU price (retrieved from contract)
-- **MUO Tokens**: 1.1x the MUG/MU price
-- **MUV Tokens**: 10x the MUO price (or 11x the MUG/MU price)
-- **Mu Pups NFTs**: 10x the MUG/MU price per NFT
+- **MUG Tokens**: 2 points per token multiplied by the MUG/MU price (retrieved from contract)
+- **MUO Tokens**: 1.1 × 2 points per token multiplied by the MUG/MU price
+- **MUV Tokens**: 10 × 1.1 × 2 points per token multiplied by the MUG/MU price
+- **Mu Pups NFTs**: 10 × 2 points per NFT multiplied by the MUG/MU price
+
+### Dynamic Minimum Balance Requirements
+
+The MU Leaderboard implements dynamic minimum balance requirements to ensure holders have a meaningful stake:
+
+- **MU**: Minimum 100 tokens
+- **MUG**: Minimum equivalent to 100 MU (calculated as 100 ÷ MUG/MU price)
+- **MUO**: Minimum equivalent to 100 MU (calculated as 100 ÷ (1.1 × MUG/MU price))
+- **MUV**: Minimum equivalent to 100 MU (calculated as 100 ÷ (10 × 1.1 × MUG/MU price))
+
+### HTML Output Enhancements
+
+The leaderboard HTML output includes the following features:
+
+- **Branded Header**: Project-specific logo, title, and gradient colors
+- **Profile Images**: Twitter profile images displayed at a fixed size (40×40px)
+- **Arena Profile Button**: Pill-shaped button linking to the holder's Arena profile
+- **Gradient Styling**: Header bar with gradient background, footer with gradient text
+- **Responsive Layout**: Centered table with max-width for better readability
+- **Pagination**: Gradient-styled pagination controls for large leaderboards
 
 ## Configuration
 

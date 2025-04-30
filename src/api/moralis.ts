@@ -102,13 +102,15 @@ async function initializeMoralis(): Promise<void> {
  * Make a direct API call to Moralis using the current key
  * This bypasses the Moralis SDK to allow key rotation
  */
-async function callMoralisApi(endpoint: string, params: any): Promise<any> {
+async function callMoralisApi(endpoint: string, params: any, verbose: boolean = false): Promise<any> {
   const apiKey = getCurrentMoralisApiKey();
   const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
   const url = `${baseUrl}${endpoint}`;
   
   try {
-    console.log(`Making direct API call to Moralis with key #${currentKeyIndex + 1}`);
+    if (verbose) {
+      console.log(`Making direct API call to Moralis with key #${currentKeyIndex + 1}`);
+    }
     
     const response = await axios.get(url, {
       params,
@@ -133,8 +135,10 @@ async function callMoralisApi(endpoint: string, params: any): Promise<any> {
       }
       
       // Retry with the new key
-      console.log(`Retrying API call with key #${currentKeyIndex + 1}`);
-      return callMoralisApi(endpoint, params);
+      if (verbose) {
+        console.log(`Retrying API call with key #${currentKeyIndex + 1}`);
+      }
+      return callMoralisApi(endpoint, params, verbose);
     }
     
     // For other errors, just throw
@@ -150,7 +154,8 @@ export async function fetchTokenHoldersFromMoralis(
   tokenAddress: string,
   tokenSymbol: string,
   tokenDecimals: number,
-  minBalance: number = 0
+  minBalance: number = 0,
+  verbose: boolean = false
 ): Promise<TokenHolder[]> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token holder fetch.');
@@ -158,7 +163,11 @@ export async function fetchTokenHoldersFromMoralis(
   }
   
   try {
-    console.log(`Fetching holders for ${tokenSymbol} (${tokenAddress}) using Moralis API...`);
+    if (verbose) {
+      console.log(`Fetching holders for ${tokenSymbol} (${tokenAddress}) using Moralis API...`);
+    } else {
+      console.log(`Fetching ${tokenSymbol} token holders...`);
+    }
     
     const holders: TokenHolder[] = [];
     let cursor: string | undefined = undefined;
@@ -167,7 +176,9 @@ export async function fetchTokenHoldersFromMoralis(
     
     // Fetch all pages of token holders
     do {
-      console.log(`Fetching page ${page} of ${tokenSymbol} holders with key #${currentKeyIndex + 1}...`);
+      if (verbose) {
+        console.log(`Fetching page ${page} of ${tokenSymbol} holders with key #${currentKeyIndex + 1}...`);
+      }
       
       try {
         const params: any = {
@@ -180,7 +191,7 @@ export async function fetchTokenHoldersFromMoralis(
           params.cursor = cursor;
         }
         
-        const responseData = await callMoralisApi(`/erc20/${tokenAddress}/owners`, params);
+        const responseData = await callMoralisApi(`/erc20/${tokenAddress}/owners`, params, verbose);
         
         // Process token holders from this page
         if (responseData && responseData.result) {
@@ -208,7 +219,7 @@ export async function fetchTokenHoldersFromMoralis(
                   address: holder.owner_address.toLowerCase(),
                   balance: holder.balance,
                   balanceFormatted,
-                  tokenSymbol
+                  tokenSymbol: tokenSymbol
                 });
               }
             }
@@ -277,7 +288,8 @@ export async function fetchTokenHoldersFromMoralis(
 export async function fetchTokenBalanceWithMoralis(
   tokenAddress: string,
   holderAddress: string,
-  tokenDecimals: number
+  tokenDecimals: number,
+  verbose: boolean = false
 ): Promise<number> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token balance fetch.');
@@ -289,7 +301,7 @@ export async function fetchTokenBalanceWithMoralis(
       chain: AVALANCHE_CHAIN_ID
     };
     
-    const responseData = await callMoralisApi(`/${holderAddress}/erc20`, params);
+    const responseData = await callMoralisApi(`/${holderAddress}/erc20`, params, verbose);
     
     if (responseData && Array.isArray(responseData)) {
       const tokenBalance = responseData.find((b: any) => b.token_address.toLowerCase() === tokenAddress.toLowerCase());
@@ -317,7 +329,8 @@ export async function fetchTokenBalancesWithMoralis(
   tokenAddress: string,
   tokenSymbol: string,
   holderAddresses: string[],
-  tokenDecimals: number
+  tokenDecimals: number,
+  verbose: boolean = false
 ): Promise<TokenHolder[]> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token balances fetch.');
@@ -327,7 +340,11 @@ export async function fetchTokenBalancesWithMoralis(
   const holders: TokenHolder[] = [];
   let processedCount = 0;
   
-  console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using Moralis API...`);
+  if (verbose) {
+    console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using Moralis API...`);
+  } else {
+    console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses...`);
+  }
   
   // Process in batches to avoid rate limiting
   const batchSize = 5;
@@ -340,7 +357,7 @@ export async function fetchTokenBalancesWithMoralis(
       
       while (retryCount <= MAX_RETRIES) {
         try {
-          const balanceFormatted = await fetchTokenBalanceWithMoralis(tokenAddress, address, tokenDecimals);
+          const balanceFormatted = await fetchTokenBalanceWithMoralis(tokenAddress, address, tokenDecimals, verbose);
           
           return {
             address,
