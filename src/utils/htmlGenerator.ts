@@ -407,7 +407,7 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
 <body>
   <div class="container">
     <div class="header">
-      ${logoPath ? `<img src="../../public/${logoPath}" alt="${title} Logo" class="logo">` : ''}
+      ${logoPath ? `<img src="/assets/${logoPath}" alt="${title} Logo" class="logo">` : ''}
       <div class="title-container">
         <h1>${titleLink ? `<a href="${titleLink}" target="_blank">${title}</a>` : title}</h1>
       </div>

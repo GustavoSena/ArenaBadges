@@ -598,8 +598,18 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
     saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
     
+    // Also save leaderboard to public directory for the web server
+    const publicDir = path.join(process.cwd(), 'public');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    const publicHtmlPath = path.join(publicDir, 'leaderboard.html');
+    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
+    
     // Print total number of entries
     console.log(`Total entries: ${leaderboard.entries.length}`);
+    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
     
     return leaderboard;
   } catch (error) {

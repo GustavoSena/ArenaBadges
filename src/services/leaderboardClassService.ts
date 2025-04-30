@@ -479,15 +479,25 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
     const jsonOutputPath = path.join(outputDir, muLeaderboard.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
-    // Save leaderboard to HTML file
+    // Save leaderboard to HTML file in output directory
     const htmlFileName = muLeaderboard.getOutputFileName().replace('.json', '.html');
     const htmlOutputPath = path.join(outputDir, htmlFileName);
     saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    // Also save leaderboard to public directory for the web server
+    const publicDir = path.join(process.cwd(), 'public');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    const publicHtmlPath = path.join(publicDir, 'mu_leaderboard.html');
+    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
     
     // Print total number of entries
     console.log(`Total entries: ${leaderboard.entries.length}`);
     console.log(`JSON saved to: ${jsonOutputPath}`);
     console.log(`HTML saved to: ${htmlOutputPath}`);
+    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
     
     return leaderboard;
   } catch (error) {
@@ -525,15 +535,25 @@ export async function generateAndSaveStandardLeaderboard(verbose: boolean = fals
     const jsonOutputPath = path.join(outputDir, standardLeaderboard.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
-    // Save leaderboard to HTML file
+    // Save leaderboard to HTML file in output directory
     const htmlFileName = standardLeaderboard.getOutputFileName().replace('.json', '.html');
     const htmlOutputPath = path.join(outputDir, htmlFileName);
     saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    // Also save leaderboard to public directory for the web server
+    const publicDir = path.join(process.cwd(), 'public');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    const publicHtmlPath = path.join(publicDir, 'standard_leaderboard.html');
+    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
     
     // Print total number of entries
     console.log(`Total entries: ${leaderboard.entries.length}`);
     console.log(`JSON saved to: ${jsonOutputPath}`);
     console.log(`HTML saved to: ${htmlOutputPath}`);
+    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
     
     return leaderboard;
   } catch (error) {

@@ -17,6 +17,7 @@ A TypeScript application that fetches MUV, MUO, MUG, and MU token holders and Mu
 - Modular architecture with separation of concerns
 - **Robust Moralis API Key Rotation**: Automatically rotates between multiple API keys when quota limits are reached
 - **Extensible Leaderboard System**: Class-based architecture allowing for custom point calculation logic
+- **Standalone Leaderboard Server**: Continuously serves the leaderboard HTML with automatic and manual refresh options
 
 ## Leaderboard Features
 
@@ -67,6 +68,35 @@ The leaderboard HTML output includes the following features:
 - **Gradient Styling**: Header bar with gradient background, footer with gradient text
 - **Responsive Layout**: Centered table with max-width for better readability
 - **Pagination**: Gradient-styled pagination controls for large leaderboards
+
+## Leaderboard Server
+
+The project includes a robust standalone leaderboard server that continuously serves the leaderboard HTML and refreshes data automatically. See [LEADERBOARD_SERVER.md](LEADERBOARD_SERVER.md) for detailed documentation.
+
+### Key Server Features
+
+- **Continuous Availability**: The leaderboard HTML is always accessible, even during data refreshes
+- **Automatic Refresh**: Leaderboard data refreshes automatically every 3 hours
+- **Manual Refresh**: Supports forced refreshes via a dedicated script
+- **Worker Process**: All refresh operations run in separate processes for reliability
+- **Multiple Leaderboard Types**: Supports both MU and Standard leaderboards
+- **Cloud-Ready**: Configured for deployment to AWS or other cloud providers
+
+### Running the Server
+
+Start the leaderboard server:
+```bash
+npm run leaderboard-server
+```
+
+The server will start on port 3001 (or the port specified in your environment variables).
+
+### Manual Refresh
+
+To manually trigger a refresh:
+```bash
+npm run refresh-leaderboard
+```
 
 ## Configuration
 

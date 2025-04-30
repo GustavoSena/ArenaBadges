@@ -1,6 +1,5 @@
 import * as dotenv from 'dotenv';
-import { generateAndSaveLeaderboard } from './leaderboardService';
-import { generateAndSaveMuLeaderboard } from './leaderboardClassService';
+import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
 import { loadConfig } from '../utils/helpers';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -19,6 +18,8 @@ export interface LeaderboardSchedulerConfig {
   leaderboardTypes?: LeaderboardType[];
   intervalMs?: number;
   runImmediately?: boolean;
+  onSchedule?: (nextRunTime: Date) => void;
+  onRun?: () => void;
 }
 
 // Interface for the scheduler configuration from config file
@@ -30,7 +31,7 @@ interface SchedulerConfig {
 
 // Default configuration
 const DEFAULT_CONFIG: LeaderboardSchedulerConfig = {
-  leaderboardTypes: [LeaderboardType.STANDARD, LeaderboardType.MU],
+  leaderboardTypes: [LeaderboardType.MU],
   runImmediately: true
 };
 
@@ -44,7 +45,7 @@ async function generateLeaderboard(type: LeaderboardType): Promise<void> {
   try {
     switch (type) {
       case LeaderboardType.STANDARD:
-        await generateAndSaveLeaderboard();
+        await generateAndSaveStandardLeaderboard();
         break;
       case LeaderboardType.MU:
         await generateAndSaveMuLeaderboard();
@@ -64,7 +65,7 @@ async function generateLeaderboard(type: LeaderboardType): Promise<void> {
  * Run all configured leaderboard generations
  * @param types Array of leaderboard types to generate
  */
-async function runLeaderboardGeneration(types: LeaderboardType[]): Promise<void> {
+export async function runLeaderboardGeneration(types: LeaderboardType[]): Promise<void> {
   console.log(`Starting scheduled leaderboard generation at ${new Date().toISOString()}`);
   
   // Create a log entry for this run
@@ -102,20 +103,35 @@ export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = D
   
   // Get configuration
   const leaderboardTypes = config.leaderboardTypes || DEFAULT_CONFIG.leaderboardTypes || [];
-  const intervalHours = schedulerConfig.leaderboardIntervalHours || 24; // Default to daily
+  const intervalHours = schedulerConfig.leaderboardIntervalHours || 3; // Default to 3 hours
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
   const runImmediately = config.runImmediately !== undefined ? config.runImmediately : DEFAULT_CONFIG.runImmediately;
   
   console.log(`Starting leaderboard scheduler to run every ${intervalHours} hours`);
-  console.log(`Configured leaderboard types: ${leaderboardTypes.join(', ')}`);
+  console.log(`Configured leaderboard type: MU`);
   
   // Run immediately on startup if configured
   if (runImmediately) {
+    if (config.onRun) {
+      config.onRun();
+    }
     runLeaderboardGeneration(leaderboardTypes);
   }
   
   // Then schedule to run at the specified interval
+  const nextRunTime = new Date(Date.now() + intervalMs);
+  if (config.onSchedule) {
+    config.onSchedule(nextRunTime);
+  }
+  
   setInterval(() => {
+    if (config.onRun) {
+      config.onRun();
+    }
     runLeaderboardGeneration(leaderboardTypes);
+    const nextRunTime = new Date(Date.now() + intervalMs);
+    if (config.onSchedule) {
+      config.onSchedule(nextRunTime);
+    }
   }, intervalMs);
 }

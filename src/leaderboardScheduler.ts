@@ -7,40 +7,18 @@ dotenv.config();
 
 /**
  * Main entry point for the leaderboard scheduler
- * Starts the scheduler to periodically generate different types of leaderboards
+ * Starts the scheduler to periodically generate the MU leaderboard
  */
 function main(): void {
   try {
-    // Parse command line arguments to determine which leaderboards to generate
-    const args = process.argv.slice(2);
-    const leaderboardTypes: LeaderboardType[] = [];
-    
-    // If specific leaderboard types are specified, use those
-    if (args.length > 0) {
-      for (const arg of args) {
-        if (arg.toLowerCase() === 'standard') {
-          leaderboardTypes.push(LeaderboardType.STANDARD);
-        } else if (arg.toLowerCase() === 'mu') {
-          leaderboardTypes.push(LeaderboardType.MU);
-        } else {
-          console.warn(`Unknown leaderboard type: ${arg}`);
-        }
-      }
-    }
-    
-    // If no valid types specified, use all types
-    if (leaderboardTypes.length === 0) {
-      leaderboardTypes.push(LeaderboardType.STANDARD, LeaderboardType.MU);
-    }
-    
-    // Start the leaderboard scheduler with the specified types
+    // Start the leaderboard scheduler with MU leaderboard type
     startLeaderboardScheduler({
-      leaderboardTypes,
+      leaderboardTypes: [LeaderboardType.MU],
       runImmediately: true
     });
     
     console.log('MuBadges Leaderboard Scheduler started successfully');
-    console.log(`Generating leaderboards: ${leaderboardTypes.join(', ')}`);
+    console.log('Generating MU leaderboard');
   } catch (error) {
     console.error('Failed to start MuBadges Leaderboard Scheduler:', error);
     process.exit(1);

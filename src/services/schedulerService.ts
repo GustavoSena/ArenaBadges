@@ -5,6 +5,8 @@ import { loadConfig } from '../utils/helpers';
 interface SchedulerConfig {
   intervalMs?: number;
   apiKey?: string;
+  onSchedule?: (nextRunTime: Date) => void;
+  onRun?: () => void;
 }
 
 /**
@@ -47,8 +49,39 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   // Run immediately on startup
   runAndSendResults(apiKey);
   
+  // Call onRun callback if provided
+  if (config.onRun) {
+    config.onRun();
+  }
+  
+  // Calculate next run time
+  const nextRunTime = new Date();
+  nextRunTime.setTime(nextRunTime.getTime() + intervalMs);
+  
+  // Call onSchedule callback if provided
+  if (config.onSchedule) {
+    config.onSchedule(nextRunTime);
+  }
+  
   // Then schedule to run at the specified interval
   setInterval(() => {
+    // Run the scheduled task
     runAndSendResults(apiKey);
+    
+    // Call onRun callback if provided
+    if (config.onRun) {
+      config.onRun();
+    }
+    
+    // Calculate next run time
+    const nextRunTime = new Date();
+    nextRunTime.setTime(nextRunTime.getTime() + intervalMs);
+    
+    // Call onSchedule callback if provided
+    if (config.onSchedule) {
+      config.onSchedule(nextRunTime);
+    }
   }, intervalMs);
 }
+
+export { runAndSendResults };

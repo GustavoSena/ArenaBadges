@@ -15,16 +15,22 @@
     "standard-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type standard",
     "custom-leaderboard": "ts-node src/generateCustomLeaderboard.ts",
     "leaderboard-scheduler": "ts-node src/leaderboardScheduler.ts",
+    "badge-server": "ts-node src/badgeSchedulerServer.ts",
+    "leaderboard-server": "ts-node src/leaderboardSchedulerServer.ts",
+    "start-servers": "ts-node src/startServers.ts",
+    "refresh-leaderboard": "ts-node src/refreshLeaderboard.ts",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/express": "^5.0.1",
     "alchemy-sdk": "^3.5.8",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "ethers": "^6.9.0",
+    "express": "^5.1.0",
     "moralis": "^2.27.2"
   },
   "devDependencies": {
