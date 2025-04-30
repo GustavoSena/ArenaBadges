@@ -4,8 +4,8 @@
   "description": "Mu badges project",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
     "start": "ts-node src/index.ts",
+    "build": "tsc",
     "dev": "ts-node src/index.ts",
     "scheduler": "ts-node src/index.ts",
     "send-results": "ts-node src/sendResults.ts",
@@ -15,10 +15,10 @@
     "standard-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type standard",
     "custom-leaderboard": "ts-node src/generateCustomLeaderboard.ts",
     "leaderboard-scheduler": "ts-node src/leaderboardScheduler.ts",
-    "badge-server": "ts-node src/badgeSchedulerServer.ts",
-    "leaderboard-server": "ts-node src/leaderboardSchedulerServer.ts",
+    "badge-server": "ts-node src/badges/server/badgeSchedulerServer.ts",
+    "leaderboard-server": "ts-node src/leaderboard/server/leaderboardSchedulerServer.ts",
     "start-servers": "ts-node src/startServers.ts",
-    "refresh-leaderboard": "ts-node src/refreshLeaderboard.ts",
+    "refresh-leaderboard": "ts-node src/leaderboard/server/refreshLeaderboard.ts",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"
   },

@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import express, { Request, Response, RequestHandler } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import { startLeaderboardScheduler, LeaderboardType, runLeaderboardGeneration } from './services/leaderboardSchedulerService';
+import { startLeaderboardScheduler, LeaderboardType, runLeaderboardGeneration } from '../services/leaderboardSchedulerService';
 import { spawn } from 'child_process';
 
 // Load environment variables
@@ -275,10 +275,10 @@ async function startLeaderboardSchedulerServer() {
     };
 
     // Only use MU leaderboard type
-    const leaderboardTypes = [LeaderboardType.MU];
+    const leaderboardTypesConfig = [LeaderboardType.MU];
     
     // Store the leaderboard types globally
-    global.leaderboardTypes = leaderboardTypes;
+    global.leaderboardTypes = leaderboardTypesConfig;
 
     // Create public directory if it doesn't exist
     const publicDir = path.join(process.cwd(), 'public');
@@ -296,7 +296,7 @@ async function startLeaderboardSchedulerServer() {
     // Use a 3-hour interval as requested
     const intervalHours = 3;
     startLeaderboardScheduler({
-      leaderboardTypes,
+      leaderboardTypes: leaderboardTypesConfig,
       intervalMs: intervalHours * 60 * 60 * 1000,
       runImmediately: true,
       onSchedule: (nextRunTime: Date) => {

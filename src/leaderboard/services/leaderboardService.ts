@@ -1,15 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { TokenHolder, NftHolder, ArenabookUserResponse } from '../types/interfaces';
-import { LeaderboardConfig, HolderPoints, LeaderboardEntry, Leaderboard } from '../types/leaderboard';
-import { loadConfig } from '../utils/helpers';
-import { fetchNftHoldersFromEthers } from '../api/blockchain';
-import { fetchTokenHoldersFromMoralis } from '../api/moralis';
-import { processHoldersWithSocials, SocialProfileInfo } from './socialProfiles';
-import { saveLeaderboardHtml } from '../utils/htmlGenerator';
 import { ethers } from 'ethers';
 import * as dotenv from 'dotenv';
-import { formatTokenBalance, sleep } from '../utils/helpers';
+
+import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
+import { LeaderboardConfig, HolderPoints, LeaderboardEntry, Leaderboard } from '../../types/leaderboard';
+import { fetchNftHoldersFromEthers } from '../../api/blockchain';
+import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
+import { processHoldersWithSocials, SocialProfileInfo } from '../../services/socialProfiles';
+import { generateLeaderboardHtml } from '../../utils/htmlGenerator';
+import { formatTokenBalance, sleep, loadConfig } from '../../utils/helpers';
 
 // Load environment variables
 dotenv.config();
@@ -596,7 +596,8 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     
     // Save leaderboard to HTML file
     const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    const htmlContent = generateLeaderboardHtml(leaderboard, config.output);
+    fs.writeFileSync(htmlOutputPath, htmlContent);
     
     // Also save leaderboard to public directory for the web server
     const publicDir = path.join(process.cwd(), 'public');
@@ -605,7 +606,7 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     }
     
     const publicHtmlPath = path.join(publicDir, 'leaderboard.html');
-    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
+    fs.writeFileSync(publicHtmlPath, htmlContent);
     
     // Print total number of entries
     console.log(`Total entries: ${leaderboard.entries.length}`);

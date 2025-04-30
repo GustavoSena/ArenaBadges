@@ -3,16 +3,16 @@ import * as path from 'path';
 import { ethers } from 'ethers';
 import * as dotenv from 'dotenv';
 
-import { TokenHolder, NftHolder } from '../types/interfaces';
-import { LeaderboardConfig, HolderPoints, Leaderboard } from '../types/leaderboard';
-import { BaseLeaderboard } from '../types/leaderboardClasses';
-import { MuLeaderboard } from '../implementations/leaderboards/muLeaderboard';
-import { StandardLeaderboard } from '../implementations/leaderboards/standardLeaderboard';
-import { fetchNftHoldersFromEthers, fetchNftHoldersWithoutTotalSupply } from '../api/blockchain';
-import { fetchTokenHoldersFromMoralis } from '../api/moralis';
-import { processHoldersWithSocials, SocialProfileInfo } from './socialProfiles';
-import { saveLeaderboardHtml } from '../utils/htmlGenerator';
-import { formatTokenBalance, sleep } from '../utils/helpers';
+import { TokenHolder, NftHolder } from '../../types/interfaces';
+import { LeaderboardConfig, HolderPoints, Leaderboard } from '../../types/leaderboard';
+import { BaseLeaderboard } from '../../types/leaderboardClasses';
+import { MuLeaderboard } from '../../implementations/leaderboards/muLeaderboard';
+import { StandardLeaderboard } from '../../implementations/leaderboards/standardLeaderboard';
+import { fetchNftHoldersFromEthers, fetchNftHoldersWithoutTotalSupply } from '../../api/blockchain';
+import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
+import { processHoldersWithSocials, SocialProfileInfo } from '../../services/socialProfiles';
+import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
+import { formatTokenBalance, sleep } from '../../utils/helpers';
 
 // Load environment variables
 dotenv.config();

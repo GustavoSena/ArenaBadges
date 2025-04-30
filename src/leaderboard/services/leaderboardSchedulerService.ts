@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
-import { loadConfig } from '../utils/helpers';
+import { loadConfig } from '../../utils/helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 

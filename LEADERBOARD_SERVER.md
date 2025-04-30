@@ -148,17 +148,25 @@ See the [AWS Deployment Guide](aws-deployment.md) for detailed instructions on d
 
 ### Project Structure
 
-- `src/leaderboardSchedulerServer.ts` - Main server file
-- `src/refreshWorker.ts` - Worker process for refreshing leaderboard data
-- `src/refreshLeaderboard.ts` - Script for manual refresh
-- `src/services/leaderboardSchedulerService.ts` - Scheduler service
-- `src/services/leaderboardClassService.ts` - Leaderboard generation logic
+The project is organized into two main components:
+
+#### Leaderboard Component
+- `src/leaderboard/server/leaderboardSchedulerServer.ts` - Main leaderboard server file
+- `src/leaderboard/server/refreshWorker.ts` - Worker process for refreshing leaderboard data
+- `src/leaderboard/server/refreshLeaderboard.ts` - Script for manual leaderboard refresh
+- `src/leaderboard/services/leaderboardSchedulerService.ts` - Leaderboard scheduler service
+- `src/leaderboard/services/leaderboardClassService.ts` - Leaderboard generation logic
+- `src/leaderboard/services/leaderboardService.ts` - Leaderboard service for data processing
+
+#### Badge Component
+- `src/badges/server/badgeSchedulerServer.ts` - Badge scheduler server
+- `src/badges/services/schedulerService.ts` - Generic scheduler service
 
 ### Adding New Features
 
 To add new endpoints or features:
 
-1. Modify `src/leaderboardSchedulerServer.ts` to add new routes
+1. Modify `src/leaderboard/server/leaderboardSchedulerServer.ts` to add new routes
 2. Update the worker process if needed
 3. Update documentation to reflect changes
 

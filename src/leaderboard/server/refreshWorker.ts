@@ -1,7 +1,7 @@
 // Refresh Worker Process
 import * as dotenv from 'dotenv';
 import axios from 'axios';
-import { LeaderboardType, runLeaderboardGeneration } from './services/leaderboardSchedulerService';
+import { LeaderboardType, runLeaderboardGeneration } from '../services/leaderboardSchedulerService';
 
 // Load environment variables
 dotenv.config();
