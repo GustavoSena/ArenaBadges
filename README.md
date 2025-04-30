@@ -98,6 +98,88 @@ To manually trigger a refresh:
 npm run refresh-leaderboard
 ```
 
+## Project Structure
+
+The project is now organized into a clear, modular structure with separate directories for leaderboard and badge functionality:
+
+- `src/index.ts`: Main entry point that starts both leaderboard and badge servers
+- `src/leaderboard/`: All leaderboard-related functionality
+  - `server/`: Leaderboard server implementation
+    - `leaderboardSchedulerServer.ts`: Express server for serving leaderboards
+    - `refreshLeaderboard.ts`: Script for manually triggering leaderboard refresh
+  - `services/`: Core leaderboard services
+    - `leaderboardClassService.ts`: Class-based leaderboard generation
+    - `leaderboardService.ts`: Standard leaderboard generation
+  - `generators/`: Leaderboard generation scripts
+    - `generateCustomLeaderboard.ts`: Script for generating custom leaderboards (MU or standard)
+    - `generateLeaderboard.ts`: Script for generating the standard leaderboard
+    - `generateMuLeaderboard.ts`: Script for generating the MU leaderboard
+- `src/badges/`: All badge-related functionality
+  - `server/`: Badge server implementation
+    - `badgeSchedulerServer.ts`: Express server for badge scheduling
+  - `services/`: Core badge services
+    - `schedulerService.ts`: Manages the scheduling of data collection and API updates
+    - `holderService.ts`: Fetches token and NFT holders
+    - `apiService.ts`: Handles API communication
+  - `profiles/`: Profile management
+    - `fetchTokenHolderProfiles.ts`: Fetches token holder profiles
+    - `holderProfileManager.ts`: Manages fetching and saving holder profiles
+    - `sendResults.ts`: Script for sending results to the API
+  - `utils/`: Badge-specific utilities
+    - `helpers.ts`: Helper functions for badge functionality
+  - `config/`: Badge-specific configuration
+- `src/api/`: API integrations
+  - `blockchain.ts`: Fetches NFT holders using ethers.js
+  - `moralis.ts`: Fetches token holders with API key rotation
+  - `snowtrace.ts`: Fetches token holders from Snowtrace
+  - `arenabook.ts`: Fetches social profiles from Arenabook
+- `src/utils/`: Common utility functions
+  - `htmlGenerator.ts`: Generates HTML output for the leaderboard
+  - `helpers.ts`: Common helper functions
+- `src/types/`: TypeScript interfaces and types
+  - `interfaces.ts`: Common interfaces for the application
+  - `leaderboard.ts`: Interfaces for the leaderboard feature
+  - `leaderboardClasses.ts`: Class-based leaderboard system
+- `docs/`: Documentation
+- `config/`: Global configuration files
+- `public/`: Public HTML files served by the leaderboard server
+- `assets/`: Static assets like logos
+- `tests/`: Test files
+
+## Running the Servers
+
+### Start Both Servers
+
+To start both the leaderboard and badge servers:
+
+```bash
+npm start
+```
+
+### Start Leaderboard Server Only
+
+To start only the leaderboard server:
+
+```bash
+npm run leaderboard-server
+```
+
+### Start Badge Server Only
+
+To start only the badge server:
+
+```bash
+npm run badge-server
+```
+
+### Refresh Leaderboard Manually
+
+To manually trigger a leaderboard refresh:
+
+```bash
+npm run refresh-leaderboard
+```
+
 ## Configuration
 
 ### Token and NFT Configuration
@@ -253,40 +335,6 @@ npm run mu-leaderboard
 ```
 
 Both leaderboard commands will create JSON and HTML versions of the leaderboard in the `files/` directory.
-
-## Project Structure
-
-- `src/index.ts`: Main entry point that starts the scheduler
-- `src/holderProfileManager.ts`: Manages fetching and saving holder profiles
-- `src/sendResults.ts`: Script for sending results to the API
-- `src/generateLeaderboard.ts`: Script for generating the standard leaderboard
-- `src/generateMuLeaderboard.ts`: Script for generating the MU leaderboard
-- `src/services/`: Core services for the application
-  - `holderService.ts`: Fetches token and NFT holders
-  - `leaderboardService.ts`: Standard leaderboard generation
-  - `leaderboardClassService.ts`: Class-based leaderboard generation
-  - `socialProfiles.ts`: Processes holders and fetches their social profiles
-  - `apiService.ts`: Handles API communication
-  - `schedulerService.ts`: Manages the scheduling of data collection and API updates
-- `src/api/`: API integrations
-  - `blockchain.ts`: Fetches NFT holders using ethers.js
-  - `moralis.ts`: Fetches token holders with API key rotation
-  - `snowtrace.ts`: Fetches token holders from Snowtrace
-  - `arenabook.ts`: Fetches social profiles from Arenabook
-- `src/utils/`: Utility functions
-  - `htmlGenerator.ts`: Generates HTML output for the leaderboard
-  - `helpers.ts`: Common helper functions
-- `src/types/`: TypeScript interfaces and types
-  - `interfaces.ts`: Common interfaces for the application
-  - `leaderboard.ts`: Interfaces for the leaderboard feature
-  - `leaderboardClasses.ts`: Class-based leaderboard system
-- `docs/`: Documentation
-  - `LEADERBOARD.md`: Documentation for the standard leaderboard
-  - `LEADERBOARD_CLASSES.md`: Documentation for the class-based leaderboard system
-  - `MORALIS_API_KEY_ROTATION.md`: Documentation for the Moralis API key rotation feature
-- `config/`: Configuration files
-- `files/`: Output directory for JSON and HTML files
-- `tests/`: Test files
 
 ## Output Format
 

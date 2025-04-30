@@ -1,11 +1,21 @@
+// Token Holder Profiles Fetcher
 import * as fs from 'fs';
 import * as path from 'path';
-import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
+import axios from 'axios';
+import { sleep as sleepUtil } from '../../utils/helpers';
+import { TokenHolder, NftHolder } from '../../types/interfaces';
+import { SocialProfileInfo } from '../../services/socialProfiles';
 
 // Load environment variables
 dotenv.config();
+
+// Export the HolderResults interface for use in other files
+export interface HolderResults {
+  nftHolders: string[];
+  combinedHolders: string[];
+}
 
 // Load configuration
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/tokens.json'), 'utf8'));
@@ -33,19 +43,6 @@ interface AppConfig {
 const typedConfig = config as AppConfig;
 
 // Define types
-interface TokenHolder {
-  address: string;
-  balance: string;
-  balanceFormatted: number;
-  tokenSymbol: string;
-}
-
-interface NftHolder {
-  address: string;
-  tokenCount: number;
-  tokenName: string;
-}
-
 interface ArenabookUserResponse {
   twitter_username: string | null;
   twitter_handle: string | null;
@@ -169,7 +166,7 @@ async function fetchTokenHoldersFromSnowtrace(tokenAddress: string): Promise<Tok
           } else {
             page++;
             // Add delay between pages to avoid rate limiting
-            await sleep(1000);
+            await sleepUtil(1000);
           }
         } else {
           hasMorePages = false;
@@ -259,7 +256,7 @@ async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[
       console.log(`Processed up to token ID ${i + batchSize - 1}, found ${holderCounts.size} unique holders so far`);
       
       // Add a small delay between batches to avoid rate limiting
-      await sleep(200);
+      await sleepUtil(200);
     }
     
     console.log(`Found ${holderCounts.size} unique holders`);
@@ -313,7 +310,7 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleep(REQUEST_DELAY_MS);
+            await sleepUtil(REQUEST_DELAY_MS);
           } else {
             console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error.response.status, error.response.statusText);
             return null;
@@ -323,7 +320,7 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
         retryCount++;
         if (retryCount <= MAX_RETRIES) {
           console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-          await sleep(REQUEST_DELAY_MS);
+          await sleepUtil(REQUEST_DELAY_MS);
         } else {
           console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error);
           return null;
@@ -397,7 +394,7 @@ async function processHoldersWithSocials<T extends { address: string }>(
     
     // Delay before next batch
     if (i + batchSize < holders.length) {
-      await sleep(REQUEST_DELAY_MS);
+      await sleepUtil(REQUEST_DELAY_MS);
     }
   }
   
@@ -419,7 +416,7 @@ async function processHoldersWithSocials<T extends { address: string }>(
 /**
  * Main function to fetch token holders and their social profiles
  */
-export async function fetchTokenHolderProfiles(): Promise<void> {
+export async function fetchTokenHolderProfiles(): Promise<HolderResults> {
   try {
     // Define token addresses to check
     const tokenAddress = typedConfig.tokens[0].address;
@@ -473,8 +470,16 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
     
     console.log(`\nSaved ${combinedHandles.length} Twitter handles of holders with both MUV tokens and NFTs`);
     
+    return {
+      nftHolders: combinedHandles,
+      combinedHolders: combinedHandles
+    };
   } catch (error) {
     console.error('Error in fetchTokenHolderProfiles:', error);
+    return {
+      nftHolders: [],
+      combinedHolders: []
+    };
   }
 }
 

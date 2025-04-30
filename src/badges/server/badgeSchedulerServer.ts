@@ -1,19 +1,23 @@
 // Badge Scheduler Server
 import * as dotenv from 'dotenv';
 import express from 'express';
-import { startScheduler } from '../services/schedulerService';
+import { startScheduler, runAndSendResults } from '../services/schedulerService';
 
 // Load environment variables
 dotenv.config();
 
 // Default port for the badge scheduler server
-const PORT = process.env.BADGE_SERVER_PORT || 3000;
+const PORT = process.env.BADGE_SERVER_PORT ? parseInt(process.env.BADGE_SERVER_PORT, 10) : 3000;
 
 // Global variables to track scheduler status
 declare global {
   var lastBadgeSchedulerRun: string | null;
   var nextBadgeSchedulerRun: string | null;
 }
+
+// Initialize global variables
+global.lastBadgeSchedulerRun = null;
+global.nextBadgeSchedulerRun = null;
 
 /**
  * Main function to start the badge scheduler server
@@ -52,9 +56,6 @@ async function startBadgeSchedulerServer() {
         if (!apiKey) {
           throw new Error('API key is required. Set it as API_KEY environment variable.');
         }
-
-        // Override the global runAndSendResults function to track last run time
-        const runAndSendResults = require('./services/schedulerService').runAndSendResults;
         
         // Run the scheduler manually
         global.lastBadgeSchedulerRun = new Date().toISOString();
@@ -92,7 +93,7 @@ async function startBadgeSchedulerServer() {
     });
 
     // Start the server
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`Badge Scheduler Server running on port ${PORT}`);
       console.log('Badge scheduler started successfully');
     });

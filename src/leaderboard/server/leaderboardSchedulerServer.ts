@@ -14,17 +14,22 @@ const PORT = process.env.LEADERBOARD_SERVER_PORT || 3001;
 
 // Global variables to track scheduler status
 declare global {
-  var lastLeaderboardRun: string | null;
-  var nextLeaderboardRun: string | null;
-  var leaderboardTypes: LeaderboardType[];
-  var isRefreshing: boolean;
+  interface GlobalVariables {
+    lastLeaderboardRun: string | null;
+    nextLeaderboardRun: string | null;
+    leaderboardTypes: LeaderboardType[];
+    isRefreshing: boolean;
+  }
+  var globalVariables: GlobalVariables;
 }
 
 // Initialize global variables
-global.lastLeaderboardRun = null;
-global.nextLeaderboardRun = null;
-global.leaderboardTypes = [LeaderboardType.MU];
-global.isRefreshing = false;
+global.globalVariables = {
+  lastLeaderboardRun: null,
+  nextLeaderboardRun: null,
+  leaderboardTypes: [LeaderboardType.MU],
+  isRefreshing: false
+};
 
 /**
  * Main function to start the leaderboard scheduler server
@@ -59,9 +64,9 @@ async function startLeaderboardSchedulerServer() {
         status: 'running',
         service: 'leaderboard-scheduler',
         leaderboardType: LeaderboardType.MU,
-        lastRun: global.lastLeaderboardRun || null,
-        nextRun: global.nextLeaderboardRun || null,
-        isRefreshing: global.isRefreshing || false,
+        lastRun: global.globalVariables.lastLeaderboardRun || null,
+        nextRun: global.globalVariables.nextLeaderboardRun || null,
+        isRefreshing: global.globalVariables.isRefreshing || false,
         timestamp: new Date().toISOString()
       });
     };
@@ -103,11 +108,11 @@ async function startLeaderboardSchedulerServer() {
     const triggerHandler: RequestHandler = (req, res) => {
       try {
         // If already refreshing, return a 429 status
-        if (global.isRefreshing) {
+        if (global.globalVariables.isRefreshing) {
           res.status(429).json({
             status: 'busy',
             message: 'Leaderboard is already being refreshed',
-            lastRun: global.lastLeaderboardRun,
+            lastRun: global.globalVariables.lastLeaderboardRun,
             timestamp: new Date().toISOString()
           });
         }
@@ -115,7 +120,7 @@ async function startLeaderboardSchedulerServer() {
         console.log('Manual trigger received for leaderboard scheduler');
         
         // Set refreshing flag
-        global.isRefreshing = true;
+        global.globalVariables.isRefreshing = true;
         
         // Send immediate response
         res.status(202).json({
@@ -141,20 +146,20 @@ async function startLeaderboardSchedulerServer() {
           console.log(`Started leaderboard refresh process with PID: ${refreshProcess.pid}`);
           
           // Update the last run time
-          global.lastLeaderboardRun = new Date().toISOString();
+          global.globalVariables.lastLeaderboardRun = new Date().toISOString();
           
           // Calculate next run time
           const intervalHours = 3; // Default to 3 hours
           const nextRun = new Date();
           nextRun.setHours(nextRun.getHours() + intervalHours);
-          global.nextLeaderboardRun = nextRun.toISOString();
+          global.globalVariables.nextLeaderboardRun = nextRun.toISOString();
         } catch (error) {
           console.error('Error spawning refresh process:', error);
-          global.isRefreshing = false;
+          global.globalVariables.isRefreshing = false;
         }
       } catch (error: any) {
         console.error('Error triggering leaderboard generation:', error);
-        global.isRefreshing = false;
+        global.globalVariables.isRefreshing = false;
         res.status(500).json({
           status: 'error',
           message: error.message,
@@ -168,11 +173,11 @@ async function startLeaderboardSchedulerServer() {
     const triggerStandardHandler: RequestHandler = (req, res) => {
       try {
         // If already refreshing, return a 429 status
-        if (global.isRefreshing) {
+        if (global.globalVariables.isRefreshing) {
           res.status(429).json({
             status: 'busy',
             message: 'Leaderboard is already being refreshed',
-            lastRun: global.lastLeaderboardRun,
+            lastRun: global.globalVariables.lastLeaderboardRun,
             timestamp: new Date().toISOString()
           });
           return;
@@ -181,7 +186,7 @@ async function startLeaderboardSchedulerServer() {
         console.log('Manual trigger received for standard leaderboard generation');
         
         // Set refreshing flag
-        global.isRefreshing = true;
+        global.globalVariables.isRefreshing = true;
         
         // Send immediate response
         res.status(202).json({
@@ -211,20 +216,20 @@ async function startLeaderboardSchedulerServer() {
           console.log(`Started standard leaderboard refresh process with PID: ${refreshProcess.pid}`);
           
           // Update the last run time
-          global.lastLeaderboardRun = new Date().toISOString();
+          global.globalVariables.lastLeaderboardRun = new Date().toISOString();
           
           // Calculate next run time
           const intervalHours = 3; // Default to 3 hours
           const nextRun = new Date();
           nextRun.setHours(nextRun.getHours() + intervalHours);
-          global.nextLeaderboardRun = nextRun.toISOString();
+          global.globalVariables.nextLeaderboardRun = nextRun.toISOString();
         } catch (error) {
           console.error('Error spawning standard refresh process:', error);
-          global.isRefreshing = false;
+          global.globalVariables.isRefreshing = false;
         }
       } catch (error: any) {
         console.error('Error triggering standard leaderboard generation:', error);
-        global.isRefreshing = false;
+        global.globalVariables.isRefreshing = false;
         res.status(500).json({
           status: 'error',
           message: error.message,
@@ -248,8 +253,8 @@ async function startLeaderboardSchedulerServer() {
         }
 
         // Reset the refreshing flag
-        global.isRefreshing = false;
-        global.lastLeaderboardRun = new Date().toISOString();
+        global.globalVariables.isRefreshing = false;
+        global.globalVariables.lastLeaderboardRun = new Date().toISOString();
         
         res.status(200).json({
           status: 'success',
@@ -278,7 +283,7 @@ async function startLeaderboardSchedulerServer() {
     const leaderboardTypesConfig = [LeaderboardType.MU];
     
     // Store the leaderboard types globally
-    global.leaderboardTypes = leaderboardTypesConfig;
+    global.globalVariables.leaderboardTypes = leaderboardTypesConfig;
 
     // Create public directory if it doesn't exist
     const publicDir = path.join(process.cwd(), 'public');
@@ -300,13 +305,13 @@ async function startLeaderboardSchedulerServer() {
       intervalMs: intervalHours * 60 * 60 * 1000,
       runImmediately: true,
       onSchedule: (nextRunTime: Date) => {
-        global.nextLeaderboardRun = nextRunTime.toISOString();
+        global.globalVariables.nextLeaderboardRun = nextRunTime.toISOString();
       },
       onRun: () => {
         // Instead of running directly, trigger the refresh worker
-        if (!global.isRefreshing) {
-          global.isRefreshing = true;
-          global.lastLeaderboardRun = new Date().toISOString();
+        if (!global.globalVariables.isRefreshing) {
+          global.globalVariables.isRefreshing = true;
+          global.globalVariables.lastLeaderboardRun = new Date().toISOString();
           
           // Spawn a separate process to handle the refresh
           // Use node directly with the ts-node/register hook
@@ -327,7 +332,7 @@ async function startLeaderboardSchedulerServer() {
     });
 
     // Set initial next run time
-    global.nextLeaderboardRun = calculateNextRunTime(intervalHours).toISOString();
+    global.globalVariables.nextLeaderboardRun = calculateNextRunTime(intervalHours).toISOString();
 
     // Start the server
     const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
