@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-04-30T12:07:47.634Z",
+  "timestamp": "2025-04-30T13:54:48.381Z",
   "entries": [
     {
       "rank": 1,
@@ -2636,12 +2636,12 @@
       "twitterHandle": "petolatunji",
       "profileImageUrl": "https://static.starsarena.com/uploads/fa07e49c-ac8c-2e44-0235-8d0c62fa9c801734187134990.png",
       "address": "0x541bce4fd262f094080b7da8bafc8a649dab9981",
-      "totalPoints": 616.2837681129059,
+      "totalPoints": 616.296900112906,
       "tokenPoints": {
         "MUV": 0,
         "MUO": 0,
         "MUG": 0,
-        "MU": 5.2577
+        "MU": 5.270832
       },
       "nftPoints": {
         "Mu Pups": 611.0260681129059
@@ -2759,6 +2759,22 @@
     },
     {
       "rank": 188,
+      "twitterHandle": "Milica44833050",
+      "profileImageUrl": "https://static.starsarena.com/uploads/d94bcde1-2cb2-78a3-e21a-ad34cebb4aab1743531838367.png",
+      "address": "0x3ae918eb1e1fc5de14dc70ff85d6b888a584e92c",
+      "totalPoints": 611.0368481129059,
+      "tokenPoints": {
+        "MUV": 0,
+        "MUO": 0,
+        "MUG": 0,
+        "MU": 0.01078
+      },
+      "nftPoints": {
+        "Mu Pups": 611.0260681129059
+      }
+    },
+    {
+      "rank": 189,
       "twitterHandle": "Tomorrows_Talk",
       "profileImageUrl": "https://static.starsarena.com/uploads/32a05359-bbc9-99c8-1486-2596fb0fcc061744408157223.png",
       "address": "0x94ecc5b20184c7e34f344210ba5f54a039bf4a47",
@@ -2768,22 +2784,6 @@
         "MUO": 0,
         "MUG": 0,
         "MU": 0.006068
-      },
-      "nftPoints": {
-        "Mu Pups": 611.0260681129059
-      }
-    },
-    {
-      "rank": 189,
-      "twitterHandle": "Milica44833050",
-      "profileImageUrl": "https://static.starsarena.com/uploads/d94bcde1-2cb2-78a3-e21a-ad34cebb4aab1743531838367.png",
-      "address": "0x3ae918eb1e1fc5de14dc70ff85d6b888a584e92c",
-      "totalPoints": 611.0260681129059,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 0
       },
       "nftPoints": {
         "Mu Pups": 611.0260681129059
@@ -3905,20 +3905,6 @@
     },
     {
       "rank": 269,
-      "twitterHandle": "prettyjson",
-      "profileImageUrl": "https://static.starsarena.com/uploads/338b9b6b-b9e1-44a9-25b0-99647b1a093c1734226063134.png",
-      "address": "0x2131c2e43b5548ba9324685a1a79369627d009be",
-      "totalPoints": 352.80793978553,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 352.80793978553
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 270,
       "twitterHandle": "MetisDoctor",
       "profileImageUrl": "https://static.starsarena.com/uploads/11a8c584-c8d0-5477-8d81-066d544e01141734148810802.png",
       "address": "0x28aa20ee65c321a633b25a01d90be10320399f5f",
@@ -3932,63 +3918,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 271,
-      "twitterHandle": "ae5thr0sx",
-      "profileImageUrl": "https://static.starsarena.com/uploads/01b96fcf-2375-a2b8-6b98-609bb5791b001734327965274.png",
-      "address": "0x7ca8096026be739f2a1bc865ec10999575071f27",
-      "totalPoints": 348.83055111694927,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 348.83055111694927
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 272,
-      "twitterHandle": "arminreiter",
-      "profileImageUrl": "https://static.starsarena.com/uploads/7927ce64-c964-96c6-2567-4f88812246181729695832756.png",
-      "address": "0x6e536f75ad2edb986f8cad55b84d37c83c4071f5",
-      "totalPoints": 348.543421203043,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 348.543421203043
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 273,
-      "twitterHandle": "jarednotjerry1",
-      "profileImageUrl": "https://static.starsarena.com/uploads/404a0fcb-b9ac-8854-b8b3-46dfd97e7fd51740159064111.png",
-      "address": "0xbceccaf084822cb95df722dd4ab82e60258cc1bc",
-      "totalPoints": 346.96193472029665,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 346.96193472029665
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 274,
-      "twitterHandle": "Milosaur777",
-      "profileImageUrl": "https://static.starsarena.com/uploads/57a5175f-ac2b-8de0-1909-8c152f7a000c1743196996179.png",
-      "address": "0x2afb41282e9d4cab010a5d1147b3d5ce0a0159ad",
-      "totalPoints": 346.27590490225987,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 346.27590490225987
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 275,
+      "rank": 270,
       "twitterHandle": "UlaPorter7",
       "profileImageUrl": "https://static.starsarena.com/uploads/da881dd7-df62-6cfc-574a-0360b0f39ca21745620454168.png",
       "address": "0x281f1366ea51cc572b564494651f0f99988a93af",
@@ -4002,35 +3932,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 276,
-      "twitterHandle": "PappiAbraham",
-      "profileImageUrl": "https://static.starsarena.com/uploads/328cc1be-f219-e905-4a2d-7a860cb0d3bb1739740596478.png",
-      "address": "0x19045212269ed7b7cc0d8eb2214f85a3cd53ebda",
-      "totalPoints": 344.36491722254027,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 344.36491722254027
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 277,
-      "twitterHandle": "Foreign_buffett",
-      "profileImageUrl": "https://static.starsarena.com/uploads/e8e9a523-8a9b-60f1-3c32-ba6d9198f1131724713938591.png",
-      "address": "0xcb98f38d328791e86dc1757b8dc3b33b96c3407b",
-      "totalPoints": 343.40575850713105,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 343.40575850713105
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 278,
+      "rank": 271,
       "twitterHandle": "chikn_stache",
       "profileImageUrl": "https://static.starsarena.com/uploads/b1b1fdec-048e-70d6-2905-cf50700c08a21740703477096.png",
       "address": "0x2c13e032765550c7ce1afd6dd452d00890587b9a",
@@ -4044,35 +3946,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 279,
-      "twitterHandle": "imajcenus",
-      "profileImageUrl": "https://static.starsarena.com/uploads/300dd3d2-eccf-fb55-6c27-97c53cac39a51740615065312.png",
-      "address": "0x85eb2931f2226875cdceb7239dd7b10009de16a6",
-      "totalPoints": 341.908051893876,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 341.908051893876
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 280,
-      "twitterHandle": "asscror2",
-      "profileImageUrl": "https://static.starsarena.com/uploads/fbe5eff6-3a39-00ea-d9be-c28829d4fc5e1743979478671.png",
-      "address": "0x668376816df687650bf5922e429589ef581c229d",
-      "totalPoints": 337.06445366220305,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 337.06445366220305
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 281,
+      "rank": 272,
       "twitterHandle": "MykePayn3",
       "profileImageUrl": "https://static.starsarena.com/uploads/f270f86b-4abb-228b-8107-d9bf902d2ec11714052851916.png",
       "address": "0x6ad669e9af9d0c88ffa33ae20902c02a0340a62d",
@@ -4086,7 +3960,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 282,
+      "rank": 273,
       "twitterHandle": "stevesnakamoto",
       "profileImageUrl": "https://static.starsarena.com/uploads/f05d695b-cf2c-5709-9eaa-b8e67bc2b76d1743029764534.png",
       "address": "0x77ae4b83f28cf8179a872a7b25c8654f798a1e83",
@@ -4100,7 +3974,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 283,
+      "rank": 274,
       "twitterHandle": "ovoimballin",
       "profileImageUrl": "https://static.starsarena.com/uploads/8947a95e-bf85-a2b3-ecf7-33b56b849d781741277980026.png",
       "address": "0xc454b104ce2b3194f6353068283a42d6ac03f181",
@@ -4114,7 +3988,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 284,
+      "rank": 275,
       "twitterHandle": "Zackevan92",
       "profileImageUrl": "https://static.starsarena.com/uploads/4675c2ec-ed0c-96c3-5927-8efc578e36741725205527765.png",
       "address": "0x3ddcfe819465c86fb5e540942edfc240fa5ad101",
@@ -4128,21 +4002,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 285,
-      "twitterHandle": "litvus72459",
-      "profileImageUrl": "https://static.starsarena.com/uploads/eb92a7f8-d208-9da9-29ba-2a7f3b45d8ba1730421949585.png",
-      "address": "0x71f148fcad85650603f98d2c7d3846c5dab87836",
-      "totalPoints": 321.30116557811044,
-      "tokenPoints": {
-        "MUV": 0,
-        "MUO": 0,
-        "MUG": 0,
-        "MU": 321.30116557811044
-      },
-      "nftPoints": {}
-    },
-    {
-      "rank": 286,
+      "rank": 276,
       "twitterHandle": "satothewise",
       "profileImageUrl": "https://static.starsarena.com/uploads/477e8a78-48b8-23d8-4b50-bb426c099e181730248721371.png",
       "address": "0x0f028042a57a49b79de72ad00f6a0073bb3e1423",
@@ -4156,7 +4016,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 287,
+      "rank": 277,
       "twitterHandle": "KO_Markets",
       "profileImageUrl": "https://static.starsarena.com/uploads/5760f8ca-6e71-3365-35b7-6708dbba8a6d1734899006098.png",
       "address": "0x041be3921cea086f294ae48be11b76b006007a6b",
@@ -4170,7 +4030,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 288,
+      "rank": 278,
       "twitterHandle": "SolNFTs",
       "profileImageUrl": "https://static.starsarena.com/uploads/4ab2d5e2-8061-e031-ab43-d88ed165d0661738851516357.png",
       "address": "0x3d9e67692097538fae23b6995dd69439da5e4315",
@@ -4184,7 +4044,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 289,
+      "rank": 279,
       "twitterHandle": "justinkim415",
       "profileImageUrl": "https://static.starsarena.com/uploads/e1b643d3-0ef1-8b1c-3569-732472ab802f1744291698067.png",
       "address": "0xb84789104549faefdb268bb3ceb87a93201139fa",
@@ -4198,7 +4058,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 290,
+      "rank": 280,
       "twitterHandle": "cast3_io",
       "profileImageUrl": "https://static.starsarena.com/uploads/03ff4442-22f0-6022-267b-9ccaef1290ab1734646815362.png",
       "address": "0x11f382923d16c4f0052d1dcb64aab588bd2fb696",
@@ -4212,7 +4072,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 291,
+      "rank": 281,
       "twitterHandle": "ChinSportsBet",
       "profileImageUrl": "https://static.starsarena.com/uploads/d96c5ccf-9228-e11e-daba-c5f57216a6251739819486838.png",
       "address": "0xf704a006df4ef463c6bd7c70c75a3597953cd385",
@@ -4226,7 +4086,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 292,
+      "rank": 282,
       "twitterHandle": "FlipSighedNFT",
       "profileImageUrl": "https://static.starsarena.com/uploads/6347e610-9802-537a-0931-000df65818521739818083623.png",
       "address": "0xdd13a435def7bcff118b80b9235e199da05181af",
@@ -4240,7 +4100,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 293,
+      "rank": 283,
       "twitterHandle": "Geepsaps",
       "profileImageUrl": "https://static.starsarena.com/uploads/ef248a37-d315-c6c8-eb68-51570e47059f1734900105669.png",
       "address": "0x3d2a9fccc399af031140e39f8352a6a1334b4c11",
@@ -4254,7 +4114,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 294,
+      "rank": 284,
       "twitterHandle": "CanapeKesava",
       "profileImageUrl": "https://static.starsarena.com/uploads/56e40eec-c0bc-43b0-5661-8f8d8da734e71731706205741.png",
       "address": "0xcc12e1e6267a7f027de5aca17219734a48f12e1f",
@@ -4268,7 +4128,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 295,
+      "rank": 285,
       "twitterHandle": "bun_tzu",
       "profileImageUrl": "https://static.starsarena.com/uploads/12ca00db-a9d3-cc46-657c-95a2c935586c1738348190245.png",
       "address": "0x49e496821ce65152a545b363f01d42df56b31a47",
@@ -4282,7 +4142,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 296,
+      "rank": 286,
       "twitterHandle": "SkoyaL_",
       "profileImageUrl": "https://static.starsarena.com/uploads/e6c1ca24-05cc-c906-d8ba-010a012f00ba1737151036882.png",
       "address": "0x5924b333efd83b34e2685cc32fd36896f0eabd8e",
@@ -4296,7 +4156,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 297,
+      "rank": 287,
       "twitterHandle": "Twixxweb3",
       "profileImageUrl": "https://static.starsarena.com/uploads/858f9207-1685-300a-9738-65542073c9701742630631009.png",
       "address": "0xd31878e3e8148c07a7abb304e1d1456911d728ef",
@@ -4310,7 +4170,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 298,
+      "rank": 288,
       "twitterHandle": "0xshayB",
       "profileImageUrl": "https://static.starsarena.com/uploads/faef2d11-9262-e1bf-24c0-a516d53dfb4b1735856688679.png",
       "address": "0x39fab2d4633c9daf34c6392c268a1564c51a8d15",
@@ -4324,7 +4184,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 299,
+      "rank": 289,
       "twitterHandle": "COQTOSHI",
       "profileImageUrl": "https://static.starsarena.com/uploads/6d2e702c-1671-0b43-b130-562b8e3c749e1744118554845.png",
       "address": "0x3d4b2e41556fc790ddd04da2b5ad9fc9b3b7424d",
@@ -4338,7 +4198,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 300,
+      "rank": 290,
       "twitterHandle": "kno_web3",
       "profileImageUrl": "https://static.starsarena.com/uploads/ce1ae73e-b074-6787-d2d3-63f5bd1c04371741023389163.png",
       "address": "0x99427418638178653e489ecc339b5600a45ec3b7",
@@ -4352,7 +4212,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 301,
+      "rank": 291,
       "twitterHandle": "shymie144327321",
       "profileImageUrl": "https://static.starsarena.com/uploads/99174840-c176-6622-879f-6c11335962e01731861308627.png",
       "address": "0xf17454ce8f65b6a5307cf31d7697624be3faa14f",
@@ -4366,7 +4226,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 302,
+      "rank": 292,
       "twitterHandle": "philro1",
       "profileImageUrl": "https://static.starsarena.com/uploads/69485b91-156b-edbe-00cd-84844680bdc91741375178582.png",
       "address": "0xa31be636f842c4950ccdf2817a2a1715dd4561ad",
@@ -4380,7 +4240,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 303,
+      "rank": 293,
       "twitterHandle": "phfoong",
       "profileImageUrl": "https://static.starsarena.com/uploads/c346bd13-16be-4d11-f532-f8693036b16f1724600445204.png",
       "address": "0x8c09be435f5cdc8b2907ecde933e1d3702d57553",
@@ -4394,7 +4254,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 304,
+      "rank": 294,
       "twitterHandle": "0xCeb",
       "profileImageUrl": "https://static.starsarena.com/uploads/3012e052-e993-e9e2-91d2-20987b9c382e1741204825009.png",
       "address": "0x0628a9588044e0a39ddbeec91010bb95df7075d0",
@@ -4408,7 +4268,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 305,
+      "rank": 295,
       "twitterHandle": "Pablo01618",
       "profileImageUrl": "https://static.starsarena.com/uploads/b2a3a682-eee1-710a-6039-ec66990d04c21739628481897.png",
       "address": "0x37a1621bd89b75ff761ac9d9145bc34920e75ade",
@@ -4422,7 +4282,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 306,
+      "rank": 296,
       "twitterHandle": "ethman98765",
       "profileImageUrl": "https://static.starsarena.com/uploads/aa07faf4-15fe-dd86-8efb-d468e71a3a181744824174762.png",
       "address": "0xc29a9d09681c6e928ead1b79e3a4cf89fa369b05",
@@ -4436,7 +4296,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 307,
+      "rank": 297,
       "twitterHandle": "JustnThePhotog",
       "profileImageUrl": "https://static.starsarena.com/uploads/4c8fb148-f012-d5d6-56c9-ee913cffcee01726856742139.png",
       "address": "0xd468b1a5a9d01fbe63e19eb1321bc627bcdf757e",
@@ -4450,7 +4310,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 308,
+      "rank": 298,
       "twitterHandle": "DoctalkVoice",
       "profileImageUrl": "https://static.starsarena.com/uploads/afe8aaa0-0afb-968e-80e8-56c3c1b83d0d1737393937717.png",
       "address": "0x4547eca58bd9650320591bec55bc06193fed671a",
@@ -4464,7 +4324,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 309,
+      "rank": 299,
       "twitterHandle": "SchmeckleRich",
       "profileImageUrl": "https://static.starsarena.com/uploads/83e87fb1-47ff-6582-0ae4-2a4ec16b876c1712454175008.png",
       "address": "0x5b7354df3e4542845256de23a48958b027650dbe",
@@ -4478,7 +4338,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 310,
+      "rank": 300,
       "twitterHandle": "alirehansays",
       "profileImageUrl": "https://static.starsarena.com/uploads/53bee2c1-7030-82dd-7829-310b8019ac541743052507597.png",
       "address": "0x53303729a8201042d59f79b523749c24f460ed29",
@@ -4492,7 +4352,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 311,
+      "rank": 301,
       "twitterHandle": "wen_ath",
       "profileImageUrl": "https://static.starsarena.com/uploads/d81ba01c-8448-f55f-ab88-e1e9996ca5d11713731620379.png",
       "address": "0x26db53e0c8dd2acaff36c50f373107ccc2ec5b77",
@@ -4506,7 +4366,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 312,
+      "rank": 302,
       "twitterHandle": "Chilearmy123",
       "profileImageUrl": "https://static.starsarena.com/uploads/6563d5c8-4857-7a89-a8c6-d061e093b6821732564515781.png",
       "address": "0x384bf452b327930bdbde80f4ba08f0ec87acd80a",
@@ -4520,7 +4380,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 313,
+      "rank": 303,
       "twitterHandle": "junkunderground",
       "profileImageUrl": "https://static.starsarena.com/uploads/ab6538e9-5ca5-eb57-8aab-c4c34edb970f1741664487532.png",
       "address": "0x628ee19f3cdef2d43273d9f53055f86daa324583",
@@ -4534,7 +4394,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 314,
+      "rank": 304,
       "twitterHandle": "resaang",
       "profileImageUrl": "https://static.starsarena.com/uploads/b9de4cc8-8683-772f-f8ae-7d407fb929061739770560274.png",
       "address": "0x9f2117c3cdf539f60218d569c7aaee2e80ce856c",
@@ -4548,7 +4408,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 315,
+      "rank": 305,
       "twitterHandle": "KhaelnasR",
       "profileImageUrl": "https://static.starsarena.com/uploads/b06f6bb9-5f19-e1dd-f436-9495db2125881738518664198.png",
       "address": "0x7edd953255bfc08c80aca581bd9f947b66f651cf",
@@ -4562,7 +4422,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 316,
+      "rank": 306,
       "twitterHandle": "busizem718",
       "profileImageUrl": "https://static.starsarena.com/uploads/3c74feda-0ee1-3217-f1f1-46eab144fcbe1730322586261.png",
       "address": "0x78cd29e5f870e8e1d7b49f96e1a5b0337365bbe9",
@@ -4576,7 +4436,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 317,
+      "rank": 307,
       "twitterHandle": "TokenTraverse",
       "profileImageUrl": "https://static.starsarena.com/uploads/6016794d-6452-4c5d-cc4b-218a4d6129161712717068276.png",
       "address": "0x6e928dbaefdae16861b8bbc075fe4ff0b5df999d",
@@ -4590,7 +4450,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 318,
+      "rank": 308,
       "twitterHandle": "Alf444_",
       "profileImageUrl": "https://static.starsarena.com/uploads/467a2510-336b-3753-a7e0-a1e9e7bb0a191740124512767.png",
       "address": "0xabaef14f84ab52baf1d74960a55bbd3bc2c2a932",
@@ -4604,7 +4464,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 319,
+      "rank": 309,
       "twitterHandle": "smolshidder",
       "profileImageUrl": "https://static.starsarena.com/uploads/37ac836f-f0b8-65ed-25cd-998e3b2e106a1741405785810.png",
       "address": "0xce8fe172f8b45a735b58a8d04aff824288904994",
@@ -4618,7 +4478,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 320,
+      "rank": 310,
       "twitterHandle": "LunaLuovula",
       "profileImageUrl": "https://static.starsarena.com/uploads/3b4bcaf9-b68a-4ab8-4d79-fd34be06fd571743222974706.png",
       "address": "0xfda5318c9d4fd909c97aeffc9e6302b62c68d8bc",
@@ -4632,7 +4492,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 321,
+      "rank": 311,
       "twitterHandle": "SubnetNomad",
       "profileImageUrl": "https://static.starsarena.com/uploads/08d239e2-9d4c-d51c-0733-2b98c22581051732306313207.png",
       "address": "0x3ba208212921d9145b637042d5920e0795d1f865",
@@ -4646,7 +4506,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 322,
+      "rank": 312,
       "twitterHandle": "Joe51564153",
       "profileImageUrl": "https://static.starsarena.com/uploads/4bb5045c-4f79-e1ac-1191-ed1ce20d7c9a1712976509907.png",
       "address": "0x65db2af24773c185bce3aa2a760dffcc2287dbba",
@@ -4660,7 +4520,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 323,
+      "rank": 313,
       "twitterHandle": "WenMenDegen",
       "profileImageUrl": "https://static.starsarena.com/uploads/6da0ea02-dd3e-5a08-da28-334cb5abe63a1733504939736.png",
       "address": "0xe7f0a0af04ba8419bf37c83cef8ecc2600e51019",
@@ -4674,7 +4534,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 324,
+      "rank": 314,
       "twitterHandle": "Seifswahba",
       "profileImageUrl": "https://static.starsarena.com/uploads/c0fb7356-dc4d-61f3-a002-1dbbd09f563e1740096402567.png",
       "address": "0x94271fc52afed0cc259b34ce54bd8edbf92c04df",
@@ -4688,7 +4548,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 325,
+      "rank": 315,
       "twitterHandle": "xWoodchecK",
       "profileImageUrl": "https://static.starsarena.com/uploads/c486bb2d-f967-f026-e3dc-7a75d55df48d1745594271357.png",
       "address": "0x689379dd00d59f319327c7bc698250ba441f46d2",
@@ -4702,7 +4562,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 326,
+      "rank": 316,
       "twitterHandle": "Mahone76568927",
       "profileImageUrl": "https://static.starsarena.com/uploads/cf9593b6-66cf-8e0a-5318-6f6063ea76831730409890359.png",
       "address": "0xdfb5e1a9cc68e34cf8992829c5ad97473188fca6",
@@ -4716,7 +4576,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 327,
+      "rank": 317,
       "twitterHandle": "gucceed",
       "profileImageUrl": "https://static.starsarena.com/uploads/9dc97d8b-f925-91a9-0903-fae804213f9f1713847294350.png",
       "address": "0x5325ff3de6b6d8e2785627e1c77aef7ad12ea123",
@@ -4730,7 +4590,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 328,
+      "rank": 318,
       "twitterHandle": "RZebr2",
       "profileImageUrl": "https://static.starsarena.com/uploads/7f1fe85f-2d67-b634-c689-b86ecf0328b51733156741424.png",
       "address": "0x2b3a35426686ea2b5b2781e66b19cea029468f66",
@@ -4744,7 +4604,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 329,
+      "rank": 319,
       "twitterHandle": "dev_enjoys",
       "profileImageUrl": "https://static.starsarena.com/uploads/35b51153-c0f2-df8e-751d-8a7daf9665981716350495394.png",
       "address": "0x61305b9dc8c324cf3419d95c4ade9f20925f1b09",
@@ -4758,7 +4618,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 330,
+      "rank": 320,
       "twitterHandle": "CryptoDevin1",
       "profileImageUrl": "https://static.starsarena.com/uploads/7b89ac34-1cb7-76f2-b29e-e7bc520a8ad81740117555729.png",
       "address": "0xf875c9b99ce8daadb75e33d0ad2d2308ef8cd791",
@@ -4772,7 +4632,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 331,
+      "rank": 321,
       "twitterHandle": "ocryptoo",
       "profileImageUrl": "https://static.starsarena.com/uploads/42daf55e-6b17-c8a2-d2af-0298d349ff541730433984090.png",
       "address": "0xfdb5465c61d50e62484829cbe085a9ff2e63bb5f",
@@ -4786,7 +4646,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 332,
+      "rank": 322,
       "twitterHandle": "Julius_eth_dev",
       "profileImageUrl": "https://static.starsarena.com/uploads/4adb075c-e6a7-60fe-f84e-e14c4370d8b71729409460861.png",
       "address": "0x36f743123a1568534bdc27a5df2c72a7aa164260",
@@ -4800,7 +4660,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 333,
+      "rank": 323,
       "twitterHandle": "Manitou0803",
       "profileImageUrl": "https://static.starsarena.com/uploads/2662867a-e40a-f1af-7c30-e7e04cfef8f61712645245168.png",
       "address": "0x37bcb0e65fe05ada31a43ae4c1895dd0d936f666",
@@ -4814,7 +4674,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 334,
+      "rank": 324,
       "twitterHandle": "angel_surfer",
       "profileImageUrl": "https://static.starsarena.com/uploads/096ea6db-227f-00ae-9529-c61ce42a5df81712290608188.png",
       "address": "0x82224034f2dc1a87b920526367bf35e986663268",
@@ -4828,7 +4688,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 335,
+      "rank": 325,
       "twitterHandle": "AnoopWeb3",
       "profileImageUrl": "https://static.starsarena.com/uploads/d7ceb97b-319a-30a0-1bfe-2b755b6ff50e1737340774338.png",
       "address": "0x9f872cf17750267e4f622a722f987cd496c71b54",
@@ -4842,7 +4702,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 336,
+      "rank": 326,
       "twitterHandle": "crypto_rendal",
       "profileImageUrl": "https://static.starsarena.com/uploads/668cbfe5-ccb3-f734-66b0-b3680b2e08d51714111728969.png",
       "address": "0xbf29c768f15343f4cde492703dec42b8c5c7f52e",
@@ -4856,7 +4716,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 337,
+      "rank": 327,
       "twitterHandle": "avery_bartlett",
       "profileImageUrl": "https://static.starsarena.com/uploads/fe0a7686-3f2c-fbb1-8b0f-24bc28ebd70b1722616089496.png",
       "address": "0x086d8c2f13a3764fa03f36362f5c56f995d823e8",
@@ -4870,7 +4730,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 338,
+      "rank": 328,
       "twitterHandle": "KryptoMike58",
       "profileImageUrl": "https://static.starsarena.com/uploads/3eeb9130-2d36-0e0f-42b8-038251180cc51740486528277.png",
       "address": "0x6b465af5d2b3cf387f46bd05c1215f488479a46a",
@@ -4884,7 +4744,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 339,
+      "rank": 329,
       "twitterHandle": "bullbobaggins_",
       "profileImageUrl": "https://static.starsarena.com/uploads/d938de6c-49f7-609d-7f1a-a443564baf1e1735438085756.png",
       "address": "0x1c4a224ba364b31a82e4bc9409eabb951e3f0ae7",
@@ -4898,7 +4758,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 340,
+      "rank": 330,
       "twitterHandle": "PedroFounder",
       "profileImageUrl": "https://static.starsarena.com/uploads/37fdf706-79ba-e2e8-2fea-4e73ea5c56da1739840893131.png",
       "address": "0x70148a5172877a36d6c3a23639fe6db9e20f04e4",
@@ -4912,7 +4772,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 341,
+      "rank": 331,
       "twitterHandle": "lyo4R",
       "profileImageUrl": "https://static.starsarena.com/uploads/9a3d0ddb-a6f9-43d4-ef25-4c4ea2fa9b981723207182853.png",
       "address": "0xbe2e93e076b7bffa946c9fc5d8aa4bd03ab7cad9",
@@ -4926,7 +4786,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 342,
+      "rank": 332,
       "twitterHandle": "IamDavidBrain",
       "profileImageUrl": "https://static.starsarena.com/uploads/e0121d5e-5179-e662-f510-29136df02efa1740589037336.png",
       "address": "0xeb37385c72fb1ad548a736ecaeb903561acdc794",
@@ -4940,7 +4800,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 343,
+      "rank": 333,
       "twitterHandle": "DeFinalFantasy",
       "profileImageUrl": "https://static.starsarena.com/uploads/32265488-87ea-b49f-6230-697da9648acf1735038122660.png",
       "address": "0x49083726dea6f575582636356397c3c9246fcbc3",
@@ -4954,7 +4814,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 344,
+      "rank": 334,
       "twitterHandle": "ETCMINER",
       "profileImageUrl": "https://static.starsarena.com/uploads/ec079c05-69da-bb03-ce14-98ef22d0972f1712624701876.png",
       "address": "0xe2324b3dd5000c21721a9f9c1a0c63479318f244",
@@ -4968,7 +4828,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 345,
+      "rank": 335,
       "twitterHandle": "awais_aslamm",
       "profileImageUrl": "https://static.starsarena.com/uploads/0f939ca5-9ccb-a48a-125c-84372b7324a61731331729842.png",
       "address": "0x3f9fcabbffc976f791a5a4ebfc44cb0f2a8b166e",
@@ -4982,7 +4842,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 346,
+      "rank": 336,
       "twitterHandle": "naquep",
       "profileImageUrl": "https://static.starsarena.com/uploads/f40ba8c3-6e99-eedb-ea9f-f22f7e934c2f1713156997709.png",
       "address": "0x23b5f3a21415bd5ef27316b32beded01be9f18fc",
@@ -4996,7 +4856,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 347,
+      "rank": 337,
       "twitterHandle": "AvaxCoinbro",
       "profileImageUrl": "https://static.starsarena.com/uploads/460b7b1b-758f-4082-292a-c3b95cdfbff01741301995599.png",
       "address": "0x57aef2b8d8ed7a9d7a177a9f13c2f5bdc229b50b",
@@ -5010,7 +4870,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 348,
+      "rank": 338,
       "twitterHandle": "jigmetsher83055",
       "profileImageUrl": "https://static.starsarena.com/uploads/333b7398-4c4f-207b-8a68-325ce5bc5a1c1739955512474.png",
       "address": "0xfcf2b8781df341c156a9035aa6dee216bc0a9030",
@@ -5024,7 +4884,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 349,
+      "rank": 339,
       "twitterHandle": "MajorAzshole",
       "profileImageUrl": "https://static.starsarena.com/uploads/af7199cf-8140-3af7-ab8b-f41acf797eb01713335877955.png",
       "address": "0x3b5cffe60fe52f67939bfccbf9bb1786b84636cb",
@@ -5038,7 +4898,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 350,
+      "rank": 340,
       "twitterHandle": "agentboff",
       "profileImageUrl": "https://static.starsarena.com/uploads/31366a47-45ee-eaa7-a35b-1a16c1a139fb1745616929411.png",
       "address": "0x09db8fc031836d93a9b6147c14f45d04917f511a",
@@ -5052,7 +4912,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 351,
+      "rank": 341,
       "twitterHandle": "winamplexa",
       "profileImageUrl": "https://static.starsarena.com/uploads/80cd24a7-3bba-7c8e-2c63-0e4aff6cb9d31735155463410.png",
       "address": "0xf57b54df3fccdf033a5a4e442542d06fa18729bc",
@@ -5066,7 +4926,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 352,
+      "rank": 342,
       "twitterHandle": "priimozzz",
       "profileImageUrl": "https://static.starsarena.com/uploads/4911a81b-47ab-bf62-ba69-a61a315e02a81742499523371.png",
       "address": "0x07feba780c367d0ed072cd24871145c3a5f0d01c",
@@ -5080,7 +4940,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 353,
+      "rank": 343,
       "twitterHandle": "nividimi",
       "profileImageUrl": "https://static.starsarena.com/uploads/a858ffaf-13bc-1c1b-4721-da934e84a34b1730838495814.png",
       "address": "0xfc914af98f6b5c9d5e80240101e1ac61fd80e039",
@@ -5094,7 +4954,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 354,
+      "rank": 344,
       "twitterHandle": "LadyRedPepe",
       "profileImageUrl": "https://static.starsarena.com/uploads/439b5a6f-272c-0cf9-9c59-aac0d58be6451727470045456.png",
       "address": "0xa8d877197e6d82c3c31ff240af0dd36650bcf7bb",
@@ -5108,7 +4968,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 355,
+      "rank": 345,
       "twitterHandle": "702scoobz",
       "profileImageUrl": "https://static.starsarena.com/uploads/74272732-7429-564f-599a-32f9d074c3491740941852309.png",
       "address": "0x15cc25c6602eb0e01c8fbadce0c4d1e70169ece7",
@@ -5122,7 +4982,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 356,
+      "rank": 346,
       "twitterHandle": "RenLop5",
       "profileImageUrl": "https://static.starsarena.com/uploads/eb783c91-5140-0194-6c4f-ee836c729d121719216203532.png",
       "address": "0xa3ca3d0fdd4bd7c0e3e17cd10b635336daae4c67",
@@ -5136,7 +4996,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 357,
+      "rank": 347,
       "twitterHandle": "ValentinRomascu",
       "profileImageUrl": "https://static.starsarena.com/uploads/68aec7ef-458f-edd8-fa46-136db7a3f6071741524862745.png",
       "address": "0x2f58b0092f1ca9bda4783c990b571c19c169674b",
@@ -5150,7 +5010,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 358,
+      "rank": 348,
       "twitterHandle": "MrPeacful",
       "profileImageUrl": "https://static.starsarena.com/uploads/dfd72d8f-b8fb-d3b2-c9f9-d9f95dd525b51744581858439.png",
       "address": "0xe501075c7a23dec7d588870c39ab01810f0658e8",
@@ -5164,7 +5024,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 359,
+      "rank": 349,
       "twitterHandle": "ElNochillio",
       "profileImageUrl": "https://static.starsarena.com/uploads/a5ffcce4-22ac-674e-6e98-840b94bd5f9d1740618716245.png",
       "address": "0xb178428401529153561740835c2d1bbcb9318128",
@@ -5178,7 +5038,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 360,
+      "rank": 350,
       "twitterHandle": "xahash",
       "profileImageUrl": "https://static.starsarena.com/uploads/153d4df7-d4c4-d0cf-24ed-c988f61b64e61726883505189.png",
       "address": "0xc3300e3960d0833877fa439cfd074fcf0a92eb8d",
@@ -5192,7 +5052,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 361,
+      "rank": 351,
       "twitterHandle": "Geronimo612_",
       "profileImageUrl": "https://static.starsarena.com/uploads/71e298e1-95a1-0cc0-303a-140af4abd28f1712866615483.png",
       "address": "0x90915354c3c8bd0d6d91dfcd38e03ccc11c5b82d",
@@ -5206,7 +5066,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 362,
+      "rank": 352,
       "twitterHandle": "ohhhhhYeeah",
       "profileImageUrl": "https://static.starsarena.com/uploads/9a35e99a-67a1-eded-9c49-e755a61899471741613599150.png",
       "address": "0x37f8a280265474727319a26a339702c01f91e7da",
@@ -5220,7 +5080,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 363,
+      "rank": 353,
       "twitterHandle": "DimiFW_eth",
       "profileImageUrl": "https://static.starsarena.com/uploads/04ed6214-61aa-8542-302f-9b3c7acf9a9a1741151530764.png",
       "address": "0x832bb2b55bfb176ec392bca736645dc36293e4a5",
@@ -5234,7 +5094,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 364,
+      "rank": 354,
       "twitterHandle": "NotWarh0l",
       "profileImageUrl": "https://static.starsarena.com/uploads/8e1c23bf-29ac-c221-2205-c4da153cb2651740751447699.png",
       "address": "0x07e13545e11a0db67cec8e295377d9b7c2bea624",
@@ -5248,7 +5108,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 365,
+      "rank": 355,
       "twitterHandle": "Ororys",
       "profileImageUrl": "https://static.starsarena.com/uploads/6f489f3e-b9ba-9cca-3073-25290ae389c11729100576435.png",
       "address": "0x7c082a88f7efea52247df7494d5ec6477c498b5f",
@@ -5262,7 +5122,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 366,
+      "rank": 356,
       "twitterHandle": "0xsergen",
       "profileImageUrl": "https://static.starsarena.com/uploads/02a89125-2328-44d9-b8da-5671ed2a9db51732933581798.png",
       "address": "0xd33b85f9dc5e4f6c0446949d2a9dbd700a093999",
@@ -5276,7 +5136,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 367,
+      "rank": 357,
       "twitterHandle": "JohnSarson1",
       "profileImageUrl": "https://static.starsarena.com/uploads/b3338b7e-a263-cd21-0523-66f03e75d7f21727992145029.png",
       "address": "0x2bdce47cd3094b6fd56fcb5f8f8f11a60cbfd73e",
@@ -5290,7 +5150,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 368,
+      "rank": 358,
       "twitterHandle": "DaKnoodl",
       "profileImageUrl": "https://static.starsarena.com/uploads/843f7483-880f-ca2c-ebe9-f6c591daf3771729109582023.png",
       "address": "0x8dd61f1007a48fb312f746966ad5627c85aba3c1",
@@ -5304,7 +5164,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 369,
+      "rank": 359,
       "twitterHandle": "CryptoDale",
       "profileImageUrl": "https://static.starsarena.com/uploads/4dd4f644-7b35-3ad5-09e7-efe33aa58e4c1735443241869.png",
       "address": "0xdce9e96272f7de7fa0db048bd685391019708f1e",
@@ -5318,7 +5178,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 370,
+      "rank": 360,
       "twitterHandle": "RynoB_27",
       "profileImageUrl": "https://static.starsarena.com/uploads/3b2fa426-232b-f792-a8e9-e70bd604f9481738533861232.png",
       "address": "0x54302ce4f410f64e5f467c5b7f17a33cda7ed1d8",
@@ -5332,7 +5192,7 @@
       "nftPoints": {}
     },
     {
-      "rank": 371,
+      "rank": 361,
       "twitterHandle": "SHILLNAVIGATOR",
       "profileImageUrl": "https://static.starsarena.com/uploads/b6047841-4006-811f-9322-8a9b0f8eccf01740992560665.png",
       "address": "0x321b3a3131fcf1baf8a82d837fb7a547b8eafa1c",

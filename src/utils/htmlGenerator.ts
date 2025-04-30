@@ -58,17 +58,17 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
       // Format points with commas for thousands
       const formattedPoints = entry.totalPoints.toLocaleString(undefined, { 
         minimumFractionDigits: 0,
-        maximumFractionDigits: 2
+        maximumFractionDigits: 0
       });
       
       // Format token points
-      const muPoints = entry.tokenPoints.MU ? entry.tokenPoints.MU.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
-      const mugPoints = entry.tokenPoints.MUG ? entry.tokenPoints.MUG.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
-      const muoPoints = entry.tokenPoints.MUO ? entry.tokenPoints.MUO.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
-      const muvPoints = entry.tokenPoints.MUV ? entry.tokenPoints.MUV.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
+      const muPoints = entry.tokenPoints.MU ? entry.tokenPoints.MU.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
+      const mugPoints = entry.tokenPoints.MUG ? entry.tokenPoints.MUG.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
+      const muoPoints = entry.tokenPoints.MUO ? entry.tokenPoints.MUO.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
+      const muvPoints = entry.tokenPoints.MUV ? entry.tokenPoints.MUV.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
       
       // Format NFT points
-      const muPupsPoints = entry.nftPoints['Mu Pups'] ? entry.nftPoints['Mu Pups'].toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
+      const muPupsPoints = entry.nftPoints['Mu Pups'] ? entry.nftPoints['Mu Pups'].toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
       
       // Twitter handle with link
       const twitterHandle = entry.twitterHandle ? 
@@ -88,12 +88,17 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
       return `
         <tr>
           <td class="rank">${entry.rank}</td>
-          <td class="twitter-handle">${profileImage}${twitterHandle}</td>
+          <td class="twitter-handle">
+            ${profileImage}
+            <div class="user-info">
+              ${twitterHandle}
+              <div class="arena-profile-container">${arenaProfile}</div>
+            </div>
+          </td>
           <td class="address">
             <a href="https://snowtrace.io/address/${entry.address}" target="_blank" title="View on Snowtrace">
               ${shortenAddress(entry.address)}
             </a>
-            ${arenaProfile}
           </td>
           <td class="points">${formattedPoints}</td>
           <td class="points">${muPoints}</td>
@@ -212,7 +217,7 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
     .leaderboard th {
       color: white;
       padding: 12px;
-      text-align: left;
+      text-align: center;
       font-weight: bold;
       background: transparent;
     }
@@ -231,13 +236,24 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
     }
     
     .rank {
-      font-weight: bold;
-      width: 50px;
       text-align: center;
+      font-weight: bold;
     }
     
     .twitter-handle {
-      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .arena-profile-container {
+      margin-top: 2px;
     }
     
     .twitter-handle a {
@@ -293,7 +309,7 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
     
     .points {
       font-weight: bold;
-      text-align: right;
+      text-align: center;
     }
     
     .pagination {
