@@ -10,14 +10,22 @@
     "scheduler": "ts-node src/index.ts",
     "send-results": "ts-node src/sendResults.ts",
     "fetch-profiles": "ts-node src/holderProfileManager.ts",
-    "test": "jest"
+    "leaderboard": "ts-node src/generateLeaderboard.ts",
+    "mu-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type mu",
+    "standard-leaderboard": "ts-node src/generateCustomLeaderboard.ts --type standard",
+    "custom-leaderboard": "ts-node src/generateCustomLeaderboard.ts",
+    "leaderboard-scheduler": "ts-node src/leaderboardScheduler.ts",
+    "test": "jest",
+    "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "alchemy-sdk": "^3.5.8",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
-    "ethers": "^6.9.0"
+    "ethers": "^6.9.0",
+    "moralis": "^2.27.2"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
