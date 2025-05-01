@@ -16,14 +16,17 @@ export interface NftHolder {
 export interface ArenabookUserResponse {
   twitter_username: string | null;
   twitter_handle: string | null;
+  twitter_pfp_url: string | null;
 }
 
 export interface HolderWithSocial extends TokenHolder {
   twitter_handle: string | null;
+  twitter_pfp_url?: string | null;
 }
 
 export interface NftHolderWithSocial extends NftHolder {
   twitter_handle: string | null;
+  twitter_pfp_url?: string | null;
 }
 
 // Config interfaces

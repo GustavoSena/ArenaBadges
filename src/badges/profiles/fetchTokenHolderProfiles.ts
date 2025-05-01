@@ -1,14 +1,36 @@
+// Token Holder Profiles Fetcher
 import * as fs from 'fs';
 import * as path from 'path';
-import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
+import axios from 'axios';
+import { sleep as sleepUtil } from '../../utils/helpers';
+import { TokenHolder, NftHolder } from '../../types/interfaces';
+import { SocialProfileInfo } from '../../services/socialProfiles';
 
 // Load environment variables
 dotenv.config();
 
-// Load configuration
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/tokens.json'), 'utf8'));
+// Export the HolderResults interface for use in other files
+export interface HolderResults {
+  nftHolders: string[];
+  combinedHolders: string[];
+}
+
+// List of permanent accounts that should always be included in both lists
+const PERMANENT_ACCOUNTS = [
+  'mucoinofficial',
+  'ceojonvaughn',
+  'aunkitanandi'
+];
+
+// Flag to control whether holders can be in both lists
+// If false, combined holders will be removed from the NFT-only list
+const ALLOW_DUPLICATE_HOLDERS = true;
+
+// Load configuration from the main config directory
+const configPath = path.join(process.cwd(), 'config', 'tokens.json');
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 // Define config interfaces
 interface TokenConfig {
@@ -22,6 +44,7 @@ interface NftConfig {
   address: string;
   name: string;
   minBalance: number;
+  collectionSize?: number;
 }
 
 interface AppConfig {
@@ -33,19 +56,6 @@ interface AppConfig {
 const typedConfig = config as AppConfig;
 
 // Define types
-interface TokenHolder {
-  address: string;
-  balance: string;
-  balanceFormatted: number;
-  tokenSymbol: string;
-}
-
-interface NftHolder {
-  address: string;
-  tokenCount: number;
-  tokenName: string;
-}
-
 interface ArenabookUserResponse {
   twitter_username: string | null;
   twitter_handle: string | null;
@@ -60,8 +70,9 @@ interface NftHolderWithSocial extends NftHolder {
 }
 
 // File paths
-const NFT_HOLDERS_PATH = path.join(__dirname, '../files/nft_holders.json');
-const COMBINED_HOLDERS_PATH = path.join(__dirname, '../files/combined_holders.json');
+const OUTPUT_DIR = path.join(process.cwd(), 'output');
+const NFT_HOLDERS_PATH = path.join(OUTPUT_DIR, 'nft_holders.json');
+const COMBINED_HOLDERS_PATH = path.join(OUTPUT_DIR, 'combined_holders.json');
 
 // Constants
 const ARENABOOK_API_URL = 'https://api.arenabook.xyz/user_info';
@@ -85,15 +96,12 @@ const NFT_CONFIG = typedConfig.nfts[0];
 const NFT_CONTRACT = NFT_CONFIG.address;
 const NFT_NAME = NFT_CONFIG.name;
 const MIN_NFT_BALANCE = NFT_CONFIG.minBalance;
+const NFT_COLLECTION_SIZE = NFT_CONFIG.collectionSize || 1000; // Default to 1000 if not specified
 
 // Get API keys from .env
-const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY;
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 
-if (!SNOWTRACE_API_KEY) {
-  console.warn('SNOWTRACE_API_KEY not found in .env file. Will use API without key (rate limited).');
-}
-
+// Check if ALCHEMY_API_KEY is set
 if (!ALCHEMY_API_KEY) {
   console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
 }
@@ -138,7 +146,7 @@ async function fetchTokenHoldersFromSnowtrace(tokenAddress: string): Promise<Tok
       console.log(`Fetching page ${page} of token holders...`);
       
       // Construct the Snowtrace API URL
-      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${SNOWTRACE_API_KEY ? `&apikey=${SNOWTRACE_API_KEY}` : ''}`;
+      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}`;
       
       try {
         const response = await axios.get(apiUrl);
@@ -169,7 +177,7 @@ async function fetchTokenHoldersFromSnowtrace(tokenAddress: string): Promise<Tok
           } else {
             page++;
             // Add delay between pages to avoid rate limiting
-            await sleep(1000);
+            await sleepUtil(1000);
           }
         } else {
           hasMorePages = false;
@@ -197,6 +205,7 @@ async function fetchTokenHoldersFromSnowtrace(tokenAddress: string): Promise<Tok
 async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[]> {
   try {
     console.log(`Fetching holders for ${NFT_NAME} (${nftAddress}) using ethers.js...`);
+    console.log(`Collection size from config: ${NFT_COLLECTION_SIZE}`);
     
     // Create contract instance
     const nftContract = new ethers.Contract(nftAddress, ERC721_ABI, provider);
@@ -212,10 +221,16 @@ async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[
     let invalidTokenCount = 0;
     const maxInvalidTokens = 5; // Stop after encountering this many invalid tokens in a row
     
-    for (let i = 0; ; i += batchSize) {
+    // Use collection size from config instead of infinite loop
+    for (let i = 0; i < NFT_COLLECTION_SIZE; i += batchSize) {
       const promises = [];
       for (let j = 0; j < batchSize; j++) {
         const tokenId = i + j;
+        // Skip if we've reached the collection size
+        if (tokenId >= NFT_COLLECTION_SIZE) {
+          continue;
+        }
+        
         promises.push(
           (async () => {
             try {
@@ -223,8 +238,46 @@ async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[
               return { tokenId, owner: owner.toLowerCase(), valid: true };
             } catch (error) {
               const errorMessage = error instanceof Error ? error.message : String(error);
-              const isInvalidTokenId = errorMessage.includes("invalid token ID");
+              // Check for various error patterns that indicate an invalid token
+              const isInvalidTokenId = 
+                errorMessage.includes("invalid token ID") || 
+                errorMessage.includes("nonexistent token") ||
+                errorMessage.includes("owner query for nonexistent token") ||
+                errorMessage.includes("ERC721: invalid token ID") ||
+                errorMessage.includes("ERC721: owner query for nonexistent token") ||
+                errorMessage.includes("missing revert data") || 
+                (errorMessage.includes("CALL_EXCEPTION") && errorMessage.includes("revert=null")); 
+              
               console.log(`Token ${tokenId}: ${isInvalidTokenId ? "Invalid token ID" : "Error: " + errorMessage}`);
+              
+              // Retry up to 3 times for invalid token errors
+              if (isInvalidTokenId) {
+                let retryCount = 0;
+                const maxRetries = 3;
+                
+                while (retryCount < maxRetries) {
+                  retryCount++;
+                  console.log(`Retry ${retryCount}/${maxRetries} for token ${tokenId}...`);
+                  
+                  // Wait 0.2 seconds between retries
+                  await sleepUtil(200);
+                  
+                  try {
+                    const owner = await nftContract.ownerOf(tokenId);
+                    console.log(`Retry ${retryCount} succeeded for token ${tokenId}`);
+                    return { tokenId, owner: owner.toLowerCase(), valid: true };
+                  } catch (retryError) {
+                    const retryErrorMessage = retryError instanceof Error ? retryError.message : String(retryError);
+                    console.log(`Retry ${retryCount} failed for token ${tokenId}: ${retryErrorMessage}`);
+                    
+                    // If this was the last retry, return invalid
+                    if (retryCount >= maxRetries) {
+                      console.log(`All ${maxRetries} retries failed for token ${tokenId}, marking as invalid`);
+                    }
+                  }
+                }
+              }
+              
               return { tokenId, valid: false, isInvalidTokenId };
             }
           })()
@@ -259,7 +312,7 @@ async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[
       console.log(`Processed up to token ID ${i + batchSize - 1}, found ${holderCounts.size} unique holders so far`);
       
       // Add a small delay between batches to avoid rate limiting
-      await sleep(200);
+      await sleepUtil(200);
     }
     
     console.log(`Found ${holderCounts.size} unique holders`);
@@ -313,7 +366,7 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleep(REQUEST_DELAY_MS);
+            await sleepUtil(REQUEST_DELAY_MS);
           } else {
             console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error.response.status, error.response.statusText);
             return null;
@@ -323,7 +376,7 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
         retryCount++;
         if (retryCount <= MAX_RETRIES) {
           console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-          await sleep(REQUEST_DELAY_MS);
+          await sleepUtil(REQUEST_DELAY_MS);
         } else {
           console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error);
           return null;
@@ -397,7 +450,7 @@ async function processHoldersWithSocials<T extends { address: string }>(
     
     // Delay before next batch
     if (i + batchSize < holders.length) {
-      await sleep(REQUEST_DELAY_MS);
+      await sleepUtil(REQUEST_DELAY_MS);
     }
   }
   
@@ -417,22 +470,25 @@ async function processHoldersWithSocials<T extends { address: string }>(
 }
 
 /**
- * Main function to fetch token holders and their social profiles
+ * Main function to fetch token holder profiles
  */
-export async function fetchTokenHolderProfiles(): Promise<void> {
+export async function fetchTokenHolderProfiles(verbose: boolean = false): Promise<HolderResults> {
   try {
-    // Define token addresses to check
+    if (verbose) {
+      console.log('Starting to fetch token holder profiles...');
+    }
+    
+    // Ensure output directory exists
+    if (!fs.existsSync(OUTPUT_DIR)) {
+      fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+      console.log(`Created output directory: ${OUTPUT_DIR}`);
+    }
+    
+    // Get token address from config
     const tokenAddress = typedConfig.tokens[0].address;
     
-    console.log('Starting to fetch token holders and their social profiles...');
-    console.log(`Token address to check: ${TOKEN_SYMBOLS[tokenAddress.toLowerCase()]}: ${tokenAddress} (min balance: ${MIN_TOKEN_BALANCES[tokenAddress.toLowerCase()]})`);
+    console.log(`Token to check: ${TOKEN_SYMBOLS[tokenAddress.toLowerCase()]} (${tokenAddress}) (min balance: ${MIN_TOKEN_BALANCES[tokenAddress.toLowerCase()]})`);
     console.log(`NFT to check: ${NFT_NAME} (${NFT_CONTRACT}) (min balance: ${MIN_NFT_BALANCE})`);
-    
-    // Create output directory if it doesn't exist
-    const outputDir = path.dirname(NFT_HOLDERS_PATH);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
     
     // Fetch token holders
     console.log('\nFetching token holders...');
@@ -467,14 +523,50 @@ export async function fetchTokenHolderProfiles(): Promise<void> {
       .map(address => addressToTwitterHandle.get(address))
       .filter(handle => handle !== null && handle !== undefined) as string[];
     
+    // Get Twitter handles for NFT-only holders
+    let nftOnlyHandles: string[];
+    
+    if (ALLOW_DUPLICATE_HOLDERS) {
+      // If duplicates are allowed, all NFT holders get the NFT badge
+      nftOnlyHandles = [...addressToTwitterHandle.values()]
+        .filter(handle => handle !== null && handle !== undefined) as string[];
+    } else {
+      // If duplicates are not allowed, remove combined holders from NFT-only list
+      const combinedAddressesSet = new Set(combinedAddresses);
+      nftOnlyHandles = [...nftHolders]
+        .filter(holder => !combinedAddressesSet.has(holder.address.toLowerCase()))
+        .map(holder => addressToTwitterHandle.get(holder.address.toLowerCase()))
+        .filter(handle => handle !== null && handle !== undefined) as string[];
+    }
+    
+    // Add permanent accounts to both lists
+    const finalNftHandles = [...new Set([...nftOnlyHandles, ...PERMANENT_ACCOUNTS])];
+    const finalCombinedHandles = [...new Set([...combinedHandles, ...PERMANENT_ACCOUNTS])];
+    
+    // Save NFT-only results
+    const nftOutputData = { handles: finalNftHandles };
+    fs.writeFileSync(NFT_HOLDERS_PATH, JSON.stringify(nftOutputData, null, 2), 'utf8');
+    console.log(`\nSaved ${finalNftHandles.length} Twitter handles of NFT holders`);
+    
     // Save combined results
-    const combinedOutputData = { handles: combinedHandles };
+    const combinedOutputData = { handles: finalCombinedHandles };
     fs.writeFileSync(COMBINED_HOLDERS_PATH, JSON.stringify(combinedOutputData, null, 2), 'utf8');
+    console.log(`\nSaved ${finalCombinedHandles.length} Twitter handles of holders with both MUV tokens and NFTs`);
     
-    console.log(`\nSaved ${combinedHandles.length} Twitter handles of holders with both MUV tokens and NFTs`);
+    // Log permanent accounts
+    console.log("\nPermanent accounts added to both lists:", PERMANENT_ACCOUNTS.join(", "));
+    console.log(`Duplicate holders ${ALLOW_DUPLICATE_HOLDERS ? 'allowed' : 'not allowed'} in both lists`);
     
+    return {
+      nftHolders: finalNftHandles,
+      combinedHolders: finalCombinedHandles
+    };
   } catch (error) {
     console.error('Error in fetchTokenHolderProfiles:', error);
+    return {
+      nftHolders: PERMANENT_ACCOUNTS,
+      combinedHolders: PERMANENT_ACCOUNTS
+    };
   }
 }
 
