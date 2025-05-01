@@ -19,149 +19,20 @@ const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_K
 // Setup ethers provider for Avalanche
 const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
 
-// ERC-721 ABI (minimal for ownerOf and totalSupply functions)
+// ERC-721 ABI (minimal for ownerOf function only)
 const ERC721_ABI = [
-  "function ownerOf(uint256 tokenId) view returns (address)",
-  "function totalSupply() view returns (uint256)"
+  "function ownerOf(uint256 tokenId) view returns (address)"
 ];
 
 /**
- * Fetch NFT holders from Ethers.js with robust error handling and retries
+ * Fetch NFT holders using sequential token ID scanning with robust error handling and retries
  * @param contractAddress The NFT contract address
  * @param tokenName The name of the NFT
  * @param minBalance Minimum balance required (default: 1)
  * @param verbose Whether to show verbose logs
  * @returns Array of NFT holders
  */
-export async function fetchNftHoldersFromEthers(
-  contractAddress: string,
-  tokenName: string,
-  minBalance: number = 1,
-  verbose: boolean = false
-): Promise<NftHolder[]> {
-  try {
-    if (verbose) {
-      console.log(`Fetching NFT holders for ${tokenName} (${contractAddress}) using ethers.js...`);
-    } else {
-      console.log(`Fetching NFT holders for ${tokenName}...`);
-    }
-    
-    // Create a contract instance
-    const contract = new ethers.Contract(contractAddress, ERC721_ABI, provider);
-    
-    // Get the total supply with retries
-    const MAX_RETRIES = 5;
-    let totalSupply: number;
-    let retryCount = 0;
-    
-    while (true) {
-      try {
-        totalSupply = await contract.totalSupply();
-        if (verbose) console.log(`Total supply: ${totalSupply}`);
-        break;
-      } catch (error) {
-        retryCount++;
-        if (retryCount > MAX_RETRIES) {
-          console.error(`Failed to get total supply after ${MAX_RETRIES} retries:`, error);
-          throw error;
-        }
-        if (verbose) console.log(`Error fetching total supply, retry ${retryCount}/${MAX_RETRIES}...`);
-        // Exponential backoff
-        await sleep(1000 * Math.pow(2, retryCount - 1));
-      }
-    }
-    
-    // Map to store holder addresses and token counts
-    const holderMap = new Map<string, number>();
-    
-    // Process in batches to avoid rate limiting
-    const batchSize = 25;
-    for (let i = 0; i < totalSupply; i += batchSize) {
-      const endIndex = Math.min(i + batchSize, totalSupply);
-      if (verbose) console.log(`Processing tokens ${i} to ${endIndex - 1}...`);
-      
-      const batchPromises = [];
-      for (let tokenId = i; tokenId < endIndex; tokenId++) {
-        batchPromises.push(
-          (async () => {
-            // Add retry mechanism for each token
-            let ownerRetryCount = 0;
-            
-            while (true) {
-              try {
-                const owner = await contract.ownerOf(tokenId);
-                const ownerLower = owner.toLowerCase();
-                
-                // Update holder map
-                holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
-                break;
-              } catch (error) {
-                // Check if it's an invalid token ID error
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                const isInvalidTokenId = errorMessage.includes("invalid token ID") || 
-                                        errorMessage.includes("nonexistent token") ||
-                                        errorMessage.includes("owner query for nonexistent token");
-                
-                if (isInvalidTokenId) {
-                  // No need to retry for invalid token IDs
-                  if (verbose) console.log(`Token ${tokenId}: Invalid token ID`);
-                  break;
-                }
-                
-                ownerRetryCount++;
-                if (ownerRetryCount > MAX_RETRIES) {
-                  console.error(`Failed to get owner for token ${tokenId} after ${MAX_RETRIES} retries:`, error);
-                  break;
-                }
-                
-                if (verbose) console.log(`Error fetching owner for token ${tokenId}, retry ${ownerRetryCount}/${MAX_RETRIES}...`);
-                // Exponential backoff
-                await sleep(500 * Math.pow(2, ownerRetryCount - 1));
-              }
-            }
-          })()
-        );
-      }
-      
-      // Wait for all promises in the batch to resolve
-      await Promise.all(batchPromises);
-      
-      // Add delay between batches to avoid rate limiting
-      if (i + batchSize < totalSupply) {
-        await sleep(1000);
-      }
-    }
-    
-    // Convert holder map to array
-    const holders: NftHolder[] = Array.from(holderMap.entries())
-      .filter(([_, count]) => count >= minBalance)
-      .map(([address, count]) => ({
-        address,
-        tokenCount: count,
-        tokenName
-      }));
-    
-    console.log(`Found ${holders.length} holders with at least ${minBalance} ${tokenName}`);
-    
-    return holders;
-  } catch (error) {
-    console.error(`Error fetching NFT holders for ${contractAddress}:`, error);
-    
-    // Return empty array on error
-    console.log(`Returning empty array for ${tokenName} due to error`);
-    return [];
-  }
-}
-
-/**
- * Fallback function to handle NFT contracts that don't implement totalSupply
- * @param contractAddress The NFT contract address
- * @param tokenName The name of the NFT
- * @param minBalance Minimum balance required
- * @param verbose Whether to show verbose logs
- * @returns Array of NFT holders
- */
-export async function fetchNftHoldersWithoutTotalSupply(
+export async function fetchNftHolders(
   contractAddress: string,
   tokenName: string,
   minBalance: number = 1,
@@ -171,7 +42,7 @@ export async function fetchNftHoldersWithoutTotalSupply(
     if (verbose) {
       console.log(`Fetching NFT holders for ${tokenName} (${contractAddress}) using sequential token ID scanning...`);
     } else {
-      console.log(`Fetching NFT holders for ${tokenName} using fallback method...`);
+      console.log(`Fetching NFT holders for ${tokenName}...`);
     }
     
     // Create a contract instance
@@ -183,8 +54,8 @@ export async function fetchNftHoldersWithoutTotalSupply(
     // Start checking token IDs from 0
     let tokenId = 0;
     let consecutiveFailures = 0;
-    const MAX_CONSECUTIVE_FAILURES = 50; // Stop after this many consecutive failures
-    const MAX_TOKEN_ID = 10000; // Safety limit
+    const MAX_CONSECUTIVE_FAILURES = 100; // Stop after this many consecutive failures
+    const MAX_TOKEN_ID = 20000; // Safety limit
     const MAX_RETRIES = 5;
     
     // Process in batches to avoid rate limiting
@@ -212,23 +83,70 @@ export async function fetchNftHoldersWithoutTotalSupply(
                 // Update holder map
                 holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
                 
+                if (verbose) console.log(`Token ${currentTokenId}: Owner ${shortenAddress(ownerLower)}`);
+                
                 batchSuccesses++;
                 return true; // Success
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                const isInvalidTokenId = errorMessage.includes("invalid token ID") || 
-                                        errorMessage.includes("nonexistent token") ||
-                                        errorMessage.includes("owner query for nonexistent token");
                 
-                if (isInvalidTokenId) {
-                  // No need to retry for invalid token IDs
-                  return false; // Failure
-                }
+                // Check for rate limiting errors first
+                const isRateLimited = 
+                  errorMessage.includes("exceeded its compute units") || 
+                  errorMessage.includes("rate limit") || 
+                  errorMessage.includes("too many requests") ||
+                  errorMessage.includes("429");
                 
-                retryCount++;
-                if (retryCount <= MAX_RETRIES) {
-                  // Add a small delay before retrying
-                  await sleep(500 * Math.pow(2, retryCount - 1));
+                // Check for truly invalid token IDs
+                const isInvalidTokenId = 
+                  errorMessage.includes("invalid token ID") || 
+                  errorMessage.includes("nonexistent token") ||
+                  errorMessage.includes("owner query for nonexistent token") ||
+                  errorMessage.includes("ERC721: invalid token ID") ||
+                  errorMessage.includes("ERC721: owner query for nonexistent token");
+                
+                // Check for revert errors that might be invalid tokens or other issues
+                const isRevertError = 
+                  errorMessage.includes("missing revert data") ||
+                  (errorMessage.includes("CALL_EXCEPTION") && errorMessage.includes("revert=null"));
+                
+                if (isRateLimited) {
+                  // Always retry rate limiting with a longer backoff
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    // Use a longer backoff for rate limiting (2-10 seconds)
+                    const backoffTime = 2000 * Math.pow(2, retryCount - 1);
+                    if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
+                    await sleep(backoffTime);
+                  } else {
+                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`);
+                    return false;
+                  }
+                } else if (isInvalidTokenId) {
+                  // These are definitely invalid tokens, no need to retry
+                  if (verbose) console.log(`Token ${currentTokenId}: Invalid token ID`);
+                  return false;
+                } else if (isRevertError) {
+                  // Revert errors could be invalid tokens or temporary issues, retry a few times
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    if (verbose) console.log(`Revert error for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
+                    await sleep(1000 * Math.pow(1.5, retryCount - 1));
+                  } else {
+                    if (verbose) console.log(`Token ${currentTokenId}: Considered invalid after ${MAX_RETRIES} revert errors`);
+                    return false;
+                  }
+                } else {
+                  // For other errors, retry with exponential backoff
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
+                    // Exponential backoff
+                    await sleep(500 * Math.pow(2, retryCount - 1));
+                  } else {
+                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries:`, error);
+                    return false;
+                  }
                 }
               }
             }
@@ -241,10 +159,15 @@ export async function fetchNftHoldersWithoutTotalSupply(
       // Wait for all promises in the batch to resolve
       const results = await Promise.all(batchPromises);
       
+      // Count successful token queries in this batch
+      const successCount = results.filter(result => result).length;
+      
       // Update consecutive failures counter
-      if (batchSuccesses === 0) {
+      if (successCount === 0) {
         consecutiveFailures += batchSize;
+        if (verbose) console.log(`No valid tokens found in batch. Consecutive failures: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`);
       } else {
+        if (verbose) console.log(`Found ${successCount} valid tokens in batch.`);
         consecutiveFailures = 0; // Reset counter if we found any valid tokens
       }
       
@@ -272,3 +195,14 @@ export async function fetchNftHoldersWithoutTotalSupply(
     return [];
   }
 }
+
+/**
+ * Shorten an address for display in logs
+ */
+function shortenAddress(address: string): string {
+  return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+}
+
+// For backward compatibility
+export const fetchNftHoldersFromEthers = fetchNftHolders;
+export const fetchNftHoldersWithoutTotalSupply = fetchNftHolders;

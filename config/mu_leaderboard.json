@@ -47,7 +47,7 @@
     "maxEntries": 0,
     "fileName": "mu_leaderboard.json",
     "title": "MU Community Leaderboard",
-    "logoPath": "assets/mu_logo.png",
+    "logoPath": "mu_logo.png",
     "titleLink": "https://www.mu.money/",
     "primaryColor": "#ff00ff",
     "secondaryColor": "#e0e0e0",

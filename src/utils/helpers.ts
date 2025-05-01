@@ -75,7 +75,7 @@ export function formatTokenBalance(balance: string, decimals: number): number {
  * Load configuration from file
  */
 export function loadConfig(): AppConfig {
-  const configPath = path.join(__dirname, '../../config/tokens.json');
+  const configPath = path.join(process.cwd(), 'config', 'tokens.json');
   return JSON.parse(fs.readFileSync(configPath, 'utf8')) as AppConfig;
 }
 

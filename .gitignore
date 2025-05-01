@@ -6,6 +6,11 @@ node_modules/
 
 # Output files
 files/*.json
+output/*
+!output/.gitkeep
+!output/leaderboards/
+output/leaderboards/*
+!output/leaderboards/.gitkeep
 
 # Logs
 logs
