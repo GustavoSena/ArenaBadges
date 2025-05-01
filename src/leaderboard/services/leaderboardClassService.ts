@@ -57,21 +57,45 @@ export function loadLeaderboardConfig(): LeaderboardConfig {
 async function fetchTokenBalanceWithEthers(
   tokenAddress: string,
   holderAddress: string,
-  tokenDecimals: number
+  tokenDecimals: number,
+  verbose: boolean = false
 ): Promise<number> {
-  try {
-    // Create contract instance
-    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-    
-    // Get balance
-    const balance = await tokenContract.balanceOf(holderAddress);
-    
-    // Convert to formatted balance using our safe formatter
-    return formatTokenBalance(balance.toString(), tokenDecimals);
-  } catch (error) {
-    console.error(`Error fetching token balance for address ${holderAddress}:`, error);
-    return 0;
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  let lastError: any = null;
+
+  while (retryCount <= MAX_RETRIES) {
+    try {
+      // Create contract instance
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      
+      // Get balance
+      const balance = await tokenContract.balanceOf(holderAddress);
+      
+      // Convert to formatted balance using our safe formatter
+      return formatTokenBalance(balance.toString(), tokenDecimals);
+    } catch (error) {
+      lastError = error;
+      retryCount++;
+      
+      if (retryCount <= MAX_RETRIES) {
+        // Calculate backoff time: 500ms, 1000ms, 2000ms, etc.
+        const backoffTime = 500 * Math.pow(2, retryCount - 1);
+        
+        if (verbose) {
+          console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
+        }
+        
+        // Wait before retrying with exponential backoff
+        await sleep(backoffTime);
+      } else {
+        console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
+      }
+    }
   }
+  
+  // If all retries failed, return 0
+  return 0;
 }
 
 /**
@@ -91,16 +115,18 @@ async function fetchTokenBalancesWithEthers(
   
   // Process in batches to avoid rate limiting
   const batchSize = 10;
+  const MAX_BATCH_RETRIES = 2; // Max retries for entire batch failures
+  
   for (let i = 0; i < holderAddresses.length; i += batchSize) {
     const batch = holderAddresses.slice(i, i + batchSize);
-    const batchPromises = batch.map(async (address) => {
-      // Add retry mechanism
-      const MAX_RETRIES = 3;
-      let retryCount = 0;
-      
-      while (retryCount <= MAX_RETRIES) {
-        try {
-          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals);
+    let batchRetries = 0;
+    let batchSuccess = false;
+    
+    while (!batchSuccess && batchRetries <= MAX_BATCH_RETRIES) {
+      try {
+        const batchPromises = batch.map(async (address) => {
+          // Individual address balance fetching with retries is handled in fetchTokenBalanceWithEthers
+          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals, verbose);
           
           return {
             address,
@@ -108,39 +134,31 @@ async function fetchTokenBalancesWithEthers(
             balanceFormatted: balance,
             tokenSymbol
           };
-        } catch (error) {
-          retryCount++;
-          if (retryCount <= MAX_RETRIES) {
-            if (verbose) console.log(`Error fetching balance for ${address}. Retry ${retryCount}/${MAX_RETRIES}...`);
-            // Add a small delay before retrying
-            await sleep(1000);
-          } else {
-            if (verbose) console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
-            return {
-              address,
-              balance: "0",
-              balanceFormatted: 0,
-              tokenSymbol
-            };
-          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        holders.push(...batchResults);
+        batchSuccess = true;
+      } catch (error) {
+        batchRetries++;
+        if (batchRetries <= MAX_BATCH_RETRIES) {
+          console.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
+          // Exponential backoff for batch retries
+          const batchBackoffTime = 1000 * Math.pow(2, batchRetries - 1);
+          if (verbose) console.log(`Retrying batch after ${batchBackoffTime}ms...`);
+          await sleep(batchBackoffTime);
+        } else {
+          console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
+          // Add empty results for this batch to maintain address count
+          const emptyResults = batch.map(address => ({
+            address,
+            balance: "0",
+            balanceFormatted: 0,
+            tokenSymbol
+          }));
+          holders.push(...emptyResults);
         }
       }
-      
-      // This should never be reached but TypeScript needs it
-      return {
-        address,
-        balance: "0",
-        balanceFormatted: 0,
-        tokenSymbol
-      };
-    });
-    
-    try {
-      const batchResults = await Promise.all(batchPromises);
-      holders.push(...batchResults);
-    } catch (error) {
-      console.error(`Error processing batch:`, error);
-      // Continue with the next batch
     }
     
     processedCount += batch.length;
@@ -150,7 +168,9 @@ async function fetchTokenBalancesWithEthers(
     
     // Add delay between batches to avoid rate limiting
     if (i + batchSize < holderAddresses.length) {
-      await sleep(500);
+      const batchDelayTime = 500; // Base delay between batches
+      if (verbose) console.log(`Waiting ${batchDelayTime}ms before next batch...`);
+      await sleep(batchDelayTime);
     }
   }
   
@@ -299,10 +319,26 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     // Process holders with socials
     const socialProfiles = await processHoldersWithSocialsWrapper(
       eligibleAddressesArray.map(address => ({ address })),
-      path.join(__dirname, '../../output/social_profiles.json'),
+      path.join(process.cwd(), 'output/social_profiles.json'),
       'Eligible Holders',
       verbose
     );
+    
+    // Save social profiles to file for debugging
+    if (verbose) {
+      const socialProfilesJson = JSON.stringify(Array.from(socialProfiles.entries()), null, 2);
+      const socialProfilesDir = path.dirname(path.join(process.cwd(), 'output/social_profiles.json'));
+      
+      if (!fs.existsSync(socialProfilesDir)) {
+        fs.mkdirSync(socialProfilesDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(
+        path.join(process.cwd(), 'output/social_profiles.json'),
+        socialProfilesJson
+      );
+      console.log(`Social profiles saved to ${path.join(process.cwd(), 'output/social_profiles.json')}`);
+    }
     
     // Step 4: Filter to addresses with social profiles
     if (verbose) console.log('\nFiltering to addresses with social profiles...');
@@ -451,113 +487,197 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
 }
 
 /**
- * Generate and save a leaderboard using the MuLeaderboard implementation
- * @param verbose Whether to show verbose logs
+ * Generate and save MU leaderboard
+ * @param verbose Whether to log verbose output
  */
 export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
   try {
+    if (verbose) {
+      console.log('Starting MU leaderboard generation...');
+    }
+    
     // Create MuLeaderboard instance
     const muLeaderboard = new MuLeaderboard(provider);
     
     // Calculate holder points
-    console.log('Calculating holder points using MuLeaderboard implementation...');
+    if (verbose) {
+      console.log('Calculating holder points using MuLeaderboard implementation...');
+    } else {
+      console.log('Calculating holder points...');
+    }
+    
     const holderPoints = await calculateHolderPoints(muLeaderboard, verbose);
     
     // Get the config
     const config = muLeaderboard.loadConfig();
     
-    // Generate leaderboard - include all entries (pass 0 for maxEntries)
-    console.log('Generating leaderboard...');
-    const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, 0);
-    
-    // Save leaderboard to JSON file
-    const outputDir = path.join(__dirname, '../../output/leaderboards');
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    if (verbose) {
+      console.log('Loaded MU leaderboard configuration');
     }
     
+    // Generate leaderboard - include all entries (pass 0 for maxEntries)
+    if (verbose) {
+      console.log('Generating MU leaderboard...');
+    } else {
+      console.log('Generating leaderboard...');
+    }
+    
+    const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, 0);
+    
+    if (verbose) {
+      console.log(`Generated MU leaderboard with ${leaderboard.entries.length} entries`);
+    }
+    
+    // Create output directory if it doesn't exist
+    const outputDir = path.join(process.cwd(), 'output', 'leaderboards');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+      if (verbose) {
+        console.log(`Created output directory: ${outputDir}`);
+      }
+    }
+    
+    // Save leaderboard to JSON file
     const jsonOutputPath = path.join(outputDir, muLeaderboard.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
-    // Save leaderboard to HTML file in output directory
-    const htmlFileName = muLeaderboard.getOutputFileName().replace('.json', '.html');
-    const htmlOutputPath = path.join(outputDir, htmlFileName);
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
-    
-    // Also save leaderboard to public directory for the web server
-    const publicDir = path.join(process.cwd(), 'public');
-    if (!fs.existsSync(publicDir)) {
-      fs.mkdirSync(publicDir, { recursive: true });
+    if (verbose) {
+      console.log(`Saved MU leaderboard JSON to ${jsonOutputPath}`);
     }
     
-    const publicHtmlPath = path.join(publicDir, 'mu_leaderboard.html');
-    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
+    // Save leaderboard to HTML file with index.html filename
+    const htmlOutputPath = path.join(outputDir, 'index.html');
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    if (verbose) {
+      console.log(`Saved MU leaderboard HTML to ${htmlOutputPath}`);
+    }
+    
+    // Copy logo file to assets directory if specified in config
+    if (config.output && config.output.logoPath) {
+      const assetsDir = path.join(outputDir, 'assets');
+      if (!fs.existsSync(assetsDir)) {
+        fs.mkdirSync(assetsDir, { recursive: true });
+        if (verbose) {
+          console.log(`Created assets directory: ${assetsDir}`);
+        }
+      }
+      
+      // Copy logo file
+      const logoSource = path.join(process.cwd(), 'assets', config.output.logoPath);
+      const logoTarget = path.join(assetsDir, config.output.logoPath);
+      fs.copyFileSync(logoSource, logoTarget);
+      
+      if (verbose) {
+        console.log(`Copied logo from ${logoSource} to ${logoTarget}`);
+      }
+    }
     
     // Print total number of entries
+    console.log(`MU leaderboard generated and saved to ${outputDir}`);
     console.log(`Total entries: ${leaderboard.entries.length}`);
-    console.log(`JSON saved to: ${jsonOutputPath}`);
-    console.log(`HTML saved to: ${htmlOutputPath}`);
-    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
     
     return leaderboard;
   } catch (error) {
-    console.error('Error generating and saving leaderboard:', error);
+    console.error('Error generating MU leaderboard:', error);
     throw error;
   }
 }
 
 /**
- * Generate and save a leaderboard using the StandardLeaderboard implementation
- * @param verbose Whether to show verbose logs
+ * Generate and save standard leaderboard
+ * @param verbose Whether to log verbose output
  */
 export async function generateAndSaveStandardLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
   try {
+    if (verbose) {
+      console.log('Starting standard leaderboard generation...');
+    }
+    
     // Create StandardLeaderboard instance
     const standardLeaderboard = new StandardLeaderboard(provider);
     
     // Calculate holder points
-    console.log('Calculating holder points using StandardLeaderboard implementation...');
+    if (verbose) {
+      console.log('Calculating holder points using StandardLeaderboard implementation...');
+    } else {
+      console.log('Calculating holder points...');
+    }
+    
     const holderPoints = await calculateHolderPoints(standardLeaderboard, verbose);
     
     // Get the config
     const config = standardLeaderboard.loadConfig();
     
-    // Generate leaderboard - include all entries (pass 0 for maxEntries)
-    console.log('Generating leaderboard...');
-    const leaderboard = standardLeaderboard.generateLeaderboard(holderPoints, 0);
-    
-    // Save leaderboard to JSON file
-    const outputDir = path.join(__dirname, '../../output/leaderboards');
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    if (verbose) {
+      console.log('Loaded standard leaderboard configuration');
     }
     
+    // Generate leaderboard - include all entries (pass 0 for maxEntries)
+    if (verbose) {
+      console.log('Generating standard leaderboard...');
+    } else {
+      console.log('Generating leaderboard...');
+    }
+    
+    const leaderboard = standardLeaderboard.generateLeaderboard(holderPoints, 0);
+    
+    if (verbose) {
+      console.log(`Generated standard leaderboard with ${leaderboard.entries.length} entries`);
+    }
+    
+    // Create output directory if it doesn't exist
+    const outputDir = path.join(process.cwd(), 'output', 'leaderboards');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+      if (verbose) {
+        console.log(`Created output directory: ${outputDir}`);
+      }
+    }
+    
+    // Save leaderboard to JSON file
     const jsonOutputPath = path.join(outputDir, standardLeaderboard.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
-    // Save leaderboard to HTML file in output directory
-    const htmlFileName = standardLeaderboard.getOutputFileName().replace('.json', '.html');
-    const htmlOutputPath = path.join(outputDir, htmlFileName);
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
-    
-    // Also save leaderboard to public directory for the web server
-    const publicDir = path.join(process.cwd(), 'public');
-    if (!fs.existsSync(publicDir)) {
-      fs.mkdirSync(publicDir, { recursive: true });
+    if (verbose) {
+      console.log(`Saved standard leaderboard JSON to ${jsonOutputPath}`);
     }
     
-    const publicHtmlPath = path.join(publicDir, 'standard_leaderboard.html');
-    saveLeaderboardHtml(leaderboard, publicHtmlPath, config.output);
+    // Save leaderboard to HTML file
+    const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    
+    if (verbose) {
+      console.log(`Saved standard leaderboard HTML to ${htmlOutputPath}`);
+    }
+    
+    // Copy logo file to assets directory if specified in config
+    if (config.output && config.output.logoPath) {
+      const assetsDir = path.join(outputDir, 'assets');
+      if (!fs.existsSync(assetsDir)) {
+        fs.mkdirSync(assetsDir, { recursive: true });
+        if (verbose) {
+          console.log(`Created assets directory: ${assetsDir}`);
+        }
+      }
+      
+      // Copy logo file
+      const logoSource = path.join(process.cwd(), 'assets', config.output.logoPath);
+      const logoTarget = path.join(assetsDir, config.output.logoPath);
+      fs.copyFileSync(logoSource, logoTarget);
+      
+      if (verbose) {
+        console.log(`Copied logo from ${logoSource} to ${logoTarget}`);
+      }
+    }
     
     // Print total number of entries
+    console.log(`Standard leaderboard generated and saved to ${outputDir}`);
     console.log(`Total entries: ${leaderboard.entries.length}`);
-    console.log(`JSON saved to: ${jsonOutputPath}`);
-    console.log(`HTML saved to: ${htmlOutputPath}`);
-    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
     
     return leaderboard;
   } catch (error) {
-    console.error('Error generating and saving leaderboard:', error);
+    console.error('Error generating standard leaderboard:', error);
     throw error;
   }
 }

@@ -586,7 +586,7 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     const leaderboard = generateLeaderboard(holderPoints, config.output.maxEntries);
     
     // Save leaderboard to JSON file
-    const outputDir = path.join(__dirname, '../../output/leaderboards');
+    const outputDir = path.join(process.cwd(), 'output/leaderboards');
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -599,18 +599,9 @@ export async function generateAndSaveLeaderboard(): Promise<Leaderboard> {
     const htmlContent = generateLeaderboardHtml(leaderboard, config.output);
     fs.writeFileSync(htmlOutputPath, htmlContent);
     
-    // Also save leaderboard to public directory for the web server
-    const publicDir = path.join(process.cwd(), 'public');
-    if (!fs.existsSync(publicDir)) {
-      fs.mkdirSync(publicDir, { recursive: true });
-    }
-    
-    const publicHtmlPath = path.join(publicDir, 'leaderboard.html');
-    fs.writeFileSync(publicHtmlPath, htmlContent);
-    
     // Print total number of entries
     console.log(`Total entries: ${leaderboard.entries.length}`);
-    console.log(`Leaderboard HTML also saved to ${publicHtmlPath} for web server access`);
+    console.log(`Leaderboard saved to ${outputDir}`);
     
     return leaderboard;
   } catch (error) {

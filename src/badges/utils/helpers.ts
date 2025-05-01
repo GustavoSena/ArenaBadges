@@ -1,56 +1,44 @@
-// Helper functions for the Badge Server
-import * as fs from 'fs';
 import * as path from 'path';
+import * as fs from 'fs';
 
 /**
- * Load configuration from config file
- * @returns Configuration object
+ * Load the application configuration file
+ * @returns The application configuration object
  */
-export function loadConfig(): any {
+export function loadConfig() {
   try {
-    // Default configuration
-    const defaultConfig = {
-      scheduler: {
-        intervalHours: 24
-      }
-    };
-    
-    // Try to load config from file
-    const configPath = path.join(process.cwd(), 'config', 'badges.json');
-    
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(configData);
-    }
-    
-    // If config file doesn't exist, create it with default values
-    const configDir = path.join(process.cwd(), 'config');
-    
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    
-    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-    console.log(`Created default config file at ${configPath}`);
-    
-    return defaultConfig;
+    const configPath = path.join(process.cwd(), 'config', 'scheduler.json');
+    console.log(`Loading app config from ${configPath}`);
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
-    console.error('Error loading config:', error);
-    
-    // Return default config if there's an error
-    return {
-      scheduler: {
-        intervalHours: 24
+    console.error('Error loading app config:', error);
+    return { 
+      scheduler: { 
+        intervalHours: 6,
+        leaderboardIntervalHours: 3
       }
     };
   }
 }
 
 /**
- * Sleep for a specified number of milliseconds
- * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified time
+ * Load the tokens configuration file
+ * @returns The tokens configuration object
  */
-export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+export function loadTokensConfig() {
+  try {
+    const configPath = path.join(process.cwd(), 'config', 'tokens.json');
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    console.error('Error loading tokens config:', error);
+    return { 
+      api: { 
+        baseUrl: 'http://api.arena.social/badges',
+        endpoints: {
+          nftOnly: 'mu-tier-1',
+          combined: 'mu-tier-2'
+        }
+      }
+    };
+  }
 }

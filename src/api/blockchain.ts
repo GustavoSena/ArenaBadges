@@ -89,26 +89,64 @@ export async function fetchNftHolders(
                 return true; // Success
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                const isInvalidTokenId = errorMessage.includes("invalid token ID") || 
-                                        errorMessage.includes("nonexistent token") ||
-                                        errorMessage.includes("owner query for nonexistent token") ||
-                                        errorMessage.includes("ERC721: invalid token ID") ||
-                                        errorMessage.includes("ERC721: owner query for nonexistent token");
                 
-                if (isInvalidTokenId) {
-                  // No need to retry for invalid token IDs
+                // Check for rate limiting errors first
+                const isRateLimited = 
+                  errorMessage.includes("exceeded its compute units") || 
+                  errorMessage.includes("rate limit") || 
+                  errorMessage.includes("too many requests") ||
+                  errorMessage.includes("429");
+                
+                // Check for truly invalid token IDs
+                const isInvalidTokenId = 
+                  errorMessage.includes("invalid token ID") || 
+                  errorMessage.includes("nonexistent token") ||
+                  errorMessage.includes("owner query for nonexistent token") ||
+                  errorMessage.includes("ERC721: invalid token ID") ||
+                  errorMessage.includes("ERC721: owner query for nonexistent token");
+                
+                // Check for revert errors that might be invalid tokens or other issues
+                const isRevertError = 
+                  errorMessage.includes("missing revert data") ||
+                  (errorMessage.includes("CALL_EXCEPTION") && errorMessage.includes("revert=null"));
+                
+                if (isRateLimited) {
+                  // Always retry rate limiting with a longer backoff
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    // Use a longer backoff for rate limiting (2-10 seconds)
+                    const backoffTime = 2000 * Math.pow(2, retryCount - 1);
+                    if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
+                    await sleep(backoffTime);
+                  } else {
+                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`);
+                    return false;
+                  }
+                } else if (isInvalidTokenId) {
+                  // These are definitely invalid tokens, no need to retry
                   if (verbose) console.log(`Token ${currentTokenId}: Invalid token ID`);
-                  return false; // Failure
-                }
-                
-                // For other errors, retry with exponential backoff
-                retryCount++;
-                if (retryCount <= MAX_RETRIES) {
-                  if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
-                  // Exponential backoff
-                  await sleep(500 * Math.pow(2, retryCount - 1));
+                  return false;
+                } else if (isRevertError) {
+                  // Revert errors could be invalid tokens or temporary issues, retry a few times
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    if (verbose) console.log(`Revert error for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
+                    await sleep(1000 * Math.pow(1.5, retryCount - 1));
+                  } else {
+                    if (verbose) console.log(`Token ${currentTokenId}: Considered invalid after ${MAX_RETRIES} revert errors`);
+                    return false;
+                  }
                 } else {
-                  console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries:`, error);
+                  // For other errors, retry with exponential backoff
+                  retryCount++;
+                  if (retryCount <= MAX_RETRIES) {
+                    if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
+                    // Exponential backoff
+                    await sleep(500 * Math.pow(2, retryCount - 1));
+                  } else {
+                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries:`, error);
+                    return false;
+                  }
                 }
               }
             }

@@ -27,7 +27,7 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
   
   // Get styling from config
   const title = config?.title || 'Community Leaderboard';
-  const logoPath = config?.logoPath || '';
+  const logoPath = config?.logoPath || 'logo.png';
   const titleLink = config?.titleLink || '';
   const primaryColor = config?.primaryColor || '#3498db';
   const secondaryColor = config?.secondaryColor || '#e0e0e0';
@@ -76,8 +76,8 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
         'Unknown';
       
       // Arena profile link
-      const arenaProfile = entry.address ? 
-        `<a href="https://www.arenabook.xyz/profile/${entry.address}" target="_blank" class="arena-button">Arena Profile</a>` : 
+      const arenaProfile = entry.twitterHandle ? 
+        `<a href="https://arena.social/${entry.twitterHandle}" target="_blank" class="arena-button">Arena Profile</a>` : 
         '';
       
       // Profile image
@@ -140,66 +140,38 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - ${new Date(timestamp).toLocaleDateString()}</title>
+  <title>${title}</title>
   <style>
     ${cssVariables}
     
     body {
       font-family: 'Arial', sans-serif;
-      margin: 0;
-      padding: 20px;
       background-color: var(--background-color);
       color: #333;
+      margin: 0;
+      padding: 0;
     }
     
     .container {
       max-width: 1200px;
       margin: 0 auto;
+      padding: 20px;
     }
     
     .header {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #ddd;
+      text-align: center;
+      margin-bottom: 30px;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      padding: 20px;
+      border-radius: 10px;
+      color: white;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
     .logo {
-      height: 50px;
-      margin-right: 15px;
-    }
-    
-    .title-container {
-      display: flex;
-      flex-direction: column;
-    }
-    
-    h1 {
-      margin: 0;
-      color: #000;
-      font-size: 24px;
-    }
-    
-    h1 a {
-      text-decoration: none;
-      color: #000;
-      transition: background-image 0.3s, color 0.3s;
-    }
-    
-    h1 a:hover {
-      background-image: linear-gradient(to right, var(--gradient-start), var(--gradient-end));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    
-    .timestamp {
-      text-align: center;
-      margin-bottom: 20px;
-      color: #7f8c8d;
-      font-size: 0.9em;
+      max-width: 150px;
+      max-height: 150px;
+      margin-bottom: 15px;
     }
     
     .leaderboard {
@@ -407,13 +379,11 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
 <body>
   <div class="container">
     <div class="header">
-      ${logoPath ? `<img src="/assets/${logoPath}" alt="${title} Logo" class="logo">` : ''}
-      <div class="title-container">
-        <h1>${titleLink ? `<a href="${titleLink}" target="_blank">${title}</a>` : title}</h1>
-      </div>
+      ${logoPath ? `<img src="./assets/${logoPath}" alt="${title} Logo" class="logo">` : ''}
+      <h1>${titleLink ? `<a href="${titleLink}" target="_blank" style="color: white; text-decoration: none;">${title}</a>` : title}</h1>
+      <p>Last updated: ${new Date(timestamp).toLocaleString()}</p>
     </div>
     
-    <div class="timestamp">Last updated at: ${new Date(timestamp).toLocaleString()}</div>
     <div class="entries-count">Total Entries: ${entries.length}</div>
     
     <div class="pagination" id="pagination-top">
@@ -607,6 +577,27 @@ export function saveLeaderboardHtml(leaderboard: Leaderboard, outputPath: string
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    // Copy logo file if specified
+    if (config?.logoPath) {
+      const logoPath = config.logoPath;
+      const sourceLogoPath = path.join(process.cwd(), 'assets', logoPath);
+      const outputAssetsDir = path.join(outputDir, 'assets');
+      const destLogoPath = path.join(outputAssetsDir, logoPath);
+      
+      // Create assets directory in output folder if it doesn't exist
+      if (!fs.existsSync(outputAssetsDir)) {
+        fs.mkdirSync(outputAssetsDir, { recursive: true });
+      }
+      
+      // Copy the logo file
+      if (fs.existsSync(sourceLogoPath)) {
+        fs.copyFileSync(sourceLogoPath, destLogoPath);
+        console.log(`Copied logo from ${sourceLogoPath} to ${destLogoPath}`);
+      } else {
+        console.warn(`Logo file not found at ${sourceLogoPath}`);
+      }
     }
     
     // Save the HTML to a file
