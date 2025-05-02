@@ -68,7 +68,7 @@ async function startAllSchedulers() {
     
     // Start leaderboard scheduler
     startLeaderboardScheduler({
-      leaderboardTypes: [LeaderboardType.MU, LeaderboardType.STANDARD],
+      leaderboardTypes: [LeaderboardType.MU],
       intervalMs: schedulerConfig.intervals.leaderboard * 60 * 60 * 1000,
       runImmediately: true,
       verbose,
