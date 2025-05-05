@@ -363,7 +363,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       if (socialInfo && socialInfo.twitter_handle) {
         holderPointsMap.set(address, {
           address,
-          twitterHandle: socialInfo.twitter_handle,
+          twitterHandle: socialInfo.twitter_handle.toLowerCase(),
           profileImageUrl: socialInfo.twitter_pfp_url || null,
           totalPoints: 0,
           tokenPoints: {},
