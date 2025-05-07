@@ -10,30 +10,87 @@ interface SchedulerConfig {
   verbose?: boolean;
 }
 
+// Define error types
+enum ErrorType {
+  RETRY_FAILURE = 'RETRY_FAILURE',
+  OTHER = 'OTHER'
+}
+
 /**
  * Runs the data collection and sends results to the API
+ * @returns ErrorType if there was an error, undefined if successful
  */
-async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false): Promise<void> {
+async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false): Promise<ErrorType | undefined> {
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
     // Run the main process to fetch token holder profiles
-    const results = await fetchTokenHolderProfiles(verbose);
+    let results;
+    try {
+      results = await fetchTokenHolderProfiles(verbose);
+    } catch (fetchError) {
+      // Check if this is a retry failure
+      const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      if (errorMessage.includes('max retries exceeded') || 
+          errorMessage.includes('All retries failed') || 
+          errorMessage.includes('retry limit exceeded') ||
+          errorMessage.includes('Failed to get owner') ||
+          errorMessage.includes('after 5 retries')) {
+        console.error('Retry failure detected in token holder fetching. Will reschedule for 2 hours later WITHOUT sending data to API.');
+        throw new Error(`Retry failure in fetchTokenHolderProfiles: ${errorMessage}`);
+      }
+      throw fetchError; // Re-throw other errors
+    }
+    
+    // Validate results to ensure we have enough data before sending to API
+    if (!results.nftHolders || results.nftHolders.length === 0) {
+      console.error('No NFT holders found. Will not send empty data to API.');
+      throw new Error('No NFT holders found');
+    }
     
     if (verbose) {
       console.log(`Fetched ${results.nftHolders.length} NFT holders and ${results.combinedHolders.length} combined holders`);
     }
     
     // Send the results to the API
-    await sendResults({
-      nftHolders: results.nftHolders,
-      combinedHolders: results.combinedHolders,
-      timestamp: new Date().toISOString()
-    });
+    try {
+      await sendResults({
+        nftHolders: results.nftHolders,
+        combinedHolders: results.combinedHolders,
+        timestamp: new Date().toISOString()
+      });
+    } catch (sendError) {
+      // Check if this is a retry failure in the API
+      const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
+      if (errorMessage.includes('429') || 
+          errorMessage.includes('rate limit') ||
+          errorMessage.includes('too many requests')) {
+        console.error('API rate limit detected in sending results. Will reschedule for 2 hours later WITHOUT sending data to API.');
+        throw new Error(`API rate limit in sendResults: ${errorMessage}`);
+      }
+      throw sendError; // Re-throw other errors
+    }
     
     console.log(`Completed scheduled run at ${new Date().toISOString()}`);
+    return undefined; // Success
   } catch (error) {
     console.error('Error in scheduled run:', error);
+    
+    // Check if this is a retry failure
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('max retries exceeded') || 
+        errorMessage.includes('All retries failed') || 
+        errorMessage.includes('retry limit exceeded') ||
+        errorMessage.includes('Failed to get owner') ||
+        errorMessage.includes('after 5 retries') ||
+        errorMessage.includes('Retry failure') ||
+        errorMessage.includes('API rate limit') ||
+        errorMessage.includes('No NFT holders found')) {
+      console.error('Retry failure or data validation error detected. Will reschedule for 2 hours later WITHOUT sending data to API.');
+      return ErrorType.RETRY_FAILURE;
+    }
+    
+    return ErrorType.OTHER;
   }
 }
 
@@ -50,6 +107,9 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   const apiKey = config.apiKey || process.env.API_KEY;
   const verbose = config.verbose || false;
   
+  // Define retry interval (2 hours)
+  const retryIntervalMs = 2 * 60 * 60 * 1000;
+  
   if (!apiKey) {
     throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
   }
@@ -63,42 +123,73 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   console.log(`Combined endpoint: ${appConfig.api?.endpoints?.combined || 'mu-tier-2'}`);
   console.log(`Include combined in NFT-only: ${appConfig.api?.includeCombinedInNft !== false ? 'Yes' : 'No'}`);
   
-  // Run immediately on startup
-  runAndSendResults(apiKey, verbose);
+  // Variable to store the next scheduled timeout
+  let nextScheduledTimeout: NodeJS.Timeout | null = null;
   
-  // Call onRun callback if provided
-  if (config.onRun) {
-    config.onRun();
-  }
-  
-  // Calculate next run time
-  const nextRunTime = new Date();
-  nextRunTime.setTime(nextRunTime.getTime() + intervalMs);
-  
-  // Call onSchedule callback if provided
-  if (config.onSchedule) {
-    config.onSchedule(nextRunTime);
-  }
-  
-  // Then schedule to run at the specified interval
-  setInterval(() => {
-    // Run the scheduled task
-    runAndSendResults(apiKey, verbose);
-    
-    // Call onRun callback if provided
-    if (config.onRun) {
-      config.onRun();
+  // Function to schedule the next run
+  const scheduleNextRun = (delayMs: number) => {
+    // Clear any existing timeout
+    if (nextScheduledTimeout) {
+      clearTimeout(nextScheduledTimeout);
     }
     
     // Calculate next run time
     const nextRunTime = new Date();
-    nextRunTime.setTime(nextRunTime.getTime() + intervalMs);
+    nextRunTime.setTime(nextRunTime.getTime() + delayMs);
     
     // Call onSchedule callback if provided
     if (config.onSchedule) {
       config.onSchedule(nextRunTime);
     }
-  }, intervalMs);
+    
+    // Schedule the next run
+    nextScheduledTimeout = setTimeout(async () => {
+      // Call onRun callback if provided
+      if (config.onRun) {
+        config.onRun();
+      }
+      
+      // Run the scheduled task
+      const errorType = await runAndSendResults(apiKey, verbose);
+      
+      // Determine the next interval based on the result
+      let nextIntervalMs = intervalMs;
+      
+      if (errorType === ErrorType.RETRY_FAILURE) {
+        console.log(`Scheduling next run in 2 hours due to retry failures`);
+        nextIntervalMs = retryIntervalMs;
+      } else {
+        console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
+      }
+      
+      // Schedule the next run
+      scheduleNextRun(nextIntervalMs);
+    }, delayMs);
+  };
+  
+  // Run immediately on startup
+  (async () => {
+    // Call onRun callback if provided
+    if (config.onRun) {
+      config.onRun();
+    }
+    
+    // Run the scheduled task
+    const errorType = await runAndSendResults(apiKey, verbose);
+    
+    // Determine the next interval based on the result
+    let nextIntervalMs = intervalMs;
+    
+    if (errorType === ErrorType.RETRY_FAILURE) {
+      console.log(`Scheduling next run in 2 hours due to retry failures`);
+      nextIntervalMs = retryIntervalMs;
+    } else {
+      console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
+    }
+    
+    // Schedule the next run
+    scheduleNextRun(nextIntervalMs);
+  })();
 }
 
 export { runAndSendResults };
