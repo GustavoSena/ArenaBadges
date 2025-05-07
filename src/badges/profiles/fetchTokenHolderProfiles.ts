@@ -336,6 +336,18 @@ async function fetchNftHoldersFromEthers(nftAddress: string): Promise<NftHolder[
     return holders;
   } catch (error) {
     console.error(`Error fetching NFT holders for ${nftAddress}:`, error);
+    
+    // Propagate retry-related errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Failed to get owner') || 
+        errorMessage.includes('after 5 retries') || 
+        errorMessage.includes('max retries exceeded') || 
+        errorMessage.includes('rate limit') ||
+        errorMessage.includes('Retry failure')) {
+      throw error; // Propagate the error up
+    }
+    
+    // For other errors, return empty array
     return [];
   }
 }

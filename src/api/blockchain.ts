@@ -119,8 +119,9 @@ export async function fetchNftHolders(
                     if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
                     await sleep(backoffTime);
                   } else {
-                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`);
-                    return false;
+                    const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`;
+                    console.error(errorMsg);
+                    throw new Error(errorMsg);
                   }
                 } else if (isInvalidTokenId) {
                   // These are definitely invalid tokens, no need to retry
@@ -144,8 +145,9 @@ export async function fetchNftHolders(
                     // Exponential backoff
                     await sleep(500 * Math.pow(2, retryCount - 1));
                   } else {
-                    console.error(`Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries:`, error);
-                    return false;
+                    const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries: ${error instanceof Error ? error.message : String(error)}`;
+                    console.error(errorMsg);
+                    throw new Error(errorMsg);
                   }
                 }
               }
@@ -192,6 +194,17 @@ export async function fetchNftHolders(
     return holders;
   } catch (error) {
     console.error(`Error fetching NFT holders for ${contractAddress}:`, error);
+    
+    // If this is a retry-related error, propagate it
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Failed to get owner') || 
+        errorMessage.includes('after 5 retries') || 
+        errorMessage.includes('max retries exceeded') || 
+        errorMessage.includes('rate limit')) {
+      throw new Error(`Retry failure in NFT holder fetching: ${errorMessage}`);
+    }
+    
+    // For other errors, return empty array
     return [];
   }
 }
