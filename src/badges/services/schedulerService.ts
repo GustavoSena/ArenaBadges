@@ -8,6 +8,8 @@ interface SchedulerConfig {
   onSchedule?: (nextRunTime: Date) => void;
   onRun?: () => void;
   verbose?: boolean;
+  dryRun?: boolean;
+  runOnce?: boolean;
 }
 
 // Define error types
@@ -18,9 +20,12 @@ enum ErrorType {
 
 /**
  * Runs the data collection and sends results to the API
+ * @param apiKey API key for authentication
+ * @param verbose Whether to show verbose logs
+ * @param dryRun If true, print JSON to console instead of sending to API
  * @returns ErrorType if there was an error, undefined if successful
  */
-async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false): Promise<ErrorType | undefined> {
+async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false, dryRun: boolean = false): Promise<ErrorType | undefined> {
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
@@ -54,11 +59,14 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
     
     // Send the results to the API
     try {
+      if (dryRun) {
+        console.log('Running in dry run mode - will print JSON instead of sending to API');
+      }
       await sendResults({
         nftHolders: results.nftHolders,
         combinedHolders: results.combinedHolders,
         timestamp: new Date().toISOString()
-      });
+      }, { dryRun });
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -108,6 +116,8 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
   const apiKey = config.apiKey || process.env.API_KEY;
   const verbose = config.verbose || false;
+  const dryRun = config.dryRun || false;
+  const runOnce = config.runOnce || false;
   
   // Define retry interval (2 hours)
   const retryIntervalMs = 2 * 60 * 60 * 1000;
@@ -152,7 +162,7 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       }
       
       // Run the scheduled task
-      const errorType = await runAndSendResults(apiKey, verbose);
+      const errorType = await runAndSendResults(apiKey, verbose, dryRun);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;
@@ -164,8 +174,12 @@ export function startScheduler(config: SchedulerConfig = {}): void {
         console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
       }
       
-      // Schedule the next run
-      scheduleNextRun(nextIntervalMs);
+      // Schedule the next run if not in runOnce mode
+      if (runOnce) {
+        console.log('Run once mode enabled - not scheduling next run');
+      } else {
+        scheduleNextRun(nextIntervalMs);
+      }
     }, delayMs);
   };
   
@@ -177,7 +191,7 @@ export function startScheduler(config: SchedulerConfig = {}): void {
     }
     
     // Run the scheduled task
-    const errorType = await runAndSendResults(apiKey, verbose);
+    const errorType = await runAndSendResults(apiKey, verbose, dryRun);
     
     // Determine the next interval based on the result
     let nextIntervalMs = intervalMs;
@@ -189,8 +203,12 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
     }
     
-    // Schedule the next run
-    scheduleNextRun(nextIntervalMs);
+    // Schedule the next run if not in runOnce mode
+    if (runOnce) {
+      console.log('Run once mode enabled - not scheduling next run');
+    } else {
+      scheduleNextRun(nextIntervalMs);
+    }
   })();
 }
 

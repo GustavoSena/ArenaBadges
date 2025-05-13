@@ -18,19 +18,37 @@ export interface HolderResults {
   combinedHolders: string[];
 }
 
-// List of permanent accounts that should always be included in both lists
-const PERMANENT_ACCOUNTS = [
-  'mucoinofficial',
-  'ceojonvaughn',
-  'aunkitanandi'
-];
+// Load configuration using the new config system
+const appConfig = loadAppConfig();
+
+// Get permanent accounts from project configuration
+let PERMANENT_ACCOUNTS: string[] = [];
+try {
+  // First try to get from project configuration
+  if (appConfig && appConfig.hasOwnProperty('permanentAccounts') && Array.isArray((appConfig as any).permanentAccounts)) {
+    PERMANENT_ACCOUNTS = (appConfig as any).permanentAccounts;
+  } else {
+    // Fallback to hardcoded accounts if not in project config
+    PERMANENT_ACCOUNTS = [
+      'mucoinofficial',
+      'ceojonvaughn',
+      'aunkitanandi'
+    ];
+    console.log('Warning: permanentAccounts not found in project config, using default accounts');
+  }
+} catch (error) {
+  console.error('Error loading permanent accounts:', error);
+  // Fallback to hardcoded accounts if there's an error
+  PERMANENT_ACCOUNTS = [
+    'mucoinofficial',
+    'ceojonvaughn',
+    'aunkitanandi'
+  ];
+}
 
 // Flag to control whether holders can be in both lists
 // If false, combined holders will be removed from the NFT-only list
 const ALLOW_DUPLICATE_HOLDERS = true;
-
-// Load configuration using the new config system
-const appConfig = loadAppConfig();
 
 // For backward compatibility, define the same interfaces
 interface TokenConfig {

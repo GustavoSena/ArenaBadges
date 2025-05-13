@@ -25,9 +25,10 @@ const API_KEY = process.env.API_KEY;
 /**
  * Send results to the API endpoints
  * @param data The data to send
+ * @param dryRun If true, print JSON to console instead of sending to API
  * @returns Promise resolving to the API response
  */
-export async function sendResults(data: any): Promise<any> {
+export async function sendResults(data: any, options: { dryRun?: boolean } = {}): Promise<any> {
   try {
     console.log('Sending results to API...');
     
@@ -62,28 +63,44 @@ export async function sendResults(data: any): Promise<any> {
     const nftEndpoint = `${API_BASE_URL}/${NFT_ONLY_ENDPOINT}?key=${API_KEY}`;
     const combinedEndpoint = `${API_BASE_URL}/${COMBINED_ENDPOINT}?key=${API_KEY}`;
     
-    // Send data to both endpoints
-    console.log(`Sending NFT-only holders to ${API_BASE_URL}/${NFT_ONLY_ENDPOINT}`);
-    console.log(`NFT-only holders: ${nftOnlyData.handles.length}`);
-    const nftResponse = await axios.post(nftEndpoint, nftOnlyData, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    console.log(`Sending combined holders to ${API_BASE_URL}/${COMBINED_ENDPOINT}`);
-    console.log(`Combined holders: ${combinedData.handles.length}`);
-    const combinedResponse = await axios.post(combinedEndpoint, combinedData, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    console.log('Results sent successfully to both endpoints');
-    return {
-      nftOnly: nftResponse.data,
-      combined: combinedResponse.data
-    };
+    // Check if this is a dry run
+    if (options.dryRun) {
+      console.log('DRY RUN MODE: Printing JSON to console instead of sending to API');
+      console.log('\nNFT-ONLY DATA (would be sent to ' + `${API_BASE_URL}/${NFT_ONLY_ENDPOINT}` + '):')
+      console.log(JSON.stringify(nftOnlyData, null, 2));
+      
+      console.log('\nCOMBINED DATA (would be sent to ' + `${API_BASE_URL}/${COMBINED_ENDPOINT}` + '):')
+      console.log(JSON.stringify(combinedData, null, 2));
+      
+      console.log('\nDRY RUN COMPLETED - No data was sent to the API');
+      return {
+        nftOnly: { status: 'dry-run', handles: nftOnlyData.handles.length },
+        combined: { status: 'dry-run', handles: combinedData.handles.length }
+      };
+    } else {
+      // Send data to both endpoints
+      console.log(`Sending NFT-only holders to ${API_BASE_URL}/${NFT_ONLY_ENDPOINT}`);
+      console.log(`NFT-only holders: ${nftOnlyData.handles.length}`);
+      const nftResponse = await axios.post(nftEndpoint, nftOnlyData, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`Sending combined holders to ${API_BASE_URL}/${COMBINED_ENDPOINT}`);
+      console.log(`Combined holders: ${combinedData.handles.length}`);
+      const combinedResponse = await axios.post(combinedEndpoint, combinedData, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Results sent successfully to both endpoints');
+      return {
+        nftOnly: nftResponse.data,
+        combined: combinedResponse.data
+      };
+    }
   } catch (error: any) {
     console.error('Error sending results:', error.message || String(error));
     throw error;

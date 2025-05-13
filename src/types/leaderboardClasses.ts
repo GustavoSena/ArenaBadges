@@ -35,18 +35,17 @@ export abstract class BaseLeaderboard {
   }
   
   /**
-   * Load excluded accounts from configuration
+   * Load excluded accounts from leaderboard configuration
    */
   protected loadExcludedAccounts(): void {
     try {
-      const configPath = path.join(process.cwd(), 'config', 'excluded_accounts.json');
-      if (fs.existsSync(configPath)) {
-        const configData = fs.readFileSync(configPath, 'utf8');
-        const config = JSON.parse(configData) as ExcludedAccountsConfig;
-        this.excludedAccounts = config.excludedAccounts || [];
-        console.log(`Loaded ${this.excludedAccounts.length} excluded accounts from config`);
+      // Get excluded accounts from the leaderboard configuration
+      const config = this.loadConfig();
+      if (config && config.excludedAccounts && Array.isArray(config.excludedAccounts)) {
+        this.excludedAccounts = config.excludedAccounts.map((account: string) => account.toLowerCase());
+        console.log(`Loaded ${this.excludedAccounts.length} excluded accounts from leaderboard config`);
       } else {
-        console.log('No excluded accounts configuration found, using empty list');
+        console.log('No excluded accounts found in leaderboard config, using empty list');
         this.excludedAccounts = [];
       }
     } catch (error) {

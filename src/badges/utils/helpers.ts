@@ -5,21 +5,11 @@ import { loadAppConfig } from '../../utils/config';
 /**
  * Load the application configuration file
  * @returns The application configuration object
+ * @deprecated Use loadTokensConfig instead which uses the new project-specific configuration system
  */
 export function loadConfig() {
-  try {
-    const configPath = path.join(process.cwd(), 'config', 'scheduler.json');
-    console.log(`Loading app config from ${configPath}`);
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (error) {
-    console.error('Error loading app config:', error);
-    return { 
-      scheduler: { 
-        intervalHours: 6,
-        leaderboardIntervalHours: 3
-      }
-    };
-  }
+  console.warn('Warning: loadConfig is deprecated. Use loadTokensConfig instead.');
+  return loadTokensConfig();
 }
 
 /**

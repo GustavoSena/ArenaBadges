@@ -50,6 +50,7 @@ export interface AppConfig {
   scheduler: SchedulerConfig;
   api: ApiConfig;
   excludedAccounts: string[];
+  permanentAccounts?: string[];
 }
 
 /**
@@ -117,7 +118,8 @@ function getDefaultConfig(): AppConfig {
       },
       includeCombinedInNft: true
     },
-    excludedAccounts: []
+    excludedAccounts: [],
+    permanentAccounts: []
   };
 }
 
@@ -175,4 +177,43 @@ export function getAvailableLeaderboardTypes(): string[] {
     console.error('Error getting available leaderboard types:', error);
     return [];
   }
+}
+
+/**
+ * Load a specific badge config
+ * @param type The type of badge (e.g., 'mu')
+ * @returns The badge configuration or null if not found
+ */
+export function loadBadgeConfig(type: string): any | null {
+  try {
+    const configPath = path.join(process.cwd(), 'config', 'badges', `${type}.json`);
+    if (!fs.existsSync(configPath)) {
+      console.log(`Badge config for ${type} not found at ${configPath}`);
+      return null;
+    }
+    
+    console.log(`Loading ${type} badge config from ${configPath}`);
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    console.error(`Error loading ${type} badge config:`, error);
+    return null;
+  }
+}
+
+/**
+ * Check if a project exists by checking for badge and leaderboard configurations
+ * @param projectName The name of the project to check
+ * @returns An object with flags indicating which configurations exist
+ */
+export function checkProjectExists(projectName: string): { badge: boolean, leaderboard: boolean } {
+  const badgeConfigPath = path.join(process.cwd(), 'config', 'badges', `${projectName}.json`);
+  const leaderboardConfigPath = path.join(process.cwd(), 'config', 'leaderboards', `${projectName}.json`);
+  
+  const badgeExists = fs.existsSync(badgeConfigPath);
+  const leaderboardExists = fs.existsSync(leaderboardConfigPath);
+  
+  return {
+    badge: badgeExists,
+    leaderboard: leaderboardExists
+  };
 }

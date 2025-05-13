@@ -1,1 +1,77 @@
-{}
+{
+  "title": "Standard Leaderboard",
+  "description": "Standard leaderboard for token holders",
+  "weights": {
+    "tokens": [
+      {
+        "symbol": "MU",
+        "weight": 1,
+        "minBalance": 100,
+        "address": "0xD036414fa2BCBb802691491E323BFf1348C5F4Ba",
+        "decimals": 18
+      },
+      {
+        "symbol": "MUG",
+        "weight": 1,
+        "minBalance": 100,
+        "address": "0x3f65c678C23C4952d8Cc112C2CC1339D0e2B3C1E",
+        "decimals": 18
+      },
+      {
+        "symbol": "MUO",
+        "weight": 1,
+        "minBalance": 100,
+        "address": "0x8920d6D29F56546D93A9D2D737f4c8C8Cef2c252",
+        "decimals": 18
+      },
+      {
+        "symbol": "MUV",
+        "weight": 1,
+        "minBalance": 100,
+        "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
+        "decimals": 18
+      }
+    ],
+    "nfts": [
+      {
+        "name": "Mu Pups",
+        "weight": 10,
+        "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0"
+      }
+    ]
+  },
+  "output": {
+    "title": "Standard Leaderboard",
+    "logoPath": "standard-logo.png",
+    "maxEntries": 100,
+    "refreshTimeLabel": "Updated every 3 hours",
+    "columns": [
+      {
+        "name": "Rank",
+        "field": "rank",
+        "width": "10%"
+      },
+      {
+        "name": "Twitter",
+        "field": "twitter",
+        "width": "30%"
+      },
+      {
+        "name": "Points",
+        "field": "points",
+        "width": "20%"
+      },
+      {
+        "name": "Tokens",
+        "field": "tokens",
+        "width": "20%"
+      },
+      {
+        "name": "NFTs",
+        "field": "nfts",
+        "width": "20%"
+      }
+    ]
+  },
+  "excludedAccounts": ["mucoinofficial"]
+}

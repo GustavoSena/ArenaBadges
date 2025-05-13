@@ -13,6 +13,33 @@ export enum LeaderboardType {
   MU = 'mu'
 }
 
+/**
+ * Get a LeaderboardType from a string
+ * @param type The string representation of the leaderboard type
+ * @returns The corresponding LeaderboardType or undefined if not found
+ */
+export function getLeaderboardTypeFromString(type: string): LeaderboardType | undefined {
+  // First check if it's a direct match with the enum values
+  const directMatch = Object.values(LeaderboardType).find(
+    value => value.toLowerCase() === type.toLowerCase()
+  );
+  
+  if (directMatch) {
+    return directMatch as LeaderboardType;
+  }
+  
+  // If not a direct match, try to match by enum key
+  const keyMatch = Object.keys(LeaderboardType).find(
+    key => key.toLowerCase() === type.toLowerCase()
+  );
+  
+  if (keyMatch) {
+    return LeaderboardType[keyMatch as keyof typeof LeaderboardType];
+  }
+  
+  return undefined;
+}
+
 // Define error types
 enum ErrorType {
   RETRY_FAILURE = 'RETRY_FAILURE',
