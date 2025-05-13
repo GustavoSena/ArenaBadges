@@ -3,7 +3,7 @@ import { ArenabookUserResponse } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 
 // Constants
-const ARENABOOK_API_URL = 'https://api.arenabook.xyz/user_info';
+const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
 const REQUEST_DELAY_MS = 500; // 500ms delay between requests
 
 /**
