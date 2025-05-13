@@ -21,21 +21,33 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
       if (response.data && response.data.length > 0) {
         return response.data[0];
       }
-      return null;
+      return null; // No profile found, but this is not an error
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 404) {
           console.log(`No social profile found for ${address}`);
           // No need to retry for 404 errors
           return null;
+        } else if (error.response.status === 429) {
+          // Rate limit error - always propagate these
+          retryCount++;
+          if (retryCount <= MAX_RETRIES) {
+            console.log(`Rate limit error fetching Arenabook profile for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            await sleep(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
+          } else {
+            const errorMsg = `Arena API rate limit exceeded after ${MAX_RETRIES} retries for ${address}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
+          }
         } else {
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleep(REQUEST_DELAY_MS);
           } else {
-            console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error.response.status, error.response.statusText);
-            return null;
+            const errorMsg = `Arena API error (${error.response.status}) after ${MAX_RETRIES} retries for ${address}`;
+            console.error(errorMsg, error.response.statusText);
+            throw new Error(errorMsg);
           }
         }
       } else {
@@ -44,12 +56,14 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
           console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
           await sleep(REQUEST_DELAY_MS);
         } else {
-          console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error);
-          return null;
+          const errorMsg = `Arena API unexpected error after ${MAX_RETRIES} retries for ${address}`;
+          console.error(errorMsg, error);
+          throw new Error(errorMsg);
         }
       }
     }
   }
   
-  return null;
+  // This should never be reached, but just in case
+  throw new Error(`Arena API max retries exceeded for ${address}`);
 }
