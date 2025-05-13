@@ -16,6 +16,7 @@
     "run-badges-once": "ts-node src/badges/scripts/runBadgeProcessOnce.ts",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts",
+    "test:arena-api": "ts-node tests/arenaApiTest.ts",
     "kill":"taskkill /F /IM node.exe"
   },
   "author": "",
