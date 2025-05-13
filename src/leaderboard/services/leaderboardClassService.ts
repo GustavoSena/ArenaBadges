@@ -209,6 +209,18 @@ async function processHoldersWithSocialsWrapper(
 }
 
 /**
+ * Safely get weights from leaderboard config, handling undefined values
+ * @param leaderboardConfig The leaderboard configuration
+ * @returns Safe weights object with empty arrays as fallbacks
+ */
+function getSafeWeights(leaderboardConfig: LeaderboardConfig) {
+  return {
+    tokens: leaderboardConfig.weights?.tokens || [],
+    nfts: leaderboardConfig.weights?.nfts || []
+  };
+}
+
+/**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
  * @param leaderboard The leaderboard implementation to use
@@ -232,7 +244,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     // Fetch all eligible NFT holders first
     const eligibleAddresses = new Set<string>();
     
-    for (const nftWeight of leaderboardConfig.weights.nfts) {
+    // Get safe weights from the configuration
+    const safeWeights = getSafeWeights(leaderboardConfig);
+    
+    for (const nftWeight of safeWeights.nfts) {
       if (verbose) console.log(`Checking ${nftWeight.name} NFT holders...`);
       
       // Always use the fallback method (going through NFT IDs) instead of checking total supply

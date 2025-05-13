@@ -3,21 +3,21 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 import axios from 'axios';
+import { loadAppConfig } from '../../utils/config';
 
 // Load environment variables
 dotenv.config();
 
-// Load configuration
-const configPath = path.join(process.cwd(), 'config', 'tokens.json');
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+// Load configuration using the new config system
+const appConfig = loadAppConfig();
 
 // Get API endpoints from config
-const API_BASE_URL = config.api?.baseUrl || 'http://api.arena.social/badges';
-const NFT_ONLY_ENDPOINT = config.api?.endpoints?.nftOnly || 'mu-tier-1';
-const COMBINED_ENDPOINT = config.api?.endpoints?.combined || 'mu-tier-2';
+const API_BASE_URL = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
+const NFT_ONLY_ENDPOINT = appConfig.api?.endpoints?.nftOnly || 'mu-tier-1';
+const COMBINED_ENDPOINT = appConfig.api?.endpoints?.combined || 'mu-tier-2';
 
 // Check if combined holders should also be in the NFT-only list
-const INCLUDE_COMBINED_IN_NFT = config.api?.includeCombinedInNft !== false; // Default to true if not specified
+const INCLUDE_COMBINED_IN_NFT = appConfig.api?.includeCombinedInNft !== false; // Default to true if not specified
 
 // API key from environment variables
 const API_KEY = process.env.API_KEY;

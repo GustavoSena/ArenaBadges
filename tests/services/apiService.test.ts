@@ -4,7 +4,7 @@ import path from 'path';
 
 import { sendResultsToApi } from '../../src/services/apiService';
 import { HolderResults } from '../../src/services/holderService';
-import * as helpers from '../../src/utils/helpers';
+import * as configModule from '../../src/utils/config';
 
 // Mock the modules
 jest.mock('axios');
@@ -36,23 +36,23 @@ describe('apiService', () => {
     // Reset all mocks
     jest.clearAllMocks();
     
-    // Mock loadConfig to return a valid API configuration with all required properties
-    jest.spyOn(helpers, 'loadConfig').mockReturnValue({
+    // Mock loadAppConfig to return a valid API configuration with all required properties
+    jest.spyOn(configModule, 'loadAppConfig').mockReturnValue({
+      projectName: 'TestProject',
       api: {
         baseUrl: 'http://test-api.com',
         endpoints: {
           nftOnly: 'nft-endpoint',
           combined: 'combined-endpoint'
-        }
+        },
+        includeCombinedInNft: true
       },
-      scheduler: { intervalHours: 6 },
+      scheduler: { badgeIntervalHours: 6, leaderboardIntervalHours: 3, leaderboardTypes: ['standard', 'mu'] },
       tokens: [{ address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }],
       nfts: [{ address: '0x456', name: 'TEST NFT', minBalance: 1 }]
     } as any);
     
-    // Add includeCombinedInNft property to the API config
-    const apiConfig = helpers.loadConfig().api as any;
-    apiConfig.includeCombinedInNft = true;
+    // API config is already set up in the mock above
     
     // Mock path.join to return our mock paths
     mockedPath.join.mockImplementation((dir, relativePath) => {

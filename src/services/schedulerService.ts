@@ -1,6 +1,6 @@
 import { fetchTokenHolderProfiles } from './holderService';
 import { sendResultsToApi } from './apiService';
-import { loadConfig } from '../utils/helpers';
+import { loadAppConfig } from '../utils/config';
 
 interface SchedulerConfig {
   intervalMs?: number;
@@ -33,10 +33,10 @@ async function runAndSendResults(apiKey: string | undefined): Promise<void> {
  */
 export function startScheduler(config: SchedulerConfig = {}): void {
   // Load configuration
-  const appConfig = loadConfig();
+  const appConfig = loadAppConfig();
   
   // Get configuration
-  const intervalHours = appConfig.scheduler.intervalHours;
+  const intervalHours = appConfig.scheduler.badgeIntervalHours;
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
   const apiKey = config.apiKey || process.env.API_KEY;
   

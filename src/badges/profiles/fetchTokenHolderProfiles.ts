@@ -7,6 +7,7 @@ import axios from 'axios';
 import { sleep as sleepUtil } from '../../utils/helpers';
 import { TokenHolder, NftHolder } from '../../types/interfaces';
 import { SocialProfileInfo } from '../../services/socialProfiles';
+import { loadAppConfig } from '../../utils/config';
 
 // Load environment variables
 dotenv.config();
@@ -28,11 +29,10 @@ const PERMANENT_ACCOUNTS = [
 // If false, combined holders will be removed from the NFT-only list
 const ALLOW_DUPLICATE_HOLDERS = true;
 
-// Load configuration from the main config directory
-const configPath = path.join(process.cwd(), 'config', 'tokens.json');
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+// Load configuration using the new config system
+const appConfig = loadAppConfig();
 
-// Define config interfaces
+// For backward compatibility, define the same interfaces
 interface TokenConfig {
   address: string;
   symbol: string;
@@ -47,13 +47,8 @@ interface NftConfig {
   collectionSize?: number;
 }
 
-interface AppConfig {
-  tokens: TokenConfig[];
-  nfts: NftConfig[];
-}
-
-// Type assertion for config
-const typedConfig = config as AppConfig;
+// Use the loaded config directly
+const typedConfig = appConfig;
 
 // Define types
 interface ArenabookUserResponse {
@@ -91,12 +86,12 @@ typedConfig.tokens.forEach((token: TokenConfig) => {
   TOKEN_DECIMALS[lowerAddress] = token.decimals;
 });
 
-// Get the first NFT from config
-const NFT_CONFIG = typedConfig.nfts[0];
-const NFT_CONTRACT = NFT_CONFIG.address;
-const NFT_NAME = NFT_CONFIG.name;
-const MIN_NFT_BALANCE = NFT_CONFIG.minBalance;
-const NFT_COLLECTION_SIZE = NFT_CONFIG.collectionSize || 1000; // Default to 1000 if not specified
+// Get the first NFT from config if it exists
+const NFT_CONFIG = typedConfig.nfts && typedConfig.nfts.length > 0 ? typedConfig.nfts[0] : null;
+const NFT_CONTRACT = NFT_CONFIG?.address || '';
+const NFT_NAME = NFT_CONFIG?.name || 'Unknown NFT';
+const MIN_NFT_BALANCE = NFT_CONFIG?.minBalance || 1;
+const NFT_COLLECTION_SIZE = NFT_CONFIG?.collectionSize || 1000; // Default to 1000 if not specified
 
 // Get API keys from .env
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
@@ -559,15 +554,24 @@ export async function fetchTokenHolderProfiles(verbose: boolean = false): Promis
       console.log(`Created output directory: ${OUTPUT_DIR}`);
     }
     
-    // Get token address from config
-    const tokenAddress = typedConfig.tokens[0].address;
+    // Get token address from config if tokens are defined
+    const tokenAddress = typedConfig.tokens && typedConfig.tokens.length > 0 ? typedConfig.tokens[0].address : '';
     
-    console.log(`Token to check: ${TOKEN_SYMBOLS[tokenAddress.toLowerCase()]} (${tokenAddress}) (min balance: ${MIN_TOKEN_BALANCES[tokenAddress.toLowerCase()]})`);
+    if (tokenAddress) {
+      console.log(`Token to check: ${TOKEN_SYMBOLS[tokenAddress.toLowerCase()] || 'Unknown'} (${tokenAddress}) (min balance: ${MIN_TOKEN_BALANCES[tokenAddress.toLowerCase()] || 1})`); 
+    } else {
+      console.log('No tokens defined in configuration');
+    }
     console.log(`NFT to check: ${NFT_NAME} (${NFT_CONTRACT}) (min balance: ${MIN_NFT_BALANCE})`);
     
-    // Fetch token holders
-    console.log('\nFetching token holders...');
-    const tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress);
+    // Fetch token holders if a token address is defined
+    let tokenHolders: TokenHolder[] = [];
+    if (tokenAddress) {
+      console.log('\nFetching token holders...');
+      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress);
+    } else {
+      console.log('\nSkipping token holder fetching as no tokens are defined');
+    }
     
     // Fetch NFT holders
     console.log('\nFetching NFT holders...');

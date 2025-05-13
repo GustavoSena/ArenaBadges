@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
-import { loadConfig } from '../../utils/helpers';
+import { loadAppConfig } from '../../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,9 +31,10 @@ export interface LeaderboardSchedulerConfig {
 
 // Interface for the scheduler configuration from config file
 interface SchedulerConfig {
-  intervalHours: number;
-  leaderboardIntervalHours?: number;
-  leaderboardTypes?: string[];
+  badgeIntervalHours: number;
+  enableLeaderboard: boolean;
+  leaderboardIntervalHours: number;
+  leaderboardTypes: string[];
 }
 
 // Default configuration
@@ -194,12 +195,29 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
  */
 export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = DEFAULT_CONFIG): void {
   // Load configuration from config file
-  const appConfig = loadConfig();
+  const appConfig = loadAppConfig();
   const schedulerConfig: SchedulerConfig = appConfig.scheduler || { intervalHours: 24 };
+  
+  // Check if leaderboard generation is enabled
+  const enableLeaderboard = appConfig.scheduler.enableLeaderboard !== undefined 
+    ? appConfig.scheduler.enableLeaderboard 
+    : true; // Default to enabled if not specified
+    
+  if (!enableLeaderboard) {
+    console.log('Leaderboard generation is disabled in configuration. Scheduler will not start.');
+    return;
+  }
   
   // Get configuration
   const leaderboardTypes = config.leaderboardTypes || DEFAULT_CONFIG.leaderboardTypes || [];
-  const intervalHours = schedulerConfig.leaderboardIntervalHours || 3; // Default to 3 hours
+  
+  // If no leaderboard types are configured, don't start the scheduler
+  if (leaderboardTypes.length === 0) {
+    console.log('No leaderboard types configured. Scheduler will not start.');
+    return;
+  }
+  
+  const intervalHours = appConfig.scheduler.leaderboardIntervalHours || 3; // Default to 3 hours
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
   const runImmediately = config.runImmediately !== undefined ? config.runImmediately : DEFAULT_CONFIG.runImmediately;
   const verbose = config.verbose || false;

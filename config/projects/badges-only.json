@@ -1,0 +1,36 @@
+{
+  "projectName": "BadgesOnly",
+  "tokens": [
+    {
+      "symbol": "TOKEN",
+      "address": "0x1234567890123456789012345678901234567890",
+      "minBalance": 50,
+      "decimals": 18
+    }
+  ],
+  "nfts": [
+    {
+      "name": "Example NFT",
+      "address": "0x0987654321098765432109876543210987654321",
+      "collectionSize": 200,
+      "minBalance": 1
+    }
+  ],
+  "scheduler": {
+    "badgeIntervalHours": 12,
+    "enableLeaderboard": false,
+    "leaderboardIntervalHours": 24,
+    "leaderboardTypes": []
+  },
+  "api": {
+    "baseUrl": "http://api.example.com/badges",
+    "endpoints": {
+      "nftOnly": "nft-badge",
+      "combined": "combined-badge"
+    },
+    "includeCombinedInNft": true
+  },
+  "excludedAccounts": [
+    "exampleaccount"
+  ]
+}
