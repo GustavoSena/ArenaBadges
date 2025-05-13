@@ -1,6 +1,7 @@
 import { startScheduler } from '../../src/services/schedulerService';
 import { fetchTokenHolderProfiles, HolderResults } from '../../src/services/holderService';
 import { sendResultsToApi } from '../../src/services/apiService';
+import * as helpers from '../../src/utils/helpers';
 
 // Mock the modules
 jest.mock('../../src/services/holderService');
@@ -69,6 +70,20 @@ describe('schedulerService', () => {
   });
   
   test('should throw error when API key is not provided', () => {
+    // Mock loadConfig to return a valid config to avoid other errors
+    jest.spyOn(helpers, 'loadConfig')
+      .mockReturnValue({
+        scheduler: { intervalHours: 6 },
+        api: { baseUrl: 'http://test.com', endpoints: { nftOnly: 'test', combined: 'test' } },
+        tokens: [{ address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }],
+        nfts: [{ address: '0x456', name: 'TEST NFT', minBalance: 1 }]
+      });
+    
+    // Save original environment and clear API_KEY
+    const originalEnv = process.env;
+    process.env = { ...originalEnv };
+    delete process.env.API_KEY;
+      
     // Call the function without API key and expect it to throw
     expect(() => {
       startScheduler({
@@ -76,6 +91,9 @@ describe('schedulerService', () => {
         apiKey: undefined
       });
     }).toThrow('API key is required');
+    
+    // Restore environment
+    process.env = originalEnv;
   });
   
   test('should use environment variables when config is not provided', async () => {

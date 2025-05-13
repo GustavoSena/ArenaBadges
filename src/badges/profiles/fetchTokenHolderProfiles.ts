@@ -367,21 +367,33 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
       if (response.data && response.data.length > 0) {
         return response.data[0];
       }
-      return null;
+      return null; // No profile found, but this is not an error
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 404) {
           console.log(`No social profile found for ${address}`);
           // No need to retry for 404 errors
           return null;
+        } else if (error.response.status === 429) {
+          // Rate limit error - always propagate these
+          retryCount++;
+          if (retryCount <= MAX_RETRIES) {
+            console.log(`Rate limit error fetching Arenabook profile for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            await sleepUtil(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
+          } else {
+            const errorMsg = `Arena API rate limit exceeded after ${MAX_RETRIES} retries for ${address}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
+          }
         } else {
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleepUtil(REQUEST_DELAY_MS);
           } else {
-            console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error.response.status, error.response.statusText);
-            return null;
+            const errorMsg = `Arena API error (${error.response.status}) after ${MAX_RETRIES} retries for ${address}`;
+            console.error(errorMsg, error.response.statusText);
+            throw new Error(errorMsg);
           }
         }
       } else {
@@ -390,14 +402,16 @@ async function fetchArenabookSocial(address: string): Promise<ArenabookUserRespo
           console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
           await sleepUtil(REQUEST_DELAY_MS);
         } else {
-          console.error(`Failed after ${MAX_RETRIES} retries for ${address}:`, error);
-          return null;
+          const errorMsg = `Arena API unexpected error after ${MAX_RETRIES} retries for ${address}`;
+          console.error(errorMsg, error);
+          throw new Error(errorMsg);
         }
       }
     }
   }
   
-  return null;
+  // This should never be reached, but just in case
+  throw new Error(`Arena API max retries exceeded for ${address}`);
 }
 
 /**
@@ -416,42 +430,91 @@ async function processHoldersWithSocials<T extends { address: string }>(
   const addressToTwitterHandle = new Map<string, string | null>();
   const batchSize = 10;
   
+  // Track if we've encountered any Arena API errors
+  let hasArenaApiError = false;
+  
   for (let i = 0; i < holders.length; i += batchSize) {
-    const batch = holders.slice(i, i + batchSize);
-    const promises = batch.map(async (holder) => {
-      console.log(`\n[${i + batch.indexOf(holder) + 1}/${holders.length}] Checking social profile for ${holder.address}...`);
-      
-      // Check if we already have this address's social profile
-      let social: ArenabookUserResponse | null = null;
-      
-      if (addressToTwitterHandle.has(holder.address.toLowerCase())) {
-        const twitterHandle = addressToTwitterHandle.get(holder.address.toLowerCase());
-        if (twitterHandle) {
-          social = { twitter_handle: twitterHandle, twitter_username: null };
-          console.log(`Using cached Twitter handle: ${twitterHandle}`);
-        } else {
-          console.log(`Using cached result: No social profile found`);
-        }
-      } else {
-        social = await fetchArenabookSocial(holder.address);
-        
-        if (social) {
-          socialCount++;
-          console.log(`Found Twitter handle: ${social.twitter_handle || 'None'}`);
-        } else {
-          console.log(`No social profile found`);
-        }
-        
-        // Cache the result
-        addressToTwitterHandle.set(holder.address.toLowerCase(), social?.twitter_handle || null);
-      }
-      
-      const holderWithSocial = transformFn(holder, social);
-      return holderWithSocial;
-    });
+    // If we've already encountered an Arena API error, don't process more batches
+    if (hasArenaApiError) {
+      console.error('Skipping remaining batches due to previous Arena API errors');
+      break;
+    }
     
-    const batchResults = await Promise.all(promises);
-    holdersWithSocials.push(...batchResults);
+    const batch = holders.slice(i, i + batchSize);
+    const batchPromises = [];
+    
+    for (const holder of batch) {
+      batchPromises.push((async () => {
+        try {
+          console.log(`\n[${i + batch.indexOf(holder) + 1}/${holders.length}] Checking social profile for ${holder.address}...`);
+          
+          // Check if we already have this address's social profile
+          let social: ArenabookUserResponse | null = null;
+          
+          if (addressToTwitterHandle.has(holder.address.toLowerCase())) {
+            const twitterHandle = addressToTwitterHandle.get(holder.address.toLowerCase());
+            if (twitterHandle) {
+              social = { twitter_handle: twitterHandle, twitter_username: null };
+              console.log(`Using cached Twitter handle: ${twitterHandle}`);
+            } else {
+              console.log(`Using cached result: No social profile found`);
+            }
+          } else {
+            try {
+              social = await fetchArenabookSocial(holder.address);
+              
+              if (social) {
+                socialCount++;
+                console.log(`Found Twitter handle: ${social.twitter_handle || 'None'}`);
+              } else {
+                console.log(`No social profile found`);
+              }
+              
+              // Cache the result
+              addressToTwitterHandle.set(holder.address.toLowerCase(), social?.twitter_handle || null);
+            } catch (error) {
+              // Detect Arena API errors and propagate them
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
+                console.error(`Arena API error detected: ${errorMessage}`);
+                hasArenaApiError = true;
+                throw new Error(`Arena API error during social profile fetch: ${errorMessage}`);
+              }
+              // For other errors, log but continue
+              console.error(`Error fetching social profile for ${holder.address}:`, error);
+              // Don't cache errors
+            }
+          }
+          
+          const holderWithSocial = transformFn(holder, social);
+          return holderWithSocial;
+        } catch (error) {
+          // Rethrow Arena API errors to stop the entire process
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
+            throw error;
+          }
+          // For other errors, return a placeholder
+          console.error(`Error processing holder ${holder.address}:`, error);
+          return transformFn(holder, null);
+        }
+      })());
+    }
+    
+    try {
+      const batchResults = await Promise.all(batchPromises);
+      holdersWithSocials.push(...batchResults);
+    } catch (error) {
+      // If we get an Arena API error, propagate it
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
+        console.error('Arena API error detected during batch processing. Aborting further processing.');
+        hasArenaApiError = true;
+        throw new Error(`Arena API error during batch processing: ${errorMessage}`);
+      }
+      // For other errors, log and continue with the next batch
+      console.error('Error processing batch:', error);
+    }
     
     // Save intermediate results every batch
     const holdersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);

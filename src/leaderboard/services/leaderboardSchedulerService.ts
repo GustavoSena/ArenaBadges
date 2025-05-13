@@ -73,7 +73,7 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
   } catch (error) {
     console.error(`Error generating ${type} leaderboard:`, error);
     
-    // Check if this is a retry failure and propagate it
+    // Check if this is a retry failure or Arena API error and propagate it
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('max retries exceeded') || 
         errorMessage.includes('All retries failed') || 
@@ -83,7 +83,8 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
         errorMessage.includes('429') ||
         errorMessage.includes('rate limit') ||
         errorMessage.includes('too many requests') ||
-        errorMessage.includes('Retry failure')) {
+        errorMessage.includes('Retry failure') ||
+        errorMessage.includes('Arena API')) {
       throw new Error(`Retry failure in ${type} leaderboard generation: ${errorMessage}`);
     }
     
@@ -160,9 +161,10 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
           errorMessage.includes('429') ||
           errorMessage.includes('rate limit') ||
           errorMessage.includes('too many requests') ||
-          errorMessage.includes('Retry failure')) {
-        console.error('Retry failure detected in leaderboard generation. Will reschedule for 2 hours later WITHOUT updating leaderboard files.');
-        fs.appendFileSync(logFile, `RETRY FAILURE DETECTED: ${errorMessage}\n`);
+          errorMessage.includes('Retry failure') ||
+          errorMessage.includes('Arena API')) {
+        console.error('Retry failure or Arena API error detected in leaderboard generation. Will reschedule for 2 hours later WITHOUT updating leaderboard files.');
+        fs.appendFileSync(logFile, `RETRY FAILURE OR ARENA API ERROR DETECTED: ${errorMessage}\n`);
         hasRetryFailure = true;
       }
     }

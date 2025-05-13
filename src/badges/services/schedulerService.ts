@@ -76,7 +76,7 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
   } catch (error) {
     console.error('Error in scheduled run:', error);
     
-    // Check if this is a retry failure
+    // Check if this is a retry failure or Arena API error
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('max retries exceeded') || 
         errorMessage.includes('All retries failed') || 
@@ -85,8 +85,10 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
         errorMessage.includes('after 5 retries') ||
         errorMessage.includes('Retry failure') ||
         errorMessage.includes('API rate limit') ||
-        errorMessage.includes('No NFT holders found')) {
-      console.error('Retry failure or data validation error detected. Will reschedule for 2 hours later WITHOUT sending data to API.');
+        errorMessage.includes('No NFT holders found') ||
+        errorMessage.includes('Arena API') ||
+        errorMessage.includes('rate limit')) {
+      console.error('Retry failure, Arena API error, or data validation error detected. Will reschedule for 2 hours later WITHOUT sending data to API.');
       return ErrorType.RETRY_FAILURE;
     }
     
