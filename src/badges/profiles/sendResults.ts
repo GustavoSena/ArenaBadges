@@ -8,88 +8,122 @@ import { loadAppConfig } from '../../utils/config';
 // Load environment variables
 dotenv.config();
 
-// Load configuration using the new config system
-const appConfig = loadAppConfig();
+// We'll load the project-specific configuration in the sendResults function
 
-// Get API endpoints from config
-const API_BASE_URL = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
-const NFT_ONLY_ENDPOINT = appConfig.api?.endpoints?.nftOnly || 'mu-tier-1';
-const COMBINED_ENDPOINT = appConfig.api?.endpoints?.combined || 'mu-tier-2';
+// Parse the BADGE_KEYS environment variable
+let badgeKeys: { [key: string]: string } = {};
+let API_KEY: string | undefined;
 
-// Check if combined holders should also be in the NFT-only list
-const INCLUDE_COMBINED_IN_NFT = appConfig.api?.includeCombinedInNft !== false; // Default to true if not specified
-
-// API key from environment variables
-const API_KEY = process.env.API_KEY;
+try {
+  if (process.env.BADGE_KEYS) {
+    badgeKeys = JSON.parse(process.env.BADGE_KEYS);
+  } else {
+    console.warn('BADGE_KEYS environment variable is not set');
+  }
+} catch (error) {
+  console.error('Error parsing BADGE_KEYS environment variable:', error);
+}
 
 /**
  * Send results to the API endpoints
  * @param data The data to send
- * @param dryRun If true, print JSON to console instead of sending to API
+ * @param options Options for sending results
+ * @param options.dryRun If true, print JSON to console instead of sending to API
+ * @param options.projectName The name of the project to use for API key selection
  * @returns Promise resolving to the API response
  */
-export async function sendResults(data: any, options: { dryRun?: boolean } = {}): Promise<any> {
+export async function sendResults(data: any, options: { dryRun?: boolean, projectName?: string } = {}): Promise<any> {
+  // Get project-specific API key if project name is provided
   try {
     console.log('Sending results to API...');
+    
+    // Check if project name is provided
+    if (!options.projectName) {
+      throw new Error('Project name is required');
+    }
+    
+    // Load project-specific configuration
+    console.log(`Loading configuration for project: ${options.projectName}`);
+    const appConfig = loadAppConfig(options.projectName);
+    
+    // Get API endpoints from config
+    const API_BASE_URL = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
+    const BASIC_ENDPOINT = appConfig.api?.endpoints?.basic || 'mu-tier-1';
+    const UPGRADED_ENDPOINT = appConfig.api?.endpoints?.upgraded || 'mu-tier-2';
+    
+    // Check if basic badge holders should be excluded when they also have the upgraded badge
+    const EXCLUDE_BASIC_FOR_UPGRADED = appConfig.api?.excludeBasicForUpgraded === true; // Default to false if not specified
+    
+    console.log(`Using API endpoints for project ${options.projectName}:`);
+    console.log(`- Base URL: ${API_BASE_URL}`);
+    console.log(`- Basic endpoint: ${BASIC_ENDPOINT}`);
+    console.log(`- Upgraded endpoint: ${UPGRADED_ENDPOINT}`);
+    
+    // Get API key for the project
+    if (badgeKeys[options.projectName.toLowerCase()]) {
+      API_KEY = badgeKeys[options.projectName.toLowerCase()];
+    } else {
+      throw new Error(`No API key found for project: ${options.projectName}`);
+    }
     
     if (!API_KEY) {
       throw new Error('API_KEY environment variable is not set');
     }
     
-    // Prepare NFT-only data
-    let nftOnlyHandles;
-    if (INCLUDE_COMBINED_IN_NFT) {
-      // Include combined holders in NFT-only list
-      nftOnlyHandles = [...new Set([...data.nftHolders])];
-      console.log(`Including combined holders in NFT-only list (${nftOnlyHandles.length} total handles)`);
+    // Prepare basic badge data
+    let basicHandles;
+    if (EXCLUDE_BASIC_FOR_UPGRADED) {
+      // Exclude basic badge holders who also have the upgraded badge
+      const upgradedSet = new Set(data.upgradedHolders);
+      basicHandles = data.basicHolders.filter((handle: string) => !upgradedSet.has(handle));
+      console.log(`Excluding upgraded badge holders from basic list (${basicHandles.length} basic-only handles)`);
     } else {
-      // Filter out combined holders from NFT-only list
-      const combinedSet = new Set(data.combinedHolders);
-      nftOnlyHandles = data.nftHolders.filter((handle: string) => !combinedSet.has(handle));
-      console.log(`Excluding combined holders from NFT-only list (${nftOnlyHandles.length} NFT-only handles)`);
+      // Include all basic badge holders regardless of upgraded status
+      basicHandles = [...new Set([...data.basicHolders])];
+      console.log(`Including all basic badge holders (${basicHandles.length} total handles)`);
     }
     
-    const nftOnlyData = {
-      handles: nftOnlyHandles,
+    const basicData = {
+      handles: basicHandles,
       timestamp: data.timestamp || new Date().toISOString()
     };
     
-    const combinedData = {
-      handles: data.combinedHolders,
+    const upgradedData = {
+      handles: data.upgradedHolders || data.combinedHolders,
       timestamp: data.timestamp || new Date().toISOString()
     };
     
     // Construct endpoints with key as query parameter
-    const nftEndpoint = `${API_BASE_URL}/${NFT_ONLY_ENDPOINT}?key=${API_KEY}`;
-    const combinedEndpoint = `${API_BASE_URL}/${COMBINED_ENDPOINT}?key=${API_KEY}`;
+    const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${API_KEY}`;
+    const upgradedEndpoint = `${API_BASE_URL}/${UPGRADED_ENDPOINT}?key=${API_KEY}`;
     
     // Check if this is a dry run
     if (options.dryRun) {
       console.log('DRY RUN MODE: Printing JSON to console instead of sending to API');
-      console.log('\nNFT-ONLY DATA (would be sent to ' + `${API_BASE_URL}/${NFT_ONLY_ENDPOINT}` + '):')
-      console.log(JSON.stringify(nftOnlyData, null, 2));
+      console.log('\nBASIC BADGE DATA (would be sent to ' + `${API_BASE_URL}/${BASIC_ENDPOINT}` + '):')
+      console.log(JSON.stringify(basicData, null, 2));
       
-      console.log('\nCOMBINED DATA (would be sent to ' + `${API_BASE_URL}/${COMBINED_ENDPOINT}` + '):')
-      console.log(JSON.stringify(combinedData, null, 2));
+      console.log('\nUPGRADED DATA (would be sent to ' + `${API_BASE_URL}/${UPGRADED_ENDPOINT}` + '):');
+      console.log(JSON.stringify(upgradedData, null, 2));
       
       console.log('\nDRY RUN COMPLETED - No data was sent to the API');
       return {
-        nftOnly: { status: 'dry-run', handles: nftOnlyData.handles.length },
-        combined: { status: 'dry-run', handles: combinedData.handles.length }
+        basic: { status: 'dry-run', handles: basicData.handles.length },
+        upgraded: { status: 'dry-run', handles: upgradedData.handles.length }
       };
     } else {
       // Send data to both endpoints
-      console.log(`Sending NFT-only holders to ${API_BASE_URL}/${NFT_ONLY_ENDPOINT}`);
-      console.log(`NFT-only holders: ${nftOnlyData.handles.length}`);
-      const nftResponse = await axios.post(nftEndpoint, nftOnlyData, {
+      console.log(`Sending basic badge holders to ${API_BASE_URL}/${BASIC_ENDPOINT}`);
+      console.log(`Basic badge holders: ${basicData.handles.length}`);
+      const basicResponse = await axios.post(basicEndpoint, basicData, {
         headers: {
           'Content-Type': 'application/json'
         }
       });
       
-      console.log(`Sending combined holders to ${API_BASE_URL}/${COMBINED_ENDPOINT}`);
-      console.log(`Combined holders: ${combinedData.handles.length}`);
-      const combinedResponse = await axios.post(combinedEndpoint, combinedData, {
+      console.log(`Sending upgraded badge holders to ${API_BASE_URL}/${UPGRADED_ENDPOINT}`);
+      console.log(`Upgraded badge holders: ${upgradedData.handles.length}`);
+      const upgradedResponse = await axios.post(upgradedEndpoint, upgradedData, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -97,8 +131,8 @@ export async function sendResults(data: any, options: { dryRun?: boolean } = {})
       
       console.log('Results sent successfully to both endpoints');
       return {
-        nftOnly: nftResponse.data,
-        combined: combinedResponse.data
+        basic: basicResponse.data,
+        upgraded: upgradedResponse.data
       };
     }
   } catch (error: any) {
@@ -111,8 +145,8 @@ export async function sendResults(data: any, options: { dryRun?: boolean } = {})
 if (typeof require !== 'undefined' && require.main === module) {
   if (API_KEY) {
     const testData = {
-      nftHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
-      combinedHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
+      basicHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
+      upgradedHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
       timestamp: new Date().toISOString()
     };
     

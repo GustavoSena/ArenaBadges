@@ -1,4 +1,22 @@
 {
   "activeProject": "arena",
-  "projectName": "ArenaBadges"
+  "projectName": "ArenaBadges",
+  "scheduler": {
+    "badgeIntervalHours": 6,
+    "leaderboardIntervalHours": 3
+  },
+  "projects": {
+    "mu": {
+      "scheduler": {
+        "badgeIntervalHours": 6,
+        "leaderboardIntervalHours": 3
+      }
+    },
+    "boi": {
+      "scheduler": {
+        "badgeIntervalHours": 3,
+        "leaderboardIntervalHours": 3
+      }
+    }
+  }
 }

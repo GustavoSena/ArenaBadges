@@ -1,4 +1,4 @@
-import { runAndSendResults } from '../../src/badges/services/schedulerService';
+import { runAndSendResults, ErrorType } from '../../src/badges/services/schedulerService';
 import { fetchTokenHolderProfiles } from '../../src/badges/profiles/fetchTokenHolderProfiles';
 import { LeaderboardType, runLeaderboardGeneration } from '../../src/leaderboard/services/leaderboardSchedulerService';
 import { setupArenaMock, resetMocks, restoreAxios } from '../api/arenaMock';
@@ -39,7 +39,21 @@ const mockedFetchTokenHolderProfiles = fetchTokenHolderProfiles as jest.MockedFu
 describe('Scheduler Services with Arena API Errors', () => {
   // Sample test data
   const testAddress = '0x1234567890123456789012345678901234567890';
-  const mockApiKey = 'test-api-key';
+  const mockProjectName = 'mu';
+  
+  // Mock environment variables
+  const originalEnv = process.env;
+  
+  beforeAll(() => {
+    // Setup mock environment variables
+    process.env = {
+      ...originalEnv,
+      BADGE_KEYS: JSON.stringify({
+        mu: 'test-api-key',
+        boi: 'other-test-key'
+      })
+    };
+  });
 
   beforeEach(() => {
     // Reset all mocks
@@ -55,6 +69,8 @@ describe('Scheduler Services with Arena API Errors', () => {
     // Restore mocks
     jest.restoreAllMocks();
     restoreAxios();
+    // Restore original environment variables
+    process.env = originalEnv;
   });
 
   describe('Badge Scheduler', () => {
@@ -68,11 +84,11 @@ describe('Scheduler Services with Arena API Errors', () => {
       const mockError = new Error(`Arena API rate limit exceeded for ${testAddress}`);
       mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
 
-      // Call the function
-      const result = await runAndSendResults(mockApiKey, true);
+      // Call the function with the new signature
+      const result = await runAndSendResults(undefined, true, false, mockProjectName);
 
       // Verify error was detected and handled
-      expect(result).toBe('RETRY_FAILURE');
+      expect(result).toBe(ErrorType.RETRY_FAILURE);
       expect(console.error).toHaveBeenCalled();
     });
 
@@ -86,11 +102,11 @@ describe('Scheduler Services with Arena API Errors', () => {
       const mockError = new Error(`Arena API server error for ${testAddress}`);
       mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
 
-      // Call the function
-      const result = await runAndSendResults(mockApiKey, true);
+      // Call the function with the new signature
+      const result = await runAndSendResults(undefined, true, false, mockProjectName);
 
       // Verify error was detected and handled
-      expect(result).toBe('RETRY_FAILURE');
+      expect(result).toBe(ErrorType.RETRY_FAILURE);
       expect(console.error).toHaveBeenCalled();
     });
 
@@ -104,11 +120,11 @@ describe('Scheduler Services with Arena API Errors', () => {
       const mockError = new Error(`Arena API network error for ${testAddress}`);
       mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
 
-      // Call the function
-      const result = await runAndSendResults(mockApiKey, true);
+      // Call the function with the new signature
+      const result = await runAndSendResults(undefined, true, false, mockProjectName);
 
       // Verify error was detected and handled
-      expect(result).toBe('RETRY_FAILURE');
+      expect(result).toBe(ErrorType.RETRY_FAILURE);
       expect(console.error).toHaveBeenCalled();
     });
 
@@ -117,11 +133,11 @@ describe('Scheduler Services with Arena API Errors', () => {
       const mockError = new Error(`Arena API max retries exceeded for ${testAddress}`);
       mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
 
-      // Call the function
-      const result = await runAndSendResults(mockApiKey, true);
+      // Call the function with the new signature
+      const result = await runAndSendResults(undefined, true, false, mockProjectName);
 
       // Verify error was detected and handled
-      expect(result).toBe('RETRY_FAILURE');
+      expect(result).toBe(ErrorType.RETRY_FAILURE);
       expect(console.error).toHaveBeenCalled();
     });
   });

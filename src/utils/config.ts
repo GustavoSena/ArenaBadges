@@ -18,6 +18,18 @@ export interface NftConfig {
   minBalance: number;
 }
 
+// Badge requirement configuration
+export interface BadgeRequirement {
+  tokens?: TokenConfig[];
+  nfts?: NftConfig[];
+}
+
+// Badge configuration
+export interface BadgeConfig {
+  basic: BadgeRequirement;
+  upgraded?: BadgeRequirement;
+}
+
 // Scheduler configuration
 export interface SchedulerConfig {
   badgeIntervalHours: number;
@@ -30,10 +42,10 @@ export interface SchedulerConfig {
 export interface ApiConfig {
   baseUrl: string;
   endpoints: {
-    nftOnly: string;
-    combined: string;
+    basic: string;
+    upgraded: string;
   };
-  includeCombinedInNft: boolean;
+  excludeBasicForUpgraded: boolean;
 }
 
 // Project configuration
@@ -45,12 +57,14 @@ export interface ProjectConfig {
 // Main application config
 export interface AppConfig {
   projectName: string;
-  tokens: TokenConfig[];
-  nfts: NftConfig[];
+  badges: BadgeConfig;
   scheduler: SchedulerConfig;
   api: ApiConfig;
   excludedAccounts: string[];
   permanentAccounts?: string[];
+  // For backward compatibility
+  tokens?: TokenConfig[];
+  nfts?: NftConfig[];
 }
 
 /**
@@ -60,35 +74,39 @@ export interface AppConfig {
  */
 export function loadAppConfig(projectId?: string): AppConfig {
   try {
-    // First, load the main config to check for an active project
-    const mainConfigPath = path.join(process.cwd(), 'config', 'config.json');
-    let mainConfig: AppConfig & ProjectConfig;
+    // Use the project ID provided as parameter
+    const targetProject = projectId;
     
-    try {
-      mainConfig = JSON.parse(fs.readFileSync(mainConfigPath, 'utf8')) as AppConfig & ProjectConfig;
-    } catch (error) {
-      console.error('Error loading main config:', error);
-      return getDefaultConfig();
-    }
-    
-    // If a specific project ID is provided, use that
-    const targetProject = projectId || mainConfig.activeProject;
-    
-    // If there's a specific project to load, try to load it
+    // If a specific project is specified, try to load its badge configuration
     if (targetProject) {
       try {
-        const projectConfigPath = path.join(process.cwd(), 'config', 'projects', `${targetProject}.json`);
-        console.log(`Loading project config from ${projectConfigPath}`);
-        return JSON.parse(fs.readFileSync(projectConfigPath, 'utf8')) as AppConfig;
+        // Try to load from the badges directory
+        const badgeConfigPath = path.join(process.cwd(), 'config', 'badges', `${targetProject}.json`);
+        console.log(`Loading badge config for project ${targetProject} from ${badgeConfigPath}`);
+        
+        if (fs.existsSync(badgeConfigPath)) {
+          const badgeConfig = JSON.parse(fs.readFileSync(badgeConfigPath, 'utf8'));
+          return badgeConfig as AppConfig;
+        } else {
+          console.error(`Badge config file not found for project ${targetProject} at ${badgeConfigPath}`);
+        }
       } catch (projectError) {
-        console.error(`Error loading project config for ${targetProject}:`, projectError);
-        console.log('Falling back to main config');
+        console.error(`Error loading badge config for ${targetProject}:`, projectError);
       }
     }
     
-    // If no project was specified or loading the project failed, use the main config
-    console.log(`Loading app config from ${mainConfigPath}`);
-    return mainConfig;
+    // If no project was specified or loading the project failed, try to load the main config
+    try {
+      const mainConfigPath = path.join(process.cwd(), 'config', 'config.json');
+      console.log(`Loading app config from ${mainConfigPath}`);
+      const mainConfig = JSON.parse(fs.readFileSync(mainConfigPath, 'utf8')) as AppConfig & ProjectConfig;
+      return mainConfig;
+    } catch (mainConfigError) {
+      console.error('Error loading main config:', mainConfigError);
+    }
+    
+    // If all else fails, return the default configuration
+    return getDefaultConfig();
   } catch (error) {
     console.error('Error in loadAppConfig:', error);
     return getDefaultConfig();
@@ -113,10 +131,27 @@ function getDefaultConfig(): AppConfig {
     api: {
       baseUrl: 'http://api.example.com/badges',
       endpoints: {
-        nftOnly: 'nft-endpoint',
-        combined: 'combined-endpoint'
+        basic: 'basic-endpoint',
+        upgraded: 'upgraded-endpoint'
       },
-      includeCombinedInNft: true
+      excludeBasicForUpgraded: false
+    },
+    badges: {
+      basic: {
+        nfts: [{
+          name: 'Example NFT',
+          address: '0x0000000000000000000000000000000000000000',
+          minBalance: 1
+        }]
+      },
+      upgraded: {
+        tokens: [{
+          symbol: 'TOKEN',
+          address: '0x0000000000000000000000000000000000000000',
+          minBalance: 100,
+          decimals: 18
+        }]
+      }
     },
     excludedAccounts: [],
     permanentAccounts: []

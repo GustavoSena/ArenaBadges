@@ -90,7 +90,7 @@ async function runProject(
   dryRun: boolean = false
 ) {
   try {
-    console.log(`Starting MuBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
+    console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
     
     // Check if project configurations exist
     const configs = checkProjectConfigs(projectName);
@@ -106,14 +106,31 @@ async function runProject(
     
     // Run badge component if requested and available
     if ((component === 'all' || component === 'badge') && configs.badge) {
+      // Parse the BADGE_KEYS environment variable to get the project-specific API key
+      let badgeKeys: { [key: string]: string } = {};
+      try {
+        badgeKeys = JSON.parse(process.env.BADGE_KEYS || '{}');
+      } catch (error) {
+        console.error('Error parsing BADGE_KEYS environment variable:', error);
+        process.exit(1);
+      }
+      
+      // Get the project-specific API key
+      const apiKey = badgeKeys[projectName];
+      if (!apiKey) {
+        console.error(`Error: No API key found for project '${projectName}' in BADGE_KEYS environment variable`);
+        process.exit(1);
+      }
+      
       if (runOnce) {
         console.log(`Running badge component once for project ${projectName}`);
-        await runAndSendResults(process.env.API_KEY, verbose, dryRun);
+        await runAndSendResults(apiKey, verbose, dryRun, projectName);
       } else {
         console.log(`Starting badge scheduler for project ${projectName}`);
         startScheduler({
+          projectName: projectName,
           intervalMs: schedulerConfig.badge * 60 * 60 * 1000,
-          apiKey: process.env.API_KEY,
+          apiKey: apiKey,
           verbose,
           dryRun,
           runOnce,

@@ -10,10 +10,11 @@ interface SchedulerConfig {
   verbose?: boolean;
   dryRun?: boolean;
   runOnce?: boolean;
+  projectName?: string;
 }
 
 // Define error types
-enum ErrorType {
+export enum ErrorType {
   RETRY_FAILURE = 'RETRY_FAILURE',
   OTHER = 'OTHER'
 }
@@ -21,18 +22,21 @@ enum ErrorType {
 /**
  * Runs the data collection and sends results to the API
  * @param apiKey API key for authentication
- * @param verbose Whether to show verbose logs
+ * @param verbose Whether to show verbose logging
  * @param dryRun If true, print JSON to console instead of sending to API
+ * @param projectName The name of the project to run
  * @returns ErrorType if there was an error, undefined if successful
  */
-async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false, dryRun: boolean = false): Promise<ErrorType | undefined> {
+async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false, dryRun: boolean = false, projectName?: string): Promise<ErrorType | undefined> {
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
     // Run the main process to fetch token holder profiles
     let results;
     try {
-      results = await fetchTokenHolderProfiles(verbose);
+      // Pass the project name to fetchTokenHolderProfiles
+      console.log(`Fetching token holder profiles for project: ${projectName || 'default'}`);
+      results = await fetchTokenHolderProfiles(projectName, verbose);
     } catch (fetchError) {
       // Check if this is a retry failure
       const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -48,13 +52,13 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
     }
     
     // Validate results to ensure we have enough data before sending to API
-    if (!results.nftHolders || results.nftHolders.length === 0) {
-      console.error('No NFT holders found. Will not send empty data to API.');
-      throw new Error('No NFT holders found');
+    if (!results.basicHolders || results.basicHolders.length === 0) {
+      console.error('No basic badge holders found. Will not send empty data to API.');
+      throw new Error('No basic badge holders found');
     }
     
     if (verbose) {
-      console.log(`Fetched ${results.nftHolders.length} NFT holders and ${results.combinedHolders.length} combined holders`);
+      console.log(`Fetched ${results.basicHolders.length} basic badge holders and ${results.upgradedHolders.length} upgraded badge holders`);
     }
     
     // Send the results to the API
@@ -63,10 +67,10 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
         console.log('Running in dry run mode - will print JSON instead of sending to API');
       }
       await sendResults({
-        nftHolders: results.nftHolders,
-        combinedHolders: results.combinedHolders,
+        basicHolders: results.basicHolders,
+        upgradedHolders: results.upgradedHolders,
         timestamp: new Date().toISOString()
-      }, { dryRun });
+      }, { dryRun, projectName });
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -109,7 +113,9 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
  */
 export function startScheduler(config: SchedulerConfig = {}): void {
   // Load configuration
-  const appConfig = loadTokensConfig();
+  const projectName = config.projectName || 'mu';
+  console.log(`Starting badge scheduler for project ${projectName}`);
+  const appConfig = loadTokensConfig(projectName);
   
   // Get configuration
   const intervalHours = appConfig.scheduler.intervalHours;
@@ -126,7 +132,7 @@ export function startScheduler(config: SchedulerConfig = {}): void {
     throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
   }
   
-  console.log(`Starting scheduler to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
+  console.log(`Starting scheduler for project '${projectName}' to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
   
   // Get API endpoint from config
   const apiBaseUrl = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
@@ -134,6 +140,7 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   console.log(`NFT-only endpoint: ${appConfig.api?.endpoints?.nftOnly || 'mu-tier-1'}`);
   console.log(`Combined endpoint: ${appConfig.api?.endpoints?.combined || 'mu-tier-2'}`);
   console.log(`Include combined in NFT-only: ${appConfig.api?.includeCombinedInNft !== false ? 'Yes' : 'No'}`);
+  console.log(`Project name: ${projectName}`);
   
   // Variable to store the next scheduled timeout
   let nextScheduledTimeout: NodeJS.Timeout | null = null;
@@ -161,8 +168,9 @@ export function startScheduler(config: SchedulerConfig = {}): void {
         config.onRun();
       }
       
-      // Run the scheduled task
-      const errorType = await runAndSendResults(apiKey, verbose, dryRun);
+      // Run the scheduled task with project name
+      console.log(`Running scheduled task for project: ${projectName}`);
+      const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;
@@ -190,8 +198,9 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       config.onRun();
     }
     
-    // Run the scheduled task
-    const errorType = await runAndSendResults(apiKey, verbose, dryRun);
+    // Run the scheduled task with project name
+    console.log(`Running scheduled task for project: ${projectName}`);
+    const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName);
     
     // Determine the next interval based on the result
     let nextIntervalMs = intervalMs;

@@ -16,27 +16,31 @@ export function loadConfig() {
  * Load the tokens configuration file using the new project-specific configuration system
  * @returns The tokens configuration object
  */
-export function loadTokensConfig() {
+export function loadTokensConfig(projectId?: string) {
   try {
     // Use the new project-specific configuration system
-    const appConfig = loadAppConfig();
+    const appConfig = loadAppConfig(projectId);
+    
+    // Check if we have a badge config structure or a main config structure
+    const isBadgeConfig = appConfig.badges && appConfig.api;
     
     // Return a compatible configuration structure
     return { 
       scheduler: {
-        intervalHours: appConfig.scheduler.badgeIntervalHours,
-        leaderboardIntervalHours: appConfig.scheduler.leaderboardIntervalHours
+        intervalHours: isBadgeConfig 
+          ? (appConfig.scheduler?.badgeIntervalHours || 6)
+          : (appConfig.scheduler?.badgeIntervalHours || 6)
       },
       api: { 
-        baseUrl: appConfig.api.baseUrl,
+        baseUrl: appConfig.api?.baseUrl || 'http://api.arena.social/badges',
         endpoints: {
-          nftOnly: appConfig.api.endpoints.nftOnly,
-          combined: appConfig.api.endpoints.combined
+          nftOnly: appConfig.api?.endpoints?.basic || 'basic-tier',
+          combined: appConfig.api?.endpoints?.upgraded || 'upgraded-tier'
         },
-        includeCombinedInNft: appConfig.api.includeCombinedInNft
+        includeCombinedInNft: appConfig.api?.excludeBasicForUpgraded === undefined ? true : !appConfig.api.excludeBasicForUpgraded
       },
-      nfts: appConfig.nfts,
-      tokens: appConfig.tokens
+      nfts: appConfig.badges?.basic?.nfts || [],
+      tokens: appConfig.badges?.basic?.tokens || []
     };
   } catch (error) {
     console.error('Error loading project config:', error);
@@ -48,10 +52,13 @@ export function loadTokensConfig() {
       api: { 
         baseUrl: 'http://api.arena.social/badges',
         endpoints: {
-          nftOnly: 'mu-tier-1',
-          combined: 'mu-tier-2'
-        }
-      }
+          nftOnly: 'basic-tier',
+          combined: 'upgraded-tier'
+        },
+        includeCombinedInNft: true
+      },
+      nfts: [],
+      tokens: []
     };
   }
 }

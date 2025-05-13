@@ -1,22 +1,41 @@
 {
   "name": "Mu Pups Badge",
   "description": "Badge configuration for Mu Pups NFT holders",
-  "nft": {
-    "name": "Mu Pups",
-    "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0",
-    "collectionSize": 350
-  },
-  "tokens": [
-    {
-      "symbol": "MUV",
-      "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
-      "minBalance": 100,
-      "decimals": 18
+  "projectName": "MU",
+  "badges": {
+    "basic": {
+      "nfts": [
+        {
+          "name": "Mu Pups",
+          "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0",
+          "minBalance": 1,
+          "collectionSize": 350
+        }
+      ]
+    },
+    "upgraded": {
+      "tokens": [
+        {
+          "symbol": "MUV",
+          "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
+          "minBalance": 100,
+          "decimals": 18
+        }
+      ]
     }
-  ],
+  },
+  "excludedAccounts": [],
   "permanentAccounts": [
     "mucoinofficial",
     "ceojonvaughn",
     "aunkitanandi"
-  ]
+  ],
+  "api": {
+    "baseUrl": "http://api.arena.social/badges",
+    "endpoints": {
+      "basic": "mu-tier-1",
+      "upgraded": "mu-tier-2"
+    },
+    "excludeBasicForUpgraded": false
+  }
 }

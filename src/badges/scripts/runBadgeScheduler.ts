@@ -10,11 +10,17 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+// Check if verbose mode is enabled via command line
+const args = process.argv.slice(2);
+
 // Get API key from environment variables
 const apiKey = process.env.API_KEY;
 
-// Check if verbose mode is enabled via command line
-const args = process.argv.slice(2);
+// Get project name from command line or default to 'mu'
+const projectNameArg = args.find(arg => arg.startsWith('--project='));
+const projectName = projectNameArg ? projectNameArg.split('=')[1] : 'mu';
+
+// Check for command line flags
 const verbose = args.includes('--verbose') || args.includes('-v');
 
 // Check if dry run mode is enabled via command line
@@ -29,6 +35,7 @@ startScheduler({
   verbose,
   dryRun,
   runOnce,
+  projectName,
   onSchedule: (nextRunTime) => {
     console.log(`Next scheduled run: ${nextRunTime.toISOString()}`);
   },
