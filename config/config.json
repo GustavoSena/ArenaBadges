@@ -1,15 +1,17 @@
 {
-  "activeProject": "arena",
+  "activeProject": "mu",
   "projectName": "ArenaBadges",
   "scheduler": {
     "badgeIntervalHours": 6,
-    "leaderboardIntervalHours": 3
+    "leaderboardIntervalHours": 3,
+    "enableLeaderboard": true
   },
   "projects": {
     "mu": {
       "scheduler": {
         "badgeIntervalHours": 6,
-        "leaderboardIntervalHours": 3
+        "leaderboardIntervalHours": 3,
+        "enableLeaderboard": true
       }
     },
     "boi": {
