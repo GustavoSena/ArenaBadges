@@ -1,5 +1,6 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+import { loadLeaderboardConfig } from '../../utils/config';
 import { BaseLeaderboard } from '../../types/leaderboardClasses';
 import { LeaderboardConfig } from '../../types/leaderboard';
 import { TokenHolder, NftHolder } from '../../types/interfaces';
@@ -165,14 +166,7 @@ export class MuLeaderboard extends BaseLeaderboard {
    * @returns The leaderboard configuration
    */
   loadConfig(): LeaderboardConfig {
-    try {
-      const configPath = path.join(__dirname, '../../../config', 'mu_leaderboard.json');
-      const configData = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(configData) as LeaderboardConfig;
-    } catch (error) {
-      console.error('Error loading MU leaderboard config:', error);
-      throw new Error('Failed to load MU leaderboard configuration');
-    }
+    return loadLeaderboardConfig('mu');
   }
   
   /**

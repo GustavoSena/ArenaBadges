@@ -3,7 +3,7 @@ import { TokenHolder, NftHolder, ArenabookUserResponse, HolderWithSocial, NftHol
 import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
 import { fetchNftHoldersFromEthers } from '../api/blockchain';
 import { processHoldersWithSocials, SocialProfileInfo } from './socialProfiles';
-import { loadConfig } from '../utils/helpers';
+import { loadAppConfig } from '../utils/config';
 import axios from 'axios';
 import { formatTokenBalance } from '../utils/helpers';
 
@@ -97,7 +97,7 @@ async function fetchTokenBalancesForAddresses(
 export async function fetchTokenHolderProfiles(): Promise<HolderResults> {
   try {
     // Load configuration
-    const config = loadConfig();
+    const config = loadAppConfig();
     
     // Get NFT config
     const nftConfig = config.nfts[0];

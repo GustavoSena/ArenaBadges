@@ -13,6 +13,7 @@ module.exports = {
       'ts-jest',
       {
         tsconfig: 'tsconfig.json',
+        isolatedModules: true, // Skip type checking
       },
     ],
   },

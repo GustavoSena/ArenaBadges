@@ -1,6 +1,15 @@
 import { TokenHolder, NftHolder } from './interfaces';
 import { Leaderboard, LeaderboardEntry, HolderPoints, LeaderboardConfig } from './leaderboard';
 import { ethers } from 'ethers';
+import * as fs from 'fs';
+import * as path from 'path';
+
+/**
+ * Interface for excluded accounts configuration
+ */
+export interface ExcludedAccountsConfig {
+  excludedAccounts: string[];
+}
 
 /**
  * Interface for price provider contract
@@ -18,9 +27,31 @@ export interface PriceProvider {
  */
 export abstract class BaseLeaderboard {
   protected provider: ethers.JsonRpcProvider;
+  protected excludedAccounts: string[] = [];
   
   constructor(provider: ethers.JsonRpcProvider) {
     this.provider = provider;
+    this.loadExcludedAccounts();
+  }
+  
+  /**
+   * Load excluded accounts from leaderboard configuration
+   */
+  protected loadExcludedAccounts(): void {
+    try {
+      // Get excluded accounts from the leaderboard configuration
+      const config = this.loadConfig();
+      if (config && config.excludedAccounts && Array.isArray(config.excludedAccounts)) {
+        this.excludedAccounts = config.excludedAccounts.map((account: string) => account.toLowerCase());
+        console.log(`Loaded ${this.excludedAccounts.length} excluded accounts from leaderboard config`);
+      } else {
+        console.log('No excluded accounts found in leaderboard config, using empty list');
+        this.excludedAccounts = [];
+      }
+    } catch (error) {
+      console.error('Error loading excluded accounts:', error);
+      this.excludedAccounts = [];
+    }
   }
   
   /**
@@ -60,8 +91,17 @@ export abstract class BaseLeaderboard {
    */
   generateLeaderboard(holderPoints: HolderPoints[], maxEntries: number = 0): Leaderboard {
     try {
+      // Filter out excluded accounts
+      const filteredHolders = holderPoints.filter(holder => {
+        if (holder.twitterHandle && this.excludedAccounts.includes(holder.twitterHandle.toLowerCase())) {
+          console.log(`Excluding account from leaderboard: ${holder.twitterHandle}`);
+          return false;
+        }
+        return true;
+      });
+      
       // Sort holders by total points (descending)
-      const sortedHolders = holderPoints.sort((a, b) => b.totalPoints - a.totalPoints);
+      const sortedHolders = filteredHolders.sort((a, b) => b.totalPoints - a.totalPoints);
       
       // Generate leaderboard entries with rankings
       // If maxEntries is 0, include all entries

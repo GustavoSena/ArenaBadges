@@ -4,19 +4,27 @@
   "description": "Mu badges project",
   "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
-    "start:verbose": "ts-node src/index.ts --verbose",
     "build": "tsc",
-    "fetch-profiles": "ts-node src/badges/profiles/holderProfileManager.ts",
-    "mu-leaderboard": "ts-node src/leaderboard/generators/generateMuLeaderboard.ts",
-    "badge-scheduler": "ts-node src/badges/scripts/runBadgeScheduler.ts",
-    "badge-scheduler:verbose": "ts-node src/badges/scripts/runBadgeScheduler.ts --verbose",
-    "mu-scheduler": "ts-node src/leaderboard/scripts/runMuLeaderboardScheduler.ts",
-    "mu-scheduler:verbose": "ts-node src/leaderboard/scripts/runMuLeaderboardScheduler.ts --verbose",
-    "run-badges-once": "ts-node src/badges/scripts/runBadgeProcessOnce.ts",
+    "mu:run": "ts-node src/project.ts run mu",
+    "mu:run:verbose": "ts-node src/project.ts run mu --verbose",
+    "mu:run:dry-run": "ts-node src/project.ts run mu --dry-run",
+    "mu:badge": "ts-node src/project.ts badge mu",
+    "mu:badge:once": "ts-node src/project.ts badge mu --once",
+    "mu:badge:verbose": "ts-node src/project.ts badge mu --verbose",
+    "mu:badge:dry-run": "ts-node src/project.ts badge mu --dry-run",
+    "mu:badge:dry-run:once": "ts-node src/project.ts badge mu --dry-run --once",
+    "mu:leaderboard": "ts-node src/project.ts leaderboard mu",
+    "mu:leaderboard:once": "ts-node src/project.ts leaderboard mu --once",
+    "mu:leaderboard:verbose": "ts-node src/project.ts leaderboard mu --verbose",
+    "boi:badge": "ts-node src/project.ts badge boi",
+    "boi:badge:once": "ts-node src/project.ts badge boi --once",
+    "boi:badge:verbose": "ts-node src/project.ts badge boi --verbose",
+    "boi:badge:dry-run": "ts-node src/project.ts badge boi --dry-run",
+    "boi:badge:dry-run:once": "ts-node src/project.ts badge boi --dry-run --once",
     "test": "jest",
     "test:snowtrace-sorting": "ts-node tests/snowtraceOrderTest.ts",
-    "kill":"taskkill /F /IM node.exe"
+    "test:arena-api": "ts-node tests/arenaApiTest.ts",
+    "kill": "taskkill /F /IM node.exe"
   },
   "author": "",
   "license": "ISC",
@@ -33,9 +41,10 @@
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^20.10.0",
+    "axios-mock-adapter": "^2.1.0",
     "jest": "^29.5.0",
     "ts-jest": "^29.1.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }

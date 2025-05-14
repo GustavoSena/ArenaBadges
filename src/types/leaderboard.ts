@@ -6,6 +6,9 @@ export interface LeaderboardConfig {
     nfts: NftWeight[];
   };
   output: LeaderboardOutput;
+  excludedAccounts?: string[];
+  title?: string;
+  description?: string;
 }
 
 export interface TokenWeight {

@@ -1,7 +1,8 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+import { loadLeaderboardConfig } from '../../utils/config';
 import { BaseLeaderboard } from '../../types/leaderboardClasses';
-import { LeaderboardConfig } from '../../types/leaderboard';
+import { LeaderboardConfig, TokenWeight, NftWeight } from '../../types/leaderboard';
 import { TokenHolder, NftHolder } from '../../types/interfaces';
 import { ethers } from 'ethers';
 
@@ -25,7 +26,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     
     // Calculate token points
     for (const holding of tokenHoldings) {
-      const tokenWeight = config.weights.tokens.find(t => t.symbol === holding.tokenSymbol);
+      const tokenWeight = config.weights.tokens.find((t: TokenWeight) => t.symbol === holding.tokenSymbol);
       if (tokenWeight) {
         totalPoints += holding.balanceFormatted * tokenWeight.pointsPerToken;
       }
@@ -33,7 +34,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     
     // Calculate NFT points
     for (const holding of nftHoldings) {
-      const nftWeight = config.weights.nfts.find(n => n.name === holding.tokenName);
+      const nftWeight = config.weights.nfts.find((n: NftWeight) => n.name === holding.tokenName);
       if (nftWeight) {
         totalPoints += holding.tokenCount * nftWeight.pointsPerToken;
       }
@@ -53,7 +54,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     
     // Check token eligibility
     for (const holding of tokenHoldings) {
-      const tokenWeight = config.weights.tokens.find(t => t.symbol === holding.tokenSymbol);
+      const tokenWeight = config.weights.tokens.find((t: TokenWeight) => t.symbol === holding.tokenSymbol);
       if (tokenWeight && holding.balanceFormatted >= tokenWeight.minBalance) {
         return true;
       }
@@ -61,7 +62,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     
     // Check NFT eligibility
     for (const holding of nftHoldings) {
-      const nftWeight = config.weights.nfts.find(n => n.name === holding.tokenName);
+      const nftWeight = config.weights.nfts.find((n: NftWeight) => n.name === holding.tokenName);
       if (nftWeight && holding.tokenCount >= nftWeight.minBalance) {
         return true;
       }
@@ -75,14 +76,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
    * @returns The leaderboard configuration
    */
   loadConfig(): LeaderboardConfig {
-    try {
-      const configPath = path.join(__dirname, '../../../config/leaderboard.json');
-      const configData = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(configData) as LeaderboardConfig;
-    } catch (error) {
-      console.error('Error loading leaderboard config:', error);
-      throw new Error('Failed to load leaderboard configuration');
-    }
+    return loadLeaderboardConfig('standard');
   }
   
   /**

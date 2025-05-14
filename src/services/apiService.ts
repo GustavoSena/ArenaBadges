@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
-import { loadConfig } from '../utils/helpers';
+import { loadAppConfig } from '../utils/config';
 import { HolderResults } from './holderService';
 
 // File paths
@@ -80,7 +80,7 @@ export async function sendResultsToApi(apiKey: string | undefined, results: Hold
     }
     
     // Load configuration
-    const config = loadConfig();
+    const config = loadAppConfig();
     const apiConfig = config.api;
     
     console.log(`Checking for changes in holder lists...`);

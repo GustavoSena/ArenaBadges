@@ -14,6 +14,7 @@ A badge and leaderboard automation system for Mu community tokens and NFTs.
    cp .env.example .env
    ```
    - Required API keys:
+     - `MORALIS_API_KEYS`: Array of keys for blockchain data access
      - `ALCHEMY_API_KEY`: For blockchain data access
      - `API_KEY`: For Arena Social badge API access
 

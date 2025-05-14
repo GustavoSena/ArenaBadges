@@ -1,44 +1,64 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import { loadAppConfig } from '../../utils/config';
 
 /**
  * Load the application configuration file
  * @returns The application configuration object
+ * @deprecated Use loadTokensConfig instead which uses the new project-specific configuration system
  */
 export function loadConfig() {
-  try {
-    const configPath = path.join(process.cwd(), 'config', 'scheduler.json');
-    console.log(`Loading app config from ${configPath}`);
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (error) {
-    console.error('Error loading app config:', error);
-    return { 
-      scheduler: { 
-        intervalHours: 6,
-        leaderboardIntervalHours: 3
-      }
-    };
-  }
+  console.warn('Warning: loadConfig is deprecated. Use loadTokensConfig instead.');
+  return loadTokensConfig();
 }
 
 /**
- * Load the tokens configuration file
+ * Load the tokens configuration file using the new project-specific configuration system
  * @returns The tokens configuration object
  */
-export function loadTokensConfig() {
+export function loadTokensConfig(projectId?: string) {
   try {
-    const configPath = path.join(process.cwd(), 'config', 'tokens.json');
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (error) {
-    console.error('Error loading tokens config:', error);
+    // Use the new project-specific configuration system
+    const appConfig = loadAppConfig(projectId);
+    
+    // Check if we have a badge config structure or a main config structure
+    const isBadgeConfig = appConfig.badges && appConfig.api;
+    
+    // Return a compatible configuration structure
     return { 
+      scheduler: {
+        intervalHours: isBadgeConfig 
+          ? (appConfig.scheduler?.badgeIntervalHours || 6)
+          : (appConfig.scheduler?.badgeIntervalHours || 6)
+      },
+      api: { 
+        baseUrl: appConfig.api?.baseUrl || 'http://api.arena.social/badges',
+        endpoints: {
+          nftOnly: appConfig.api?.endpoints?.basic || 'basic-tier',
+          combined: appConfig.api?.endpoints?.upgraded || 'upgraded-tier'
+        },
+        includeCombinedInNft: appConfig.api?.excludeBasicForUpgraded === undefined ? true : !appConfig.api.excludeBasicForUpgraded
+      },
+      nfts: appConfig.badges?.basic?.nfts || [],
+      tokens: appConfig.badges?.basic?.tokens || []
+    };
+  } catch (error) {
+    console.error('Error loading project config:', error);
+    return { 
+      scheduler: {
+        intervalHours: 6,
+        leaderboardIntervalHours: 3
+      },
       api: { 
         baseUrl: 'http://api.arena.social/badges',
         endpoints: {
-          nftOnly: 'mu-tier-1',
-          combined: 'mu-tier-2'
-        }
-      }
+          nftOnly: 'basic-tier',
+          combined: 'upgraded-tier'
+        },
+        includeCombinedInNft: true
+      },
+      nfts: [],
+      tokens: []
     };
   }
 }

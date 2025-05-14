@@ -1,13 +1,45 @@
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import { sendResultsToApi } from '../../src/services/apiService';
-import { HolderResults } from '../../src/services/holderService';
 
-// Mock the modules
+// Save the original environment
+const originalEnv = process.env;
+
+// Set up environment variables before importing the module under test
+process.env = {
+  ...originalEnv,
+  BADGE_KEYS: JSON.stringify({
+    mu: 'test-api-key',
+    boi: 'other-test-key'
+  })
+};
+
+// We need to mock the modules before importing the module under test
 jest.mock('axios');
 jest.mock('fs');
 jest.mock('path');
+
+// Mock the config module before importing sendResults
+jest.mock('../../src/utils/config', () => ({
+  loadAppConfig: jest.fn().mockReturnValue({
+    projectName: 'mu',
+    api: {
+      baseUrl: 'http://test-api.com',
+      endpoints: {
+        basic: 'basic-endpoint',
+        upgraded: 'upgraded-endpoint'
+      },
+      excludeBasicForUpgraded: false
+    },
+    scheduler: { badgeIntervalHours: 6, leaderboardIntervalHours: 3, leaderboardTypes: ['standard', 'mu'] },
+    tokens: [{ address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }],
+    nfts: [{ address: '0x456', name: 'TEST NFT', minBalance: 1 }]
+  })
+}));
+
+// Now import the module under test
+import { sendResults } from '../../src/badges/profiles/sendResults';
+import * as configModule from '../../src/utils/config';
 
 // Create proper mock types
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -16,19 +48,31 @@ const mockedPath = path as jest.Mocked<typeof path>;
 
 describe('apiService', () => {
   // Setup test data
-  const mockNftHolders = { handles: ['user1', 'user2', 'user3'] };
-  const mockCombinedHolders = { handles: ['user4', 'user5'] };
-  const mockApiKey = 'test-api-key';
+  const mockBasicHolders = { handles: ['user1', 'user2', 'user3'] };
+  const mockUpgradedHolders = { handles: ['user4', 'user5'] };
   
   // Mock holder results
-  const mockResults: HolderResults = {
-    nftHolders: ['user1', 'user2', 'user3'],
-    combinedHolders: ['user4', 'user5']
+  const mockResults = {
+    basicHolders: ['user1', 'user2', 'user3'],
+    upgradedHolders: ['user4', 'user5'],
+    timestamp: new Date().toISOString()
   };
   
   // Mock file paths
-  const mockNftPath = '/mocked/path/to/nft_holders.json';
-  const mockCombinedPath = '/mocked/path/to/combined_holders.json';
+  const mockBasicPath = '/mocked/path/to/basic_holders.json';
+  const mockUpgradedPath = '/mocked/path/to/upgraded_holders.json';
+  
+  // Mock API options
+  const mockOptions = {
+    dryRun: false,
+    projectName: 'mu'
+  };
+  
+  // Mock API key
+  const mockBadgeKeys = {
+    mu: 'test-api-key',
+    boi: 'other-test-key'
+  };
   
   beforeEach(() => {
     // Reset all mocks
@@ -36,10 +80,10 @@ describe('apiService', () => {
     
     // Mock path.join to return our mock paths
     mockedPath.join.mockImplementation((dir, relativePath) => {
-      if (relativePath && relativePath.includes('nft_holders.json')) {
-        return mockNftPath;
+      if (relativePath && relativePath.includes('basic_holders.json')) {
+        return mockBasicPath;
       }
-      return mockCombinedPath;
+      return mockUpgradedPath;
     });
     
     // Mock fs.existsSync to return false (no previous files)
@@ -47,9 +91,11 @@ describe('apiService', () => {
     
     // Mock fs.readFileSync to return our test data
     mockedFs.readFileSync.mockImplementation((path, options) => {
-      // Default to combined holders if path is undefined or can't be determined
-      return JSON.stringify(path === mockNftPath ? mockNftHolders : mockCombinedHolders);
+      // Default to upgraded holders if path is undefined or can't be determined
+      return JSON.stringify(path === mockBasicPath ? mockBasicHolders : mockUpgradedHolders);
     });
+    
+    // No need to mock process.env here as we've already set it up before importing the module
     
     // Mock axios.post to return a successful response
     mockedAxios.post.mockResolvedValue({
@@ -67,66 +113,69 @@ describe('apiService', () => {
     jest.restoreAllMocks();
   });
   
+  afterAll(() => {
+    // Restore original environment variables
+    process.env = originalEnv;
+  });
+  
   test('should send data to API with correct payload when no previous files exist', async () => {
-    // Call the function
-    await sendResultsToApi(mockApiKey, mockResults);
+    // Mock fs.existsSync to return false (no previous files)
+    mockedFs.existsSync.mockReturnValue(false);
     
-    // Verify fs.existsSync was called
-    expect(mockedFs.existsSync).toHaveBeenCalledTimes(2);
+    // Call the function
+    await sendResults(mockResults, mockOptions);
     
     // Verify axios.post was called twice (once for each tier)
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     
-    // Verify first call (Tier 1 - NFT holders)
-    const tier1Call = mockedAxios.post.mock.calls[0];
-    expect(tier1Call[0]).toContain('mu-tier-1');
-    expect(tier1Call[0]).toContain(`key=${mockApiKey}`);
-    expect(tier1Call[1]).toHaveProperty('handles', mockResults.nftHolders);
-    expect(tier1Call[1]).toHaveProperty('timestamp');
-    expect(tier1Call[2]).toEqual({
+    // Verify first call (Basic badge holders)
+    const basicCall = mockedAxios.post.mock.calls[0];
+    expect(basicCall[0]).toContain('basic-endpoint'); // Updated to match our mock config
+    expect(basicCall[0]).toContain(`key=${mockBadgeKeys.mu}`);
+    expect(basicCall[1]).toHaveProperty('handles', mockResults.basicHolders);
+    expect(basicCall[1]).toHaveProperty('timestamp');
+    expect(basicCall[2]).toEqual({
       headers: {
         'Content-Type': 'application/json'
       }
     });
     
-    // Verify second call (Tier 2 - Combined holders)
-    const tier2Call = mockedAxios.post.mock.calls[1];
-    expect(tier2Call[0]).toContain('mu-tier-2');
-    expect(tier2Call[0]).toContain(`key=${mockApiKey}`);
-    expect(tier2Call[1]).toHaveProperty('handles', mockResults.combinedHolders);
-    expect(tier2Call[1]).toHaveProperty('timestamp');
-    expect(tier2Call[2]).toEqual({
+    // Verify second call (Upgraded badge holders)
+    const upgradedCall = mockedAxios.post.mock.calls[1];
+    expect(upgradedCall[0]).toContain('upgraded-endpoint'); // Updated to match our mock config
+    expect(upgradedCall[0]).toContain(`key=${mockBadgeKeys.mu}`);
+    expect(upgradedCall[1]).toHaveProperty('handles', mockResults.upgradedHolders);
+    expect(upgradedCall[1]).toHaveProperty('timestamp');
+    expect(upgradedCall[2]).toEqual({
       headers: {
         'Content-Type': 'application/json'
       }
     });
   });
   
-  test('should not send data to API when results are unchanged', async () => {
-    // Mock fs.existsSync to return true (previous files exist)
-    mockedFs.existsSync.mockReturnValue(true);
+  test('should not send data to API in dry run mode', async () => {
+    // Set dryRun option to true
+    const dryRunOptions = {
+      ...mockOptions,
+      dryRun: true
+    };
     
-    // Mock fs.readFileSync to return the same data as current results
-    mockedFs.readFileSync.mockImplementation((path, options) => {
-      if (String(path).includes('nft_holders.json')) {
-        return JSON.stringify({ handles: mockResults.nftHolders });
-      }
-      return JSON.stringify({ handles: mockResults.combinedHolders });
+    // Call the function with dryRun set to true
+    const result = await sendResults(mockResults, dryRunOptions);
+    
+    // Verify the result contains dry-run status
+    expect(result).toEqual({
+      basic: { status: 'dry-run', handles: mockResults.basicHolders.length },
+      upgraded: { status: 'dry-run', handles: mockResults.upgradedHolders.length }
     });
-    
-    // Call the function
-    const result = await sendResultsToApi(mockApiKey, mockResults);
-    
-    // Verify result is null (no changes)
-    expect(result).toBeNull();
     
     // Verify axios.post was not called
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
   
-  test('should throw error when API key is not provided', async () => {
-    // Call the function without an API key and expect it to throw
-    await expect(sendResultsToApi(undefined, mockResults)).rejects.toThrow('API key is required');
+  test('should throw error when project name is not provided', async () => {
+    // Call the function without a project name and expect it to throw
+    await expect(sendResults(mockResults, { dryRun: false })).rejects.toThrow('Project name is required');
   });
   
   test('should handle API errors gracefully', async () => {
@@ -135,29 +184,25 @@ describe('apiService', () => {
     mockedAxios.post.mockRejectedValue(mockError);
     
     // Call the function and expect it to throw
-    await expect(sendResultsToApi(mockApiKey, mockResults)).rejects.toThrow();
+    await expect(sendResults(mockResults, mockOptions)).rejects.toThrow();
     
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
   });
   
-  test('should handle file reading errors gracefully', async () => {
-    // Mock fs.existsSync to return true (previous files exist)
-    mockedFs.existsSync.mockReturnValue(true);
-    
-    // Mock fs.readFileSync to throw an error
-    const mockError = new Error('File not found');
-    mockedFs.readFileSync.mockImplementation(() => {
-      throw mockError;
+  test('should handle API errors gracefully when sending data', async () => {
+    // Mock axios.post to throw an error for the first call only
+    mockedAxios.post.mockImplementationOnce(() => {
+      throw new Error('API request failed');
     });
     
-    // Call the function
-    await sendResultsToApi(mockApiKey, mockResults);
+    // Mock console.error to capture calls
+    const consoleErrorSpy = jest.spyOn(console, 'error');
     
-    // Verify axios.post was called (should assume changes when error occurs)
-    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    // Call the function and expect it to throw
+    await expect(sendResults(mockResults, mockOptions)).rejects.toThrow('API request failed');
     
     // Verify console.error was called
-    expect(console.error).toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 });

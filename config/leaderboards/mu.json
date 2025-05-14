@@ -1,0 +1,89 @@
+{
+  "title": "MU Leaderboard",
+  "description": "Leaderboard for MU token holders and Mu Pups NFT owners",
+  "weights": {
+    "tokens": [
+      {
+        "symbol": "MU",
+        "weight": 2,
+        "minBalance": 100,
+        "address": "0xD036414fa2BCBb802691491E323BFf1348C5F4Ba",
+        "decimals": 18,
+        "description": "Fixed minimum balance of 100 MU"
+      },
+      {
+        "symbol": "MUG",
+        "weight": 2,
+        "minBalance": 0,
+        "address": "0xF7ed17f0Fb2B7C9D3DDBc9F0679b2e1098993e81",
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically as 100 / mugmuprice"
+      },
+      {
+        "symbol": "MUO",
+        "weight": 2.2,
+        "minBalance": 0,
+        "address": "0x561f2209eA45023d796bF42F0402B33bc26610ce",
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically"
+      },
+      {
+        "symbol": "MUV",
+        "weight": 22,
+        "minBalance": 0,
+        "address": "0xdbA664085ae73CF4E4eb57954BDC88Be297B1f09",
+        "decimals": 18,
+        "description": "Minimum balance calculated dynamically"
+      }
+    ],
+    "nfts": [
+      {
+        "name": "Mu Pups",
+        "weight": 20,
+        "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0"
+      }
+    ]
+  },
+  "output": {
+    "title": "MU Leaderboard",
+    "logoPath": "mu_logo.png",
+    "maxEntries": 100,
+    "refreshTimeLabel": "Updated every 3 hours",
+    "primaryColor": "#ff00ff",
+    "secondaryColor": "#e0e0e0",
+    "accentColor": "#3498db",
+    "backgroundColor": "#f5f5f5",
+    "gradientStart": "#ff00ff",
+    "gradientEnd": "#9900ff",
+    "twitterColor": "#553377",
+    "addressColor": "#555555",
+    "columns": [
+      {
+        "name": "Rank",
+        "field": "rank",
+        "width": "10%"
+      },
+      {
+        "name": "Twitter",
+        "field": "twitter",
+        "width": "30%"
+      },
+      {
+        "name": "Points",
+        "field": "points",
+        "width": "20%"
+      },
+      {
+        "name": "MU",
+        "field": "mu",
+        "width": "20%"
+      },
+      {
+        "name": "NFTs",
+        "field": "nfts",
+        "width": "20%"
+      }
+    ]
+  },
+  "excludedAccounts": ["mucoinofficial"]
+}

@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
-import { loadConfig } from '../../utils/helpers';
+import { loadAppConfig } from '../../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -11,6 +11,39 @@ dotenv.config();
 export enum LeaderboardType {
   STANDARD = 'standard',
   MU = 'mu'
+}
+
+/**
+ * Get a LeaderboardType from a string
+ * @param type The string representation of the leaderboard type
+ * @returns The corresponding LeaderboardType or undefined if not found
+ */
+export function getLeaderboardTypeFromString(type: string): LeaderboardType | undefined {
+  // First check if it's a direct match with the enum values
+  const directMatch = Object.values(LeaderboardType).find(
+    value => value.toLowerCase() === type.toLowerCase()
+  );
+  
+  if (directMatch) {
+    return directMatch as LeaderboardType;
+  }
+  
+  // If not a direct match, try to match by enum key
+  const keyMatch = Object.keys(LeaderboardType).find(
+    key => key.toLowerCase() === type.toLowerCase()
+  );
+  
+  if (keyMatch) {
+    return LeaderboardType[keyMatch as keyof typeof LeaderboardType];
+  }
+  
+  return undefined;
+}
+
+// Define error types
+enum ErrorType {
+  RETRY_FAILURE = 'RETRY_FAILURE',
+  OTHER = 'OTHER'
 }
 
 // Interface for leaderboard scheduler configuration
@@ -25,9 +58,10 @@ export interface LeaderboardSchedulerConfig {
 
 // Interface for the scheduler configuration from config file
 interface SchedulerConfig {
-  intervalHours: number;
-  leaderboardIntervalHours?: number;
-  leaderboardTypes?: string[];
+  badgeIntervalHours: number;
+  enableLeaderboard: boolean;
+  leaderboardIntervalHours: number;
+  leaderboardTypes: string[];
 }
 
 // Default configuration
@@ -41,6 +75,7 @@ const DEFAULT_CONFIG: LeaderboardSchedulerConfig = {
  * Generate a specific type of leaderboard
  * @param type The type of leaderboard to generate
  * @param verbose Whether to log verbose output
+ * @throws Error if there are retry failures or other critical errors
  */
 async function generateLeaderboard(type: LeaderboardType, verbose: boolean = false): Promise<void> {
   console.log(`Generating ${type} leaderboard at ${new Date().toISOString()}`);
@@ -65,6 +100,24 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
     console.log(`Successfully generated ${type} leaderboard at ${new Date().toISOString()}`);
   } catch (error) {
     console.error(`Error generating ${type} leaderboard:`, error);
+    
+    // Check if this is a retry failure or Arena API error and propagate it
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('max retries exceeded') || 
+        errorMessage.includes('All retries failed') || 
+        errorMessage.includes('retry limit exceeded') ||
+        errorMessage.includes('Failed to get owner') ||
+        errorMessage.includes('after 5 retries') ||
+        errorMessage.includes('429') ||
+        errorMessage.includes('rate limit') ||
+        errorMessage.includes('too many requests') ||
+        errorMessage.includes('Retry failure') ||
+        errorMessage.includes('Arena API')) {
+      throw new Error(`Retry failure in ${type} leaderboard generation: ${errorMessage}`);
+    }
+    
+    // Propagate other errors as well
+    throw error;
   }
 }
 
@@ -72,8 +125,9 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
  * Run all configured leaderboard generations
  * @param types Array of leaderboard types to generate
  * @param verbose Whether to log verbose output
+ * @returns ErrorType if there was an error, undefined if successful
  */
-export async function runLeaderboardGeneration(types: LeaderboardType[], verbose: boolean = false): Promise<void> {
+export async function runLeaderboardGeneration(types: LeaderboardType[], verbose: boolean = false): Promise<ErrorType | undefined> {
   console.log(`Starting scheduled leaderboard generation at ${new Date().toISOString()}`);
   
   if (verbose) {
@@ -96,6 +150,9 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
     console.log(`Created log file: ${logFile}`);
   }
   
+  let hasRetryFailure = false;
+  let hasAnySuccess = false;
+  
   // Generate each type of leaderboard
   for (const type of types) {
     try {
@@ -103,8 +160,17 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
         console.log(`Starting generation for ${type} leaderboard...`);
       }
       
+      // If we've already encountered a retry failure, skip generating other leaderboards
+      // to ensure consistency across all leaderboard types
+      if (hasRetryFailure) {
+        console.log(`Skipping ${type} leaderboard generation due to previous retry failures`);
+        fs.appendFileSync(logFile, `Skipped ${type} leaderboard generation due to previous retry failures\n`);
+        continue;
+      }
+      
       await generateLeaderboard(type, verbose);
       fs.appendFileSync(logFile, `Successfully generated ${type} leaderboard\n`);
+      hasAnySuccess = true;
       
       if (verbose) {
         console.log(`Completed generation for ${type} leaderboard`);
@@ -112,11 +178,42 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
     } catch (error) {
       console.error(`Error generating ${type} leaderboard:`, error);
       fs.appendFileSync(logFile, `Error generating ${type} leaderboard: ${error}\n`);
+      
+      // Check if this is a retry failure
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('max retries exceeded') || 
+          errorMessage.includes('All retries failed') || 
+          errorMessage.includes('retry limit exceeded') ||
+          errorMessage.includes('Failed to get owner') ||
+          errorMessage.includes('after 5 retries') ||
+          errorMessage.includes('429') ||
+          errorMessage.includes('rate limit') ||
+          errorMessage.includes('too many requests') ||
+          errorMessage.includes('Retry failure') ||
+          errorMessage.includes('Arena API')) {
+        console.error('Retry failure or Arena API error detected in leaderboard generation. Will reschedule for 2 hours later WITHOUT updating leaderboard files.');
+        fs.appendFileSync(logFile, `RETRY FAILURE OR ARENA API ERROR DETECTED: ${errorMessage}\n`);
+        hasRetryFailure = true;
+      }
     }
   }
   
   fs.appendFileSync(logFile, `Leaderboard generation completed at ${new Date().toISOString()}\n`);
-  console.log(`Completed scheduled leaderboard generation at ${new Date().toISOString()}`);
+  
+  if (hasRetryFailure) {
+    fs.appendFileSync(logFile, `NEXT RUN SCHEDULED FOR 2 HOURS LATER DUE TO RETRY FAILURES\n`);
+    fs.appendFileSync(logFile, `NO LEADERBOARD FILES WERE UPDATED DUE TO RETRY FAILURES\n`);
+    console.log(`Completed scheduled leaderboard generation with retry failures at ${new Date().toISOString()}`);
+    console.log(`NO LEADERBOARD FILES WERE UPDATED DUE TO RETRY FAILURES`);
+    return ErrorType.RETRY_FAILURE;
+  } else if (!hasAnySuccess) {
+    fs.appendFileSync(logFile, `NEXT RUN SCHEDULED FOR 2 HOURS LATER DUE TO NO SUCCESSFUL GENERATIONS\n`);
+    console.log(`No successful leaderboard generations. Will reschedule for 2 hours later.`);
+    return ErrorType.RETRY_FAILURE;
+  }
+  
+  console.log(`Completed scheduled leaderboard generation successfully at ${new Date().toISOString()}`);
+  return undefined; // Success
 }
 
 /**
@@ -125,41 +222,110 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
  */
 export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = DEFAULT_CONFIG): void {
   // Load configuration from config file
-  const appConfig = loadConfig();
+  const appConfig = loadAppConfig();
   const schedulerConfig: SchedulerConfig = appConfig.scheduler || { intervalHours: 24 };
+  
+  // Check if leaderboard generation is enabled
+  const enableLeaderboard = appConfig.scheduler.enableLeaderboard !== undefined 
+    ? appConfig.scheduler.enableLeaderboard 
+    : true; // Default to enabled if not specified
+    
+  if (!enableLeaderboard) {
+    console.log('Leaderboard generation is disabled in configuration. Scheduler will not start.');
+    return;
+  }
   
   // Get configuration
   const leaderboardTypes = config.leaderboardTypes || DEFAULT_CONFIG.leaderboardTypes || [];
-  const intervalHours = schedulerConfig.leaderboardIntervalHours || 3; // Default to 3 hours
+  
+  // If no leaderboard types are configured, don't start the scheduler
+  if (leaderboardTypes.length === 0) {
+    console.log('No leaderboard types configured. Scheduler will not start.');
+    return;
+  }
+  
+  const intervalHours = appConfig.scheduler.leaderboardIntervalHours || 3; // Default to 3 hours
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
   const runImmediately = config.runImmediately !== undefined ? config.runImmediately : DEFAULT_CONFIG.runImmediately;
   const verbose = config.verbose || false;
   
+  // Define retry interval (2 hours)
+  const retryIntervalMs = 2 * 60 * 60 * 1000;
+  
   console.log(`Starting leaderboard scheduler to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
-  console.log(`Configured leaderboard type: MU`);
+  console.log(`Configured leaderboard types: ${leaderboardTypes.join(', ')}`);
+  console.log(`Retry interval: 2 hours (when retry failures occur)`);
   
-  // Run immediately on startup if configured
-  if (runImmediately) {
-    if (config.onRun) {
-      config.onRun();
+  // Variable to store the next scheduled timeout
+  let nextScheduledTimeout: NodeJS.Timeout | null = null;
+  
+  // Function to schedule the next run
+  const scheduleNextRun = (delayMs: number) => {
+    // Clear any existing timeout
+    if (nextScheduledTimeout) {
+      clearTimeout(nextScheduledTimeout);
     }
-    runLeaderboardGeneration(leaderboardTypes, verbose);
-  }
-  
-  // Then schedule to run at the specified interval
-  const nextRunTime = new Date(Date.now() + intervalMs);
-  if (config.onSchedule) {
-    config.onSchedule(nextRunTime);
-  }
-  
-  setInterval(() => {
-    if (config.onRun) {
-      config.onRun();
-    }
-    runLeaderboardGeneration(leaderboardTypes, verbose);
-    const nextRunTime = new Date(Date.now() + intervalMs);
+    
+    // Calculate next run time
+    const nextRunTime = new Date();
+    nextRunTime.setTime(nextRunTime.getTime() + delayMs);
+    
+    // Call onSchedule callback if provided
     if (config.onSchedule) {
       config.onSchedule(nextRunTime);
     }
-  }, intervalMs);
+    
+    // Schedule the next run
+    nextScheduledTimeout = setTimeout(async () => {
+      // Call onRun callback if provided
+      if (config.onRun) {
+        config.onRun();
+      }
+      
+      // Run the scheduled task
+      const errorType = await runLeaderboardGeneration(leaderboardTypes, verbose);
+      
+      // Determine the next interval based on the result
+      let nextIntervalMs = intervalMs;
+      
+      if (errorType === ErrorType.RETRY_FAILURE) {
+        console.log(`Scheduling next leaderboard run in 2 hours due to retry failures`);
+        nextIntervalMs = retryIntervalMs;
+      } else {
+        console.log(`Scheduling next leaderboard run in ${intervalHours} hours (normal interval)`);
+      }
+      
+      // Schedule the next run
+      scheduleNextRun(nextIntervalMs);
+    }, delayMs);
+  };
+  
+  // Run immediately on startup if configured
+  if (runImmediately) {
+    (async () => {
+      // Call onRun callback if provided
+      if (config.onRun) {
+        config.onRun();
+      }
+      
+      // Run the scheduled task
+      const errorType = await runLeaderboardGeneration(leaderboardTypes, verbose);
+      
+      // Determine the next interval based on the result
+      let nextIntervalMs = intervalMs;
+      
+      if (errorType === ErrorType.RETRY_FAILURE) {
+        console.log(`Scheduling next leaderboard run in 2 hours due to retry failures`);
+        nextIntervalMs = retryIntervalMs;
+      } else {
+        console.log(`Scheduling next leaderboard run in ${intervalHours} hours (normal interval)`);
+      }
+      
+      // Schedule the next run
+      scheduleNextRun(nextIntervalMs);
+    })();
+  } else {
+    // Schedule the first run without running immediately
+    scheduleNextRun(intervalMs);
+  }
 }

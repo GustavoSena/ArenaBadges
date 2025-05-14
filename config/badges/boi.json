@@ -1,0 +1,39 @@
+{
+  "name": "BOI Badge",
+  "description": "Badge configuration for BOI NFT holders",
+  "projectName": "BOI",
+  "badges": {
+    "basic": {
+      "tokens": [
+        {
+          "symbol": "BOI",
+          "address": "0xACC95Afa65768aa74044E6f6e267AD6417CD3e55",
+          "minBalance": 100000,
+          "decimals": 18
+        }
+      ]
+    },
+    "upgraded": {
+      "tokens": [
+        {
+          "symbol": "BOI",
+          "address": "0xACC95Afa65768aa74044E6f6e267AD6417CD3e55",
+          "minBalance": 2000000,
+          "decimals": 18
+        }
+      ]
+    }
+  },
+  "excludedAccounts": [],
+  "permanentAccounts": [
+    "Boithebear"
+  ],
+  "api": {
+    "baseUrl": "http://api.arena.social/badges",
+    "endpoints": {
+      "basic": "bois-club",
+      "upgraded": "bad-bois"
+    },
+    "excludeBasicForUpgraded": true
+  }
+}
