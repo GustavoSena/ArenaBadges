@@ -5,7 +5,7 @@
  * by attempting to fetch NFT holders with an invalid contract address.
  */
 import * as dotenv from 'dotenv';
-import { fetchNftHolders } from '../api/blockchain';
+import { fetchNftHolders } from '../src/api/blockchain';
 
 // Load environment variables
 dotenv.config();

@@ -1,7 +1,7 @@
 /**
  * Simple test script to verify error propagation in the blockchain module
  */
-import { fetchNftHolders } from '../api/blockchain';
+import { fetchNftHolders } from '../src/api/blockchain';
 
 async function testErrorPropagation() {
   console.log('Testing error propagation in blockchain module...');
