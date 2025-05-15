@@ -40,8 +40,9 @@ program
   .option('-v, --verbose', 'Enable verbose logging')
   .option('--dry-run', 'Run without sending data to API')
   .option('--once', 'Run once and exit')
+  .option('--export-addresses', 'Export addresses to file (only works with --dry-run)')
   .action(async (projectName, options) => {
-    await runProject(projectName, 'badge', options.once, options.verbose, options.dryRun);
+    await runProject(projectName, 'badge', options.once, options.verbose, options.dryRun, options.exportAddresses);
   });
 
 // Command to run leaderboard scheduler only
@@ -87,7 +88,8 @@ async function runProject(
   component: 'all' | 'badge' | 'leaderboard', 
   runOnce: boolean = false,
   verbose: boolean = false,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  exportAddresses: boolean = false
 ) {
   try {
     console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
@@ -124,7 +126,7 @@ async function runProject(
       
       if (runOnce) {
         console.log(`Running badge component once for project ${projectName}`);
-        await runAndSendResults(apiKey, verbose, dryRun, projectName);
+        await runAndSendResults(apiKey, verbose, dryRun, projectName, exportAddresses);
       } else {
         console.log(`Starting badge scheduler for project ${projectName}`);
         startScheduler({
@@ -134,6 +136,7 @@ async function runProject(
           verbose,
           dryRun,
           runOnce,
+          exportAddresses,
           onSchedule: (nextRunTime) => {
             console.log(`Next badge refresh scheduled for: ${nextRunTime.toISOString()}`);
           },

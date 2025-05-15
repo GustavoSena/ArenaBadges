@@ -36,6 +36,9 @@ export interface SchedulerConfig {
   enableLeaderboard: boolean;
   leaderboardIntervalHours: number;
   leaderboardTypes: string[];
+  // Retry intervals for error handling
+  badgeRetryIntervalHours?: number;
+  leaderboardRetryIntervalHours?: number;
 }
 
 // API configuration
@@ -126,7 +129,9 @@ function getDefaultConfig(): AppConfig {
       badgeIntervalHours: 6,
       enableLeaderboard: true,
       leaderboardIntervalHours: 3,
-      leaderboardTypes: ['standard']
+      leaderboardTypes: ['standard'],
+      badgeRetryIntervalHours: 2,
+      leaderboardRetryIntervalHours: 2
     },
     api: {
       baseUrl: 'http://api.example.com/badges',

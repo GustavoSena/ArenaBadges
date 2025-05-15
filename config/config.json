@@ -4,20 +4,24 @@
   "scheduler": {
     "badgeIntervalHours": 6,
     "leaderboardIntervalHours": 3,
-    "enableLeaderboard": true
+    "enableLeaderboard": true,
+    "badgeRetryIntervalHours": 2,
+    "leaderboardRetryIntervalHours": 2
   },
   "projects": {
     "mu": {
       "scheduler": {
         "badgeIntervalHours": 6,
         "leaderboardIntervalHours": 3,
-        "enableLeaderboard": true
+        "enableLeaderboard": true,
+        "badgeRetryIntervalHours": 2,
+        "leaderboardRetryIntervalHours": 2
       }
     },
     "boi": {
       "scheduler": {
         "badgeIntervalHours": 3,
-        "leaderboardIntervalHours": 3
+        "badgeRetryIntervalHours": 1
       }
     }
   }

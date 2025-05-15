@@ -32,7 +32,7 @@ try {
  * @param options.projectName The name of the project to use for API key selection
  * @returns Promise resolving to the API response
  */
-export async function sendResults(data: any, options: { dryRun?: boolean, projectName?: string } = {}): Promise<any> {
+export async function sendResults(data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: { dryRun?: boolean, projectName?: string, exportAddresses?: boolean } = {}): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     console.log('Sending results to API...');
@@ -89,7 +89,7 @@ export async function sendResults(data: any, options: { dryRun?: boolean, projec
     };
     
     const upgradedData = {
-      handles: data.upgradedHolders || data.combinedHolders,
+      handles: data.upgradedHolders,
       timestamp: data.timestamp || new Date().toISOString()
     };
     
@@ -100,11 +100,67 @@ export async function sendResults(data: any, options: { dryRun?: boolean, projec
     // Check if this is a dry run
     if (options.dryRun) {
       console.log('DRY RUN MODE: Printing JSON to console instead of sending to API');
+      console.log(`Export addresses flag: ${options.exportAddresses ? 'ENABLED' : 'DISABLED'}`);
       console.log('\nBASIC BADGE DATA (would be sent to ' + `${API_BASE_URL}/${BASIC_ENDPOINT}` + '):')
       console.log(JSON.stringify(basicData, null, 2));
       
       console.log('\nUPGRADED DATA (would be sent to ' + `${API_BASE_URL}/${UPGRADED_ENDPOINT}` + '):');
       console.log(JSON.stringify(upgradedData, null, 2));
+      
+      // Export addresses to files if the exportAddresses flag is set
+      if (options.exportAddresses) {
+        console.log('\nEXPORTING ADDRESSES: Saving wallet addresses to files');
+        
+        // Create output directory if it doesn't exist
+        const outputDir = path.join(process.cwd(), 'output', 'addresses');
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+          console.log(`Created output directory: ${outputDir}`);
+        }
+        
+        // Generate timestamp for filenames
+        const timestamp = new Date().toISOString().replace(/:/g, '-');
+        
+        // Check if we have wallet addresses available
+        if (!data.basicAddresses || !data.upgradedAddresses) {
+          console.log('WARNING: Wallet addresses not available in the data. Cannot export wallet addresses.');
+          return;
+        }
+        
+        // Save basic badge holder wallet addresses
+        const basicAddressesFile = path.join(outputDir, `${options.projectName}_basic_wallet_addresses_${timestamp}.json`);
+        fs.writeFileSync(basicAddressesFile, JSON.stringify({
+          addresses: data.basicAddresses,
+          count: data.basicAddresses.length,
+          timestamp: data.timestamp,
+          type: 'basic',
+          project: options.projectName
+        }, null, 2));
+        console.log(`Exported ${data.basicAddresses.length} basic badge holder wallet addresses to ${basicAddressesFile}`);
+        
+        // Save upgraded badge holder wallet addresses
+        const upgradedAddressesFile = path.join(outputDir, `${options.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
+        fs.writeFileSync(upgradedAddressesFile, JSON.stringify({
+          addresses: data.upgradedAddresses,
+          count: data.upgradedAddresses.length,
+          timestamp: data.timestamp,
+          type: 'upgraded',
+          project: options.projectName
+        }, null, 2));
+        console.log(`Exported ${data.upgradedAddresses.length} upgraded badge holder wallet addresses to ${upgradedAddressesFile}`);
+        
+        // Save all unique wallet addresses (combined)
+        const allAddresses = [...new Set([...data.basicAddresses, ...data.upgradedAddresses])];
+        const allAddressesFile = path.join(outputDir, `${options.projectName}_all_wallet_addresses_${timestamp}.json`);
+        fs.writeFileSync(allAddressesFile, JSON.stringify({
+          addresses: allAddresses,
+          count: allAddresses.length,
+          timestamp: data.timestamp,
+          type: 'all',
+          project: options.projectName
+        }, null, 2));
+        console.log(`Exported ${allAddresses.length} total unique badge holder wallet addresses to ${allAddressesFile}`);
+      }
       
       console.log('\nDRY RUN COMPLETED - No data was sent to the API');
       return {

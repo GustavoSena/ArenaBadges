@@ -29,7 +29,8 @@ export function loadTokensConfig(projectId?: string) {
       scheduler: {
         intervalHours: isBadgeConfig 
           ? (appConfig.scheduler?.badgeIntervalHours || 6)
-          : (appConfig.scheduler?.badgeIntervalHours || 6)
+          : (appConfig.scheduler?.badgeIntervalHours || 6),
+        retryIntervalHours: appConfig.scheduler?.badgeRetryIntervalHours || 2
       },
       api: { 
         baseUrl: appConfig.api?.baseUrl || 'http://api.arena.social/badges',
@@ -47,7 +48,8 @@ export function loadTokensConfig(projectId?: string) {
     return { 
       scheduler: {
         intervalHours: 6,
-        leaderboardIntervalHours: 3
+        leaderboardIntervalHours: 3,
+        retryIntervalHours: 2
       },
       api: { 
         baseUrl: 'http://api.arena.social/badges',

@@ -1,6 +1,8 @@
 import { fetchTokenHolderProfiles } from '../profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../profiles/sendResults';
 import { loadTokensConfig } from '../utils/helpers';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface SchedulerConfig {
   intervalMs?: number;
@@ -11,6 +13,7 @@ interface SchedulerConfig {
   dryRun?: boolean;
   runOnce?: boolean;
   projectName?: string;
+  exportAddresses?: boolean;
 }
 
 // Define error types
@@ -27,7 +30,12 @@ export enum ErrorType {
  * @param projectName The name of the project to run
  * @returns ErrorType if there was an error, undefined if successful
  */
-async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false, dryRun: boolean = false, projectName?: string): Promise<ErrorType | undefined> {
+async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false, dryRun: boolean = false, projectName?: string, exportAddresses: boolean = false): Promise<ErrorType | undefined> {
+  // Load the project configuration
+  const appConfig = loadTokensConfig(projectName);
+  
+  // Get customizable retry interval from config (default to 2 hours if not specified)
+  const retryIntervalHours = appConfig.scheduler.retryIntervalHours || 2;
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
@@ -69,8 +77,10 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
       await sendResults({
         basicHolders: results.basicHolders,
         upgradedHolders: results.upgradedHolders,
+        basicAddresses: results.basicAddresses,
+        upgradedAddresses: results.upgradedAddresses,
         timestamp: new Date().toISOString()
-      }, { dryRun, projectName });
+      }, { dryRun, projectName, exportAddresses });
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -88,23 +98,12 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
   } catch (error) {
     console.error('Error in scheduled run:', error);
     
-    // Check if this is a retry failure or Arena API error
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('max retries exceeded') || 
-        errorMessage.includes('All retries failed') || 
-        errorMessage.includes('retry limit exceeded') ||
-        errorMessage.includes('Failed to get owner') ||
-        errorMessage.includes('after 5 retries') ||
-        errorMessage.includes('Retry failure') ||
-        errorMessage.includes('API rate limit') ||
-        errorMessage.includes('No NFT holders found') ||
-        errorMessage.includes('Arena API') ||
-        errorMessage.includes('rate limit')) {
-      console.error('Retry failure, Arena API error, or data validation error detected. Will reschedule for 2 hours later WITHOUT sending data to API.');
-      return ErrorType.RETRY_FAILURE;
-    }
+    // For any error, prevent sending data and reschedule
+    console.error(`Error detected in badge processing: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Will reschedule for ${retryIntervalHours} hours later WITHOUT sending data to API.`);
     
-    return ErrorType.OTHER;
+    // Always return RETRY_FAILURE for any error to prevent sending incorrect data
+    return ErrorType.RETRY_FAILURE;
   }
 }
 
@@ -125,8 +124,11 @@ export function startScheduler(config: SchedulerConfig = {}): void {
   const dryRun = config.dryRun || false;
   const runOnce = config.runOnce || false;
   
-  // Define retry interval (2 hours)
-  const retryIntervalMs = 2 * 60 * 60 * 1000;
+  // Get customizable retry interval from config (default to 2 hours if not specified)
+  const retryIntervalHours = appConfig.scheduler.retryIntervalHours || 2;
+  const retryIntervalMs = retryIntervalHours * 60 * 60 * 1000;
+  
+  console.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
   
   if (!apiKey) {
     throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
@@ -170,7 +172,7 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       
       // Run the scheduled task with project name
       console.log(`Running scheduled task for project: ${projectName}`);
-      const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName);
+      const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName, config.exportAddresses);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;

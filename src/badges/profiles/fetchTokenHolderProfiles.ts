@@ -16,6 +16,8 @@ dotenv.config();
 export interface HolderResults {
   basicHolders: string[];
   upgradedHolders: string[];
+  basicAddresses: string[];
+  upgradedAddresses: string[];
 }
 
 // Configuration will be loaded when the function is called with the project name
@@ -855,21 +857,27 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
       })
     );
     
-    // Get Twitter handles for basic badge holders
-    const basicHandles = [...basicAddresses]
+    // Get Twitter handles for basic badge holders and their corresponding addresses
+    const basicHandlesAndAddresses = [...basicAddresses]
       .map(address => {
         const handle = addressToTwitterHandle.get(address);
-        return handle || null;
+        return { address, handle };
       })
-      .filter(handle => handle !== null) as string[];
+      .filter(item => item.handle !== null);
+    
+    const basicHandles = basicHandlesAndAddresses.map(item => item.handle) as string[];
+    const basicSocialAddresses = basicHandlesAndAddresses.map(item => item.address);
       
-    // Get Twitter handles for upgraded badge holders
-    const upgradedHandles = [...upgradedAddresses]
+    // Get Twitter handles for upgraded badge holders and their corresponding addresses
+    const upgradedHandlesAndAddresses = [...upgradedAddresses]
       .map(address => {
         const handle = addressToTwitterHandle.get(address);
-        return handle || null;
+        return { address, handle };
       })
-      .filter(handle => handle !== null) as string[];
+      .filter(item => item.handle !== null);
+    
+    const upgradedHandles = upgradedHandlesAndAddresses.map(item => item.handle) as string[];
+    const upgradedSocialAddresses = upgradedHandlesAndAddresses.map(item => item.address);
     
     // Flag to control whether holders can be in both lists
     const excludeBasicForUpgraded = appConfig.api?.excludeBasicForUpgraded === true;
@@ -911,15 +919,20 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
     console.log("\nPermanent accounts added to both lists:", PERMANENT_ACCOUNTS.join(", "));
     console.log(`Basic badge holders ${!excludeBasicForUpgraded ? 'can' : 'cannot'} also have upgraded badges`);
     
+    // Return both Twitter handles and wallet addresses (only for addresses with social profiles)
     return {
       basicHolders: finalBasicHandles,
-      upgradedHolders: finalUpgradedHandles
+      upgradedHolders: finalUpgradedHandles,
+      basicAddresses: basicSocialAddresses,
+      upgradedAddresses: upgradedSocialAddresses
     };
   } catch (error) {
     console.error('Error in fetchTokenHolderProfiles:', error);
     return {
       basicHolders: PERMANENT_ACCOUNTS,
-      upgradedHolders: PERMANENT_ACCOUNTS
+      upgradedHolders: PERMANENT_ACCOUNTS,
+      basicAddresses: [],
+      upgradedAddresses: []
     };
   }
 }

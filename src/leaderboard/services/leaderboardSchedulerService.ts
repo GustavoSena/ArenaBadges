@@ -128,6 +128,9 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
  * @returns ErrorType if there was an error, undefined if successful
  */
 export async function runLeaderboardGeneration(types: LeaderboardType[], verbose: boolean = false): Promise<ErrorType | undefined> {
+  // Get the retry interval from config (will be used in error messages)
+  const appConfig = loadAppConfig();
+  const retryIntervalHours = appConfig.scheduler.leaderboardRetryIntervalHours || 2;
   console.log(`Starting scheduled leaderboard generation at ${new Date().toISOString()}`);
   
   if (verbose) {
@@ -179,22 +182,16 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
       console.error(`Error generating ${type} leaderboard:`, error);
       fs.appendFileSync(logFile, `Error generating ${type} leaderboard: ${error}\n`);
       
-      // Check if this is a retry failure
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('max retries exceeded') || 
-          errorMessage.includes('All retries failed') || 
-          errorMessage.includes('retry limit exceeded') ||
-          errorMessage.includes('Failed to get owner') ||
-          errorMessage.includes('after 5 retries') ||
-          errorMessage.includes('429') ||
-          errorMessage.includes('rate limit') ||
-          errorMessage.includes('too many requests') ||
-          errorMessage.includes('Retry failure') ||
-          errorMessage.includes('Arena API')) {
-        console.error('Retry failure or Arena API error detected in leaderboard generation. Will reschedule for 2 hours later WITHOUT updating leaderboard files.');
-        fs.appendFileSync(logFile, `RETRY FAILURE OR ARENA API ERROR DETECTED: ${errorMessage}\n`);
-        hasRetryFailure = true;
-      }
+      // For any error, prevent updating leaderboard and reschedule
+      console.error(`Error detected in leaderboard generation: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`Will reschedule for ${retryIntervalHours} hours later WITHOUT updating leaderboard files.`);
+      
+      // Log basic error info to the existing log file
+      fs.appendFileSync(logFile, `Error: ${error}\n`);
+      fs.appendFileSync(logFile, `Leaderboard files were not updated due to this error\n`);
+      
+      // Set the retry failure flag to prevent updating leaderboard files
+      hasRetryFailure = true;
     }
   }
   
@@ -249,8 +246,11 @@ export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = D
   const runImmediately = config.runImmediately !== undefined ? config.runImmediately : DEFAULT_CONFIG.runImmediately;
   const verbose = config.verbose || false;
   
-  // Define retry interval (2 hours)
-  const retryIntervalMs = 2 * 60 * 60 * 1000;
+  // Get customizable retry interval from config (default to 2 hours if not specified)
+  const retryIntervalHours = appConfig.scheduler.leaderboardRetryIntervalHours || 2;
+  const retryIntervalMs = retryIntervalHours * 60 * 60 * 1000;
+  
+  console.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
   
   console.log(`Starting leaderboard scheduler to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
   console.log(`Configured leaderboard types: ${leaderboardTypes.join(', ')}`);
