@@ -1,7 +1,6 @@
 {
   "name": "BOI Badge",
-  "description": "Badge configuration for BOI NFT holders",
-  "projectName": "BOI",
+  "projectName": "boi",
   "badges": {
     "basic": {
       "tokens": [
@@ -33,13 +32,8 @@
     "endpoints": {
       "basic": "bois-club",
       "upgraded": "bad-bois"
-    },
-    "excludeBasicForUpgraded": true
+    }
   },
-  "scheduler": {
-    "badgeIntervalHours": 3,
-    "badgeRetryIntervalHours": 1
-  },
-  "walletMappingFile": "mappings/boi_wallet_mapping.json",
+  "excludeBasicForUpgraded": true,
   "sumOfBalances": false
 }

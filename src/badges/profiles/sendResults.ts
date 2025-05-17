@@ -2,37 +2,40 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import axios from 'axios';
+import { BadgeConfig } from '../../types/badge';
+import { RunOptions } from '../services/schedulerService';
 
 /**
  * Send results to the API endpoints
+ * @param badgeConfig The badge configuration
+ * @param apiKey The API key to use for authentication
  * @param data The data to send
  * @param options Options for sending results
  * @param options.dryRun If true, print JSON to console instead of sending to API
- * @param options.projectName The name of the project to use for API key selection
  * @returns Promise resolving to the API response
  */
-export async function sendResults(appConfig: any, apiKey: string,data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: { dryRun?: boolean, projectName?: string, exportAddresses?: boolean } = {}): Promise<any> {
+export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     console.log('Sending results to API...');
     
     // Check if project name is provided
-    if (!options.projectName) {
+    if (!badgeConfig.projectName) {
       throw new Error('Project name is required');
     }
     
     // Load project-specific configuration
-    console.log(`Loading configuration for project: ${options.projectName}`);
+    console.log(`Loading configuration for project: ${badgeConfig.projectName}`);
     
     // Get API endpoints from config
-    const API_BASE_URL = appConfig.api.baseUrl;
-    const BASIC_ENDPOINT = appConfig.api.endpoints.basic;
-    const UPGRADED_ENDPOINT = appConfig.api.endpoints.upgraded;
+    const API_BASE_URL = badgeConfig.api.baseUrl;
+    const BASIC_ENDPOINT = badgeConfig.api.endpoints.basic;
+    const UPGRADED_ENDPOINT = badgeConfig.api.endpoints.upgraded;
     
     // Check if basic badge holders should be excluded when they also have the upgraded badge
-    const EXCLUDE_BASIC_FOR_UPGRADED = appConfig.api.excludeBasicForUpgraded;
+    const EXCLUDE_BASIC_FOR_UPGRADED = badgeConfig.excludeBasicForUpgraded;
     
-    console.log(`Using API endpoints for project ${options.projectName}:`);
+    console.log(`Using API endpoints for project ${badgeConfig.projectName}:`);
     console.log(`- Base URL: ${API_BASE_URL}`);
     console.log(`- Basic endpoint: ${BASIC_ENDPOINT}`);
     console.log(`- Upgraded endpoint: ${UPGRADED_ENDPOINT}`);
@@ -46,7 +49,7 @@ export async function sendResults(appConfig: any, apiKey: string,data: { basicHo
     let basicHandles;
     if (EXCLUDE_BASIC_FOR_UPGRADED) {
       // Get permanent accounts from config
-      const permanentAccounts = appConfig.permanentAccounts || [];
+      const permanentAccounts = badgeConfig.permanentAccounts || [];
       const permanentAccountsSet = new Set(permanentAccounts.map((handle: string) => handle.toLowerCase()));
       
       // Exclude basic badge holders who also have the upgraded badge, but preserve permanent accounts
@@ -106,36 +109,36 @@ export async function sendResults(appConfig: any, apiKey: string,data: { basicHo
         }
         
         // Save basic badge holder wallet addresses
-        const basicAddressesFile = path.join(outputDir, `${options.projectName}_basic_wallet_addresses_${timestamp}.json`);
+        const basicAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_basic_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(basicAddressesFile, JSON.stringify({
           addresses: data.basicAddresses,
           count: data.basicAddresses.length,
           timestamp: data.timestamp,
           type: 'basic',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${data.basicAddresses.length} basic badge holder wallet addresses to ${basicAddressesFile}`);
         
         // Save upgraded badge holder wallet addresses
-        const upgradedAddressesFile = path.join(outputDir, `${options.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
+        const upgradedAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(upgradedAddressesFile, JSON.stringify({
           addresses: data.upgradedAddresses,
           count: data.upgradedAddresses.length,
           timestamp: data.timestamp,
           type: 'upgraded',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${data.upgradedAddresses.length} upgraded badge holder wallet addresses to ${upgradedAddressesFile}`);
         
         // Save all unique wallet addresses (combined)
         const allAddresses = [...new Set([...data.basicAddresses, ...data.upgradedAddresses])];
-        const allAddressesFile = path.join(outputDir, `${options.projectName}_all_wallet_addresses_${timestamp}.json`);
+        const allAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_all_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(allAddressesFile, JSON.stringify({
           addresses: allAddresses,
           count: allAddresses.length,
           timestamp: data.timestamp,
           type: 'all',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${allAddresses.length} total unique badge holder wallet addresses to ${allAddressesFile}`);
       }

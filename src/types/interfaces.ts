@@ -51,11 +51,6 @@ export interface NftConfig {
   minBalance: number;
 }
 
-export interface AppConfig {
-  tokens: TokenConfig[];
-  nfts: NftConfig[];
-}
-
 // Output interfaces
 export interface TwitterHandlesOutput {
   handles: string[];

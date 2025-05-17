@@ -1,12 +1,12 @@
 // Token Holder Profiles Fetcher
 import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
-import { loadAppConfig } from '../../utils/config';
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
 import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
 import { fetchTokenHoldersFromSnowtrace } from '../../api/snowtrace';
 import { formatTokenBalance, sleep } from '../../utils/helpers';
+import { AppConfig } from '../../utils/config';
 
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
@@ -352,14 +352,12 @@ async function combineNftHolders(
 /**
  * Main function to fetch token holder profiles
  */
-export async function fetchTokenHolderProfiles(projectName: string , verbose: boolean): Promise<HolderResults> {
-  // Load configuration using the project name
-  const appConfig = loadAppConfig(projectName);
-  console.log(`Fetching token holder profiles for project: ${projectName}`);
+export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: boolean): Promise<HolderResults> {
+  console.log(`Fetching token holder profiles for project: ${appConfig.projectName}`);
   
   // Get badge configurations with the project-specific config
-  const basicRequirements = appConfig.badges?.basic || { nfts: [], tokens: [] };
-  const upgradedRequirements = appConfig.badges?.upgraded || { nfts: [], tokens: [] };
+  const basicRequirements = appConfig.badgeConfig.badges?.basic || { nfts: [], tokens: [] };
+  const upgradedRequirements = appConfig.badgeConfig.badges?.upgraded || { nfts: [], tokens: [] };
   
   // Get NFT configurations
   const BASIC_NFT_CONFIG = basicRequirements.nfts && basicRequirements.nfts.length > 0 ? basicRequirements.nfts[0] : null;
@@ -412,8 +410,8 @@ export async function fetchTokenHolderProfiles(projectName: string , verbose: bo
   let PERMANENT_ACCOUNTS: string[] = [];
   try {
     // Get from project configuration
-    if (appConfig && appConfig.permanentAccounts && Array.isArray(appConfig.permanentAccounts)) {
-      PERMANENT_ACCOUNTS = appConfig.permanentAccounts;
+    if (appConfig && appConfig.badgeConfig.permanentAccounts && Array.isArray(appConfig.badgeConfig.permanentAccounts)) {
+      PERMANENT_ACCOUNTS = appConfig.badgeConfig.permanentAccounts;
       console.log(`Loaded ${PERMANENT_ACCOUNTS.length} permanent accounts from project config: ${PERMANENT_ACCOUNTS.join(', ')}`);
     } else {
       console.log('No permanent accounts found in project config');
@@ -423,14 +421,14 @@ export async function fetchTokenHolderProfiles(projectName: string , verbose: bo
   }
   
   // Check if sum of balances feature is enabled
-  const sumOfBalances = appConfig.sumOfBalances || appConfig.badges?.sumOfBalances || false;
+  const sumOfBalances = appConfig.badgeConfig.sumOfBalances || false;
   
   // Initialize wallet mapping variables
   let walletMapping: Record<string, string> = {};
   let handleToWallet: Record<string, string> = {};
   
   // Get wallet mapping file path from config (if it exists)
-  const walletMappingFile = appConfig.walletMappingFile || appConfig.badges?.walletMappingFile;
+  const walletMappingFile = appConfig.projectConfig.walletMappingFile;
   
   if (walletMappingFile) {
     if (sumOfBalances) {
@@ -439,7 +437,7 @@ export async function fetchTokenHolderProfiles(projectName: string , verbose: bo
       console.log(`Loading wallet mapping from ${walletMappingFile} for social profile matching...`);
     }
     
-    walletMapping = loadWalletMapping(walletMappingFile, projectName);
+    walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
     handleToWallet = getHandleToWalletMapping(walletMapping);
     console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
   } else {
@@ -744,7 +742,7 @@ export async function fetchTokenHolderProfiles(projectName: string , verbose: bo
     const upgradedSocialAddresses = upgradedHandlesAndAddresses.map(item => item.address);
     
     // Flag to control whether holders can be in both lists
-    const excludeBasicForUpgraded = appConfig.api?.excludeBasicForUpgraded === true;
+    const excludeBasicForUpgraded = appConfig.badgeConfig.excludeBasicForUpgraded === true;
     
     // If excludeBasicForUpgraded is true, remove upgraded badge holders from basic badge list
     // but NEVER remove permanent accounts

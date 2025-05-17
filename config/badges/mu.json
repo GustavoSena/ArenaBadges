@@ -1,7 +1,6 @@
 {
   "name": "Mu Pups Badge",
-  "description": "Badge configuration for Mu Pups NFT holders",
-  "projectName": "MU",
+  "projectName": "mu",
   "badges": {
     "basic": {
       "nfts": [
@@ -22,9 +21,7 @@
           "decimals": 18
         }
       ]
-    },
-    "sumOfBalances": true,
-    "walletMappingFile": "mappings/mu_wallet_mapping.json"
+    }
   },
   "excludedAccounts": [],
   "permanentAccounts": [
@@ -37,14 +34,8 @@
     "endpoints": {
       "basic": "mu-tier-1",
       "upgraded": "mu-tier-2"
-    },
-    "excludeBasicForUpgraded": false
+    }
   },
-  "scheduler": {
-    "badgeIntervalHours": 6,
-    "badgeRetryIntervalHours": 2,
-    "leaderboardIntervalHours": 3,
-    "enableLeaderboard": true,
-    "leaderboardRetryIntervalHours": 2
-  }
+  "excludeBasicForUpgraded": false,
+  "sumOfBalances": true
 }

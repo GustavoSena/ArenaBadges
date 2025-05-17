@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
-import { loadAppConfig } from '../../utils/config';
+import { AppConfig, loadAppConfig } from '../../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -48,20 +48,11 @@ enum ErrorType {
 
 // Interface for leaderboard scheduler configuration
 export interface LeaderboardSchedulerConfig {
-  leaderboardTypes?: LeaderboardType[];
-  intervalMs?: number;
   runImmediately?: boolean;
   onSchedule?: (nextRunTime: Date) => void;
   onRun?: () => void;
   verbose?: boolean;
 }
-
-// Default configuration
-const DEFAULT_CONFIG: LeaderboardSchedulerConfig = {
-  leaderboardTypes: [LeaderboardType.MU],
-  runImmediately: true,
-  verbose: false
-};
 
 /**
  * Generate a specific type of leaderboard
@@ -119,15 +110,10 @@ async function generateLeaderboard(type: LeaderboardType, verbose: boolean = fal
  * @param verbose Whether to log verbose output
  * @returns ErrorType if there was an error, undefined if successful
  */
-export async function runLeaderboardGeneration(types: LeaderboardType[], verbose: boolean = false): Promise<ErrorType | undefined> {
-  // Get the retry interval from config (will be used in error messages)
-  const appConfig = loadAppConfig();
-  const retryIntervalHours = appConfig.scheduler.leaderboardRetryIntervalHours || 2;
+export async function runLeaderboardGeneration(appConfig: AppConfig, verbose: boolean = false): Promise<ErrorType | undefined> {
+
   console.log(`Starting scheduled leaderboard generation at ${new Date().toISOString()}`);
-  
-  if (verbose) {
-    console.log(`Leaderboard types to generate: ${types.join(', ')}`);
-  }
+
   
   // Create a log entry for this run
   const logDir = path.join(process.cwd(), 'logs');
@@ -148,19 +134,10 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
   let hasRetryFailure = false;
   let hasAnySuccess = false;
   
-  // Generate each type of leaderboard
-  for (const type of types) {
+
     try {
       if (verbose) {
         console.log(`Starting generation for ${type} leaderboard...`);
-      }
-      
-      // If we've already encountered a retry failure, skip generating other leaderboards
-      // to ensure consistency across all leaderboard types
-      if (hasRetryFailure) {
-        console.log(`Skipping ${type} leaderboard generation due to previous retry failures`);
-        fs.appendFileSync(logFile, `Skipped ${type} leaderboard generation due to previous retry failures\n`);
-        continue;
       }
       
       await generateLeaderboard(type, verbose);
@@ -184,7 +161,7 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
       
       // Set the retry failure flag to prevent updating leaderboard files
       hasRetryFailure = true;
-    }
+    
   }
   
   fs.appendFileSync(logFile, `Leaderboard generation completed at ${new Date().toISOString()}\n`);
@@ -209,10 +186,7 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
  * Starts the leaderboard scheduler to run at specified intervals
  * @param config Configuration for the leaderboard scheduler
  */
-export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = DEFAULT_CONFIG): void {
-  // Load configuration from config file
-  const appConfig = loadAppConfig();
-  
+export function startLeaderboardScheduler(appConfig: AppConfig, config: LeaderboardSchedulerConfig ): void {  
   // Check if leaderboard generation is enabled
   const enableLeaderboard = appConfig.scheduler.enableLeaderboard !== undefined 
     ? appConfig.scheduler.enableLeaderboard 
@@ -224,7 +198,7 @@ export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = D
   }
   
   // Get configuration
-  const leaderboardTypes = config.leaderboardTypes || DEFAULT_CONFIG.leaderboardTypes || [];
+  const leaderboardTypes = config.leaderboardTypes || [];
   
   // If no leaderboard types are configured, don't start the scheduler
   if (leaderboardTypes.length === 0) {
@@ -234,7 +208,7 @@ export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = D
   
   const intervalHours = appConfig.scheduler.leaderboardIntervalHours || 3; // Default to 3 hours
   const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
-  const runImmediately = config.runImmediately !== undefined ? config.runImmediately : DEFAULT_CONFIG.runImmediately;
+  const runImmediately = config.runImmediately !== undefined ? config.runImmediately : false;
   const verbose = config.verbose || false;
   
   // Get customizable retry interval from config (default to 2 hours if not specified)

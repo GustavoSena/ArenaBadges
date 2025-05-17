@@ -1,17 +1,20 @@
 import { fetchTokenHolderProfiles } from '../profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../profiles/sendResults';
-import { loadProjectConfig } from '../utils/helpers';
+import { AppConfig } from '../../utils/config';
 
-interface SchedulerConfig {
-  intervalMs?: number;
-  apiKey?: string;
-  onSchedule?: (nextRunTime: Date) => void;
-  onRun?: () => void;
+
+export interface RunOptions {
   verbose?: boolean;
   dryRun?: boolean;
   runOnce?: boolean;
-  projectName?: string;
   exportAddresses?: boolean;
+}
+
+interface SchedulerConfig {
+  apiKey?: string;
+  onSchedule?: (nextRunTime: Date) => void;
+  onRun?: () => void;
+  runOptions: RunOptions;
 }
 
 // Define error types
@@ -25,15 +28,14 @@ export enum ErrorType {
  * @param apiKey API key for authentication
  * @param verbose Whether to show verbose logging
  * @param dryRun If true, print JSON to console instead of sending to API
- * @param projectName The name of the project to run
+ * @param exportAddresses If true, export addresses to a CSV file
  * @returns ErrorType if there was an error, undefined if successful
  */
-export async function runAndSendResults(apiKey: string, verbose: boolean = false, dryRun: boolean = false, projectName: string = 'default', exportAddresses: boolean = false): Promise<ErrorType | undefined> {
-  // Load the project configuration
-  const appConfig = loadProjectConfig(projectName);
+export async function runAndSendResults(appConfig: AppConfig, apiKey: string, runOptions: RunOptions): Promise<ErrorType | undefined> {
+
   
   // Get customizable retry interval from config (default to 2 hours if not specified)
-  const retryIntervalHours = appConfig.scheduler.retryIntervalHours || 2;
+  const retryIntervalHours = appConfig.projectConfig.scheduler.badgeRetryIntervalHours || 2;
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
@@ -41,8 +43,8 @@ export async function runAndSendResults(apiKey: string, verbose: boolean = false
     let results;
     try {
       // Pass the project name to fetchTokenHolderProfiles
-      console.log(`Fetching token holder profiles for project: ${projectName}`);
-      results = await fetchTokenHolderProfiles(projectName, verbose);
+      console.log(`Fetching token holder profiles for project: ${appConfig.projectName}`);
+      results = await fetchTokenHolderProfiles(appConfig, runOptions.verbose || false);
     } catch (fetchError) {
       // Check if this is a retry failure
       const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -63,22 +65,22 @@ export async function runAndSendResults(apiKey: string, verbose: boolean = false
       throw new Error('No basic badge holders found');
     }
     
-    if (verbose) {
+    if (runOptions.verbose) {
       console.log(`Fetched ${results.basicHolders.length} basic badge holders and ${results.upgradedHolders.length} upgraded badge holders`);
     }
     
     // Send the results to the API
     try {
-      if (dryRun) {
+      if (runOptions.dryRun) {
         console.log('Running in dry run mode - will print JSON instead of sending to API');
       }
-      await sendResults(appConfig, apiKey, {
+      await sendResults(appConfig.badgeConfig, apiKey, {
         basicHolders: results.basicHolders,
         upgradedHolders: results.upgradedHolders,
         basicAddresses: results.basicAddresses,
         upgradedAddresses: results.upgradedAddresses,
         timestamp: new Date().toISOString()
-      }, { dryRun, projectName, exportAddresses });
+      }, runOptions);
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -108,22 +110,20 @@ export async function runAndSendResults(apiKey: string, verbose: boolean = false
 /**
  * Starts the scheduler to run at specified intervals
  */
-export function startScheduler(config: SchedulerConfig): void {
+export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): void {
   // Load configuration
-  const projectName = config.projectName;
+  const projectName = appConfig.projectName;
   console.log(`Starting badge scheduler for project ${projectName}`);
-  const appConfig = loadProjectConfig(projectName);
   
   // Get configuration
-  const intervalHours = appConfig.scheduler.intervalHours;
-  const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
+  const intervalHours = appConfig.projectConfig.scheduler.badgeIntervalHours;
+  const intervalMs = intervalHours * 60 * 60 * 1000;
   const apiKey = config.apiKey;
-  const verbose = config.verbose || false;
-  const dryRun = config.dryRun || false;
-  const runOnce = config.runOnce || false;
+  const verbose = config.runOptions?.verbose || false;
+  const runOnce = config.runOptions?.runOnce || false;
   
   // Get customizable retry interval from config (default to 2 hours if not specified)
-  const retryIntervalHours = appConfig.scheduler.retryIntervalHours || 2;
+  const retryIntervalHours = appConfig.projectConfig.scheduler.badgeRetryIntervalHours || 2;
   const retryIntervalMs = retryIntervalHours * 60 * 60 * 1000;
   
   console.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
@@ -135,11 +135,11 @@ export function startScheduler(config: SchedulerConfig): void {
   console.log(`Starting scheduler for project '${projectName}' to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
   
   // Get API endpoint from config
-  const apiBaseUrl = appConfig.api.baseUrl;
+  const apiBaseUrl = appConfig.badgeConfig.api.baseUrl;
   console.log(`Using API base URL: ${apiBaseUrl}`);
-  console.log(`Basic endpoint: ${appConfig.api.endpoints.basic}`);
-  console.log(`Upgraded endpoint: ${appConfig.api.endpoints.upgraded}`);
-  console.log(`Include combined in NFT-only: ${appConfig.api.includeBasicForUpgraded ? 'Yes' : 'No'}`);
+  console.log(`Basic endpoint: ${appConfig.badgeConfig.api.endpoints.basic}`);
+  console.log(`Upgraded endpoint: ${appConfig.badgeConfig.api.endpoints.upgraded}`);
+  console.log(`Include combined in NFT-only: ${appConfig.badgeConfig.excludeBasicForUpgraded ? 'No' : 'Yes'}`);
   console.log(`Project name: ${projectName}`);
   
   // Variable to store the next scheduled timeout
@@ -170,7 +170,7 @@ export function startScheduler(config: SchedulerConfig): void {
       
       // Run the scheduled task with project name
       console.log(`Running scheduled task for project: ${projectName}`);
-      const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName, config.exportAddresses);
+      const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;
@@ -200,7 +200,7 @@ export function startScheduler(config: SchedulerConfig): void {
     
     // Run the scheduled task with project name
     console.log(`Running scheduled task for project: ${projectName}`);
-    const errorType = await runAndSendResults(apiKey, verbose, dryRun, projectName);
+    const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
     
     // Determine the next interval based on the result
     let nextIntervalMs = intervalMs;
