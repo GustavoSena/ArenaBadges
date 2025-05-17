@@ -42,9 +42,6 @@ const AVALANCHE_CHAIN_ID = '0xa86a';
 let currentKeyIndex = 0;
 let hasRotatedThroughAllKeys = false;
 
-// Initialize Moralis with the first key
-let isMoralisInitialized = false;
-
 /**
  * Get the current Moralis API key
  */

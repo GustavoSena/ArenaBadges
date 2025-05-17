@@ -67,8 +67,7 @@ export async function fetchTokenHoldersFromSnowtrace(
             if (typeof tokenDecimals === 'number') {
               balanceFormatted = formatTokenBalance(balance, tokenDecimals);
             } else {
-              // If tokenDecimals is not provided, try to parse the balance as a number
-              balanceFormatted = parseFloat(ethers.formatUnits(balance, 18)); // Default to 18 decimals
+              balanceFormatted = formatTokenBalance(balance);
             }
             
             // Only include holders with balance >= minBalance

@@ -100,9 +100,13 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
     if (data && data.length > 0) {
       return data[0];
     }
-    return null; // No profile found, but this is not an error
+    
+    return null;
   } catch (error) {
-    console.error(`Error fetching Arenabook profile for ${address}:`, error);
-    throw error; // Propagate the error to be handled by the caller
+    // Rethrow the error with address information
+    if (error instanceof Error) {
+      throw new Error(`${error.message} for address ${address}`);
+    }
+    throw error;
   }
 }

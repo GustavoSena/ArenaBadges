@@ -1,26 +1,7 @@
 // Send Results Module
-import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 import axios from 'axios';
-import { loadAppConfig } from '../../utils/config';
-
-// Load environment variables
-dotenv.config();
-
-// Parse the BADGE_KEYS environment variable
-let badgeKeys: { [key: string]: string } = {};
-let API_KEY: string | undefined;
-
-try {
-  if (process.env.BADGE_KEYS) {
-    badgeKeys = JSON.parse(process.env.BADGE_KEYS);
-  } else {
-    console.warn('BADGE_KEYS environment variable is not set');
-  }
-} catch (error) {
-  console.error('Error parsing BADGE_KEYS environment variable:', error);
-}
 
 /**
  * Send results to the API endpoints
@@ -30,7 +11,7 @@ try {
  * @param options.projectName The name of the project to use for API key selection
  * @returns Promise resolving to the API response
  */
-export async function sendResults(data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: { dryRun?: boolean, projectName?: string, exportAddresses?: boolean } = {}): Promise<any> {
+export async function sendResults(appConfig: any, apiKey: string,data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: { dryRun?: boolean, projectName?: string, exportAddresses?: boolean } = {}): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     console.log('Sending results to API...');
@@ -42,29 +23,22 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
     
     // Load project-specific configuration
     console.log(`Loading configuration for project: ${options.projectName}`);
-    const appConfig = loadAppConfig(options.projectName);
     
     // Get API endpoints from config
-    const API_BASE_URL = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
-    const BASIC_ENDPOINT = appConfig.api?.endpoints?.basic || 'mu-tier-1';
-    const UPGRADED_ENDPOINT = appConfig.api?.endpoints?.upgraded || 'mu-tier-2';
+    const API_BASE_URL = appConfig.api.baseUrl;
+    const BASIC_ENDPOINT = appConfig.api.endpoints.basic;
+    const UPGRADED_ENDPOINT = appConfig.api.endpoints.upgraded;
     
     // Check if basic badge holders should be excluded when they also have the upgraded badge
-    const EXCLUDE_BASIC_FOR_UPGRADED = appConfig.api?.excludeBasicForUpgraded === true; // Default to false if not specified
+    const EXCLUDE_BASIC_FOR_UPGRADED = appConfig.api.excludeBasicForUpgraded;
     
     console.log(`Using API endpoints for project ${options.projectName}:`);
     console.log(`- Base URL: ${API_BASE_URL}`);
     console.log(`- Basic endpoint: ${BASIC_ENDPOINT}`);
     console.log(`- Upgraded endpoint: ${UPGRADED_ENDPOINT}`);
     
-    // Get API key for the project
-    if (badgeKeys[options.projectName.toLowerCase()]) {
-      API_KEY = badgeKeys[options.projectName.toLowerCase()];
-    } else {
-      throw new Error(`No API key found for project: ${options.projectName}`);
-    }
     
-    if (!API_KEY) {
+    if (!apiKey) {
       throw new Error('API_KEY environment variable is not set');
     }
     
@@ -73,7 +47,7 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
     if (EXCLUDE_BASIC_FOR_UPGRADED) {
       // Get permanent accounts from config
       const permanentAccounts = appConfig.permanentAccounts || [];
-      const permanentAccountsSet = new Set(permanentAccounts.map(handle => handle.toLowerCase()));
+      const permanentAccountsSet = new Set(permanentAccounts.map((handle: string) => handle.toLowerCase()));
       
       // Exclude basic badge holders who also have the upgraded badge, but preserve permanent accounts
       const upgradedSet = new Set(data.upgradedHolders);
@@ -98,8 +72,8 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
     };
     
     // Construct endpoints with key as query parameter
-    const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${API_KEY}`;
-    const upgradedEndpoint = `${API_BASE_URL}/${UPGRADED_ENDPOINT}?key=${API_KEY}`;
+    const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${apiKey}`;
+    const upgradedEndpoint = `${API_BASE_URL}/${UPGRADED_ENDPOINT}?key=${apiKey}`;
     
     // Check if this is a dry run
     if (options.dryRun) {

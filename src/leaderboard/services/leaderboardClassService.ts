@@ -189,22 +189,6 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       verbose
     );
     
-    // Save social profiles to file for debugging
-    if (verbose) {
-      const socialProfilesJson = JSON.stringify(Array.from(socialProfiles.entries()), null, 2);
-      const socialProfilesDir = path.dirname(path.join(process.cwd(), 'output/social_profiles.json'));
-      
-      if (!fs.existsSync(socialProfilesDir)) {
-        fs.mkdirSync(socialProfilesDir, { recursive: true });
-      }
-      
-      fs.writeFileSync(
-        path.join(process.cwd(), 'output/social_profiles.json'),
-        socialProfilesJson
-      );
-      console.log(`Social profiles saved to ${path.join(process.cwd(), 'output/social_profiles.json')}`);
-    }
-    
     // Step 4: Filter to addresses with social profiles
     if (verbose) console.log('\nFiltering to addresses with social profiles...');
     

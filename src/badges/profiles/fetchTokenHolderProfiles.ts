@@ -1,8 +1,4 @@
 // Token Holder Profiles Fetcher
-import * as fs from 'fs';
-import * as path from 'path';
-import * as dotenv from 'dotenv';
-import { ethers } from 'ethers';
 import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
 import { loadAppConfig } from '../../utils/config';
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
@@ -10,9 +6,7 @@ import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
 import { fetchTokenHoldersFromSnowtrace } from '../../api/snowtrace';
-
-// Load environment variables
-dotenv.config();
+import { formatTokenBalance, sleep } from '../../utils/helpers';
 
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
@@ -20,9 +14,6 @@ export interface HolderResults {
   upgradedHolders: string[];
   basicAddresses: string[];
   upgradedAddresses: string[];
-  // Additional properties used in the API service
-  nftHolders?: string[];
-  combinedHolders?: string[];
 }
 
 // For backward compatibility, define the same interfaces
@@ -33,64 +24,15 @@ interface TokenConfig {
   minBalance: number;
 }
 
-// File paths
-const OUTPUT_DIR = path.join(process.cwd(), 'output');
-const NFT_HOLDERS_PATH = path.join(OUTPUT_DIR, 'nft_holders.json');
-const UPGRADED_HOLDERS_PATH = path.join(OUTPUT_DIR, 'upgraded_holders.json');
-
 // Constants
 const REQUEST_DELAY_MS = 500; // 500ms delay between requests
-
-// Constants for token balance mappings
-const TOKEN_SYMBOLS: { [key: string]: string } = {};
-const TOKEN_DECIMALS: { [key: string]: number } = {};
-
-// Get API keys from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-
-// Check if ALCHEMY_API_KEY is set
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
-}
-
-// Setup ethers provider
-const rpcProvider = "https://avax-mainnet.g.alchemy.com/v2/" + ALCHEMY_API_KEY;
-const provider = new ethers.JsonRpcProvider(rpcProvider);
-
-// ERC-721 ABI (minimal for balanceOf and ownerOf functions)
-const ERC721_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function ownerOf(uint256 tokenId) view returns (address)",
-  "function totalSupply() view returns (uint256)"
-];
-
-/**
- * Sleep function to introduce delay between API requests
- */
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Format token balance with proper decimals
- */
-function formatTokenBalance(balance: string, tokenAddress: string): number {
-  const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
-  return parseFloat(balance) / Math.pow(10, decimals);
-}
 
 /**
  * Check if a token balance meets the minimum requirement
  */
-function hasMinimumBalance(balance: string, minBalance: number, tokenAddress: string): boolean {
-  const formattedBalance = formatTokenBalance(balance, tokenAddress);
-  //console.log(`Comparing balance: ${balance} (formatted: ${formattedBalance}) with min: ${minBalance}`);
-  return formattedBalance >= minBalance;
+function hasMinimumBalance(balance: string, minBalance: number): boolean {
+  return formatTokenBalance(balance) >= minBalance;
 }
-
-// Moved to src/api/snowtrace.ts
-
-// Moved to src/api/blockchain.ts
-
-// fetchArenabookSocial is now imported from ../../api/arenabook
 
 /**
  * Helper function to combine token holders with the same Twitter handle
@@ -100,13 +42,12 @@ async function combineTokenHolders(
   walletMapping: Record<string, string>,
   handleToWallet: Record<string, string>,
   minBalance: number,
-  tokenAddress: string,
   sumOfBalances: boolean
 ): Promise<TokenHolder[]> {
   // If sumOfBalances is false, just return the original holders
   if (!sumOfBalances) {
     return holders.filter(holder => 
-      hasMinimumBalance(holder.balance, minBalance, tokenAddress)
+      hasMinimumBalance(holder.balance, minBalance)
     );
   }
   
@@ -114,7 +55,7 @@ async function combineTokenHolders(
   
   // Step 1: Identify holders with at least 50% of min balance
   const potentialHolders = holders.filter(holder => {
-    const formattedBalance = formatTokenBalance(holder.balance, tokenAddress);
+    const formattedBalance = formatTokenBalance(holder.balance);
     const requiredBalance = minBalance * 0.5;
     return formattedBalance >= requiredBalance;
   });
@@ -225,7 +166,7 @@ async function combineTokenHolders(
     
     if (holders.length === 1) {
       // If there's only one holder for this handle, just check if it meets the minimum
-      if (hasMinimumBalance(holders[0].balance, minBalance, tokenAddress)) {
+      if (hasMinimumBalance(holders[0].balance, minBalance)) {
         combinedHolders.push(holders[0]);
       }
       continue;
@@ -234,7 +175,7 @@ async function combineTokenHolders(
     // Combine balances
     let totalFormattedBalance = 0;
     for (const holder of holders) {
-      totalFormattedBalance += formatTokenBalance(holder.balance, tokenAddress);
+      totalFormattedBalance += formatTokenBalance(holder.balance);
     }
     
     // Check if the combined balance meets the minimum
@@ -243,8 +184,7 @@ async function combineTokenHolders(
       const combinedHolder = { ...holders[0] };
       combinedHolder.balanceFormatted = totalFormattedBalance;
       // Convert back to raw balance string
-      const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
-      combinedHolder.balance = (totalFormattedBalance * Math.pow(10, decimals)).toString();
+      combinedHolder.balance = (totalFormattedBalance * Math.pow(10, 18)).toString();
       
       console.log(`Combined ${holders.length} wallets for ${handle} with total balance: ${totalFormattedBalance}`);
       combinedHolders.push(combinedHolder);
@@ -412,23 +352,10 @@ async function combineNftHolders(
 /**
  * Main function to fetch token holder profiles
  */
-export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | boolean, verboseParam?: boolean): Promise<HolderResults> {
-  // Handle parameters - support both old and new function signatures
-  let projectName: string | undefined;
-  let verbose = false;
-  
-  if (typeof projectNameOrVerbose === 'boolean') {
-    // Old signature: fetchTokenHolderProfiles(verbose)
-    verbose = projectNameOrVerbose;
-  } else if (typeof projectNameOrVerbose === 'string') {
-    // New signature: fetchTokenHolderProfiles(projectName, verbose)
-    projectName = projectNameOrVerbose;
-    verbose = verboseParam || false;
-  }
-  
+export async function fetchTokenHolderProfiles(projectName: string , verbose: boolean): Promise<HolderResults> {
   // Load configuration using the project name
   const appConfig = loadAppConfig(projectName);
-  console.log(`Fetching token holder profiles for project: ${projectName || 'default'}`);
+  console.log(`Fetching token holder profiles for project: ${projectName}`);
   
   // Get badge configurations with the project-specific config
   const basicRequirements = appConfig.badges?.basic || { nfts: [], tokens: [] };
@@ -520,11 +447,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
   }
   
   try {
-    // Create output directory if it doesn't exist
-    if (!fs.existsSync(OUTPUT_DIR)) {
-      fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    }
-    
     // Fetch token holders first (since we'll filter by token balance before fetching social profiles)
     let tokenHolders: TokenHolder[] = [];
     
@@ -558,7 +480,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
               walletMapping,
               handleToWallet,
               basicBalance,
-              tokenAddress,
               sumOfBalances
             );
             console.log(`After combining, found ${basicTokenHolders.length} token holders meeting basic minimum balance`);
@@ -571,7 +492,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
               walletMapping,
               handleToWallet,
               upgradedBalance,
-              tokenAddress,
               sumOfBalances
             );
             console.log(`After combining, found ${upgradedTokenHolders.length} token holders meeting upgraded minimum balance`);
@@ -644,9 +564,7 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
         // Check each holder against the BASIC token balance requirement
         const qualifyingHolders = [];
         for (const holder of tokenHolders) {
-          const formattedBalance = formatTokenBalance(holder.balance, requiredToken.address);
-          const hasEnough = formattedBalance >= requiredBalance;
-          if (hasEnough) {
+          if (formatTokenBalance(holder.balance) >= requiredBalance) {
             qualifyingHolders.push(holder);
           }
         }
@@ -664,9 +582,7 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
         // Check each holder against the BASIC token balance requirement
         const qualifyingHolders = [];
         for (const holder of tokenHolders) {
-          const formattedBalance = formatTokenBalance(holder.balance, requiredToken.address);
-          const hasEnough = formattedBalance >= requiredBalance;
-          if (hasEnough) {
+          if (formatTokenBalance(holder.balance) >= requiredBalance) {
             qualifyingHolders.push(holder);
           }
         }
@@ -715,9 +631,7 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
         // Check each holder against the UPGRADED token balance requirement
         const qualifyingHolders = [];
         for (const holder of tokenHolders) {
-          const formattedBalance = formatTokenBalance(holder.balance, requiredToken.address);
-          const hasEnough = formattedBalance >= requiredBalance;
-          if (hasEnough) {
+          if (formatTokenBalance(holder.balance) >= requiredBalance) {
             qualifyingHolders.push(holder);
           }
         }
@@ -735,9 +649,7 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
         // Check each holder against the UPGRADED token balance requirement
         const qualifyingHolders = [];
         for (const holder of tokenHolders) {
-          const formattedBalance = formatTokenBalance(holder.balance, requiredToken.address);
-          const hasEnough = formattedBalance >= requiredBalance;
-          if (hasEnough) {
+          if (formatTokenBalance(holder.balance) >= requiredBalance) {
             qualifyingHolders.push(holder);
           }
         }
@@ -800,7 +712,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
       }),
       // Pass wallet mapping regardless of sumOfBalances setting
       walletMapping,
-      // Not verbose
       false
     );
     
@@ -857,16 +768,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
     // Add permanent accounts to both lists
     const finalBasicHandles = [...new Set([...filteredBasicHandles, ...PERMANENT_ACCOUNTS])];
     const finalUpgradedHandles = [...new Set([...upgradedHandles, ...PERMANENT_ACCOUNTS])];
-    
-    // Save basic badge results
-    const basicOutputData = { handles: finalBasicHandles };
-    fs.writeFileSync(NFT_HOLDERS_PATH, JSON.stringify(basicOutputData, null, 2), 'utf8');
-    console.log(`\nSaved ${finalBasicHandles.length} Twitter handles of basic badge holders`);
-    
-    // Save upgraded badge results
-    const upgradedOutputData = { handles: finalUpgradedHandles };
-    fs.writeFileSync(UPGRADED_HOLDERS_PATH, JSON.stringify(upgradedOutputData, null, 2), 'utf8');
-    console.log(`\nSaved ${finalUpgradedHandles.length} Twitter handles of upgraded badge holders`);
     
     // Log permanent accounts
     console.log("\nPermanent accounts added to both lists:", PERMANENT_ACCOUNTS.join(", "));

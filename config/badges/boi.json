@@ -36,6 +36,10 @@
     },
     "excludeBasicForUpgraded": true
   },
+  "scheduler": {
+    "badgeIntervalHours": 3,
+    "badgeRetryIntervalHours": 1
+  },
   "walletMappingFile": "mappings/boi_wallet_mapping.json",
   "sumOfBalances": false
 }

@@ -1,20 +1,11 @@
 import { loadAppConfig } from '../../utils/config';
 
-/**
- * Load the application configuration file
- * @returns The application configuration object
- * @deprecated Use loadTokensConfig instead which uses the new project-specific configuration system
- */
-export function loadConfig() {
-  console.warn('Warning: loadConfig is deprecated. Use loadTokensConfig instead.');
-  return loadTokensConfig();
-}
 
 /**
  * Load the tokens configuration file using the new project-specific configuration system
  * @returns The tokens configuration object
  */
-export function loadTokensConfig(projectId?: string) {
+export function loadProjectConfig(projectId?: string) {
   try {
     // Use the new project-specific configuration system
     const appConfig = loadAppConfig(projectId);
@@ -31,34 +22,18 @@ export function loadTokensConfig(projectId?: string) {
         retryIntervalHours: appConfig.scheduler?.badgeRetryIntervalHours || 2
       },
       api: { 
-        baseUrl: appConfig.api?.baseUrl || 'http://api.arena.social/badges',
+        baseUrl: appConfig.api.baseUrl,
         endpoints: {
-          nftOnly: appConfig.api?.endpoints?.basic || 'basic-tier',
-          combined: appConfig.api?.endpoints?.upgraded || 'upgraded-tier'
+          basic: appConfig.api.endpoints.basic,
+          upgraded: appConfig.api.endpoints.upgraded
         },
-        includeCombinedInNft: appConfig.api?.excludeBasicForUpgraded === undefined ? true : !appConfig.api.excludeBasicForUpgraded
+        includeBasicForUpgraded: appConfig.api.excludeBasicForUpgraded === undefined ? true : !appConfig.api.excludeBasicForUpgraded
       },
       nfts: appConfig.badges?.basic?.nfts || [],
       tokens: appConfig.badges?.basic?.tokens || []
     };
   } catch (error) {
     console.error('Error loading project config:', error);
-    return { 
-      scheduler: {
-        intervalHours: 6,
-        leaderboardIntervalHours: 3,
-        retryIntervalHours: 2
-      },
-      api: { 
-        baseUrl: 'http://api.arena.social/badges',
-        endpoints: {
-          nftOnly: 'basic-tier',
-          combined: 'upgraded-tier'
-        },
-        includeCombinedInNft: true
-      },
-      nfts: [],
-      tokens: []
-    };
+    throw error;
   }
 }

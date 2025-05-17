@@ -92,6 +92,7 @@ async function runProject(
   exportAddresses: boolean = false
 ) {
   try {
+
     console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
     
     // Check if project configurations exist

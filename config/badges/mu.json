@@ -39,5 +39,12 @@
       "upgraded": "mu-tier-2"
     },
     "excludeBasicForUpgraded": false
+  },
+  "scheduler": {
+    "badgeIntervalHours": 6,
+    "badgeRetryIntervalHours": 2,
+    "leaderboardIntervalHours": 3,
+    "enableLeaderboard": true,
+    "leaderboardRetryIntervalHours": 2
   }
 }

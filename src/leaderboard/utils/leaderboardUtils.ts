@@ -1,44 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ethers } from 'ethers';
-import * as dotenv from 'dotenv';
 
 import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
-import { LeaderboardConfig, HolderPoints, Leaderboard } from '../../types/leaderboard';
-import { fetchNftHoldersFromEthers } from '../../api/blockchain';
-import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
+import { Leaderboard } from '../../types/leaderboard';
 import { processHoldersWithSocials } from '../../services/socialProfiles';
-import { formatTokenBalance, sleep } from '../../utils/helpers';
 import { fetchArenabookSocial } from '../../api/arenabook';
-
-// Load environment variables
-dotenv.config();
-
-// Get API key from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching token balances.');
-}
-
-// Avalanche RPC URL using Alchemy API key
-const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-
-// Setup ethers provider for Avalanche
-const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
-
-// ERC-20 ABI (minimal for balanceOf function)
-const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)"
-];
-
-// Moved to src/api/blockchain.ts
-
-// Moved to src/api/blockchain.ts
-
-// Moved to src/api/blockchain.ts
 
 /**
  * Process eligible addresses to get social profiles
@@ -88,22 +54,6 @@ export async function processSocialProfiles(
       walletMapping,
       verbose
     );
-    
-    // Save social profiles to file for debugging
-    if (verbose) {
-      const socialProfilesJson = JSON.stringify(Array.from(socialProfiles.entries()), null, 2);
-      const socialProfilesDir = path.dirname(path.join(process.cwd(), 'output/social_profiles.json'));
-      
-      if (!fs.existsSync(socialProfilesDir)) {
-        fs.mkdirSync(socialProfilesDir, { recursive: true });
-      }
-      
-      fs.writeFileSync(
-        path.join(process.cwd(), 'output/social_profiles.json'),
-        socialProfilesJson
-      );
-      console.log(`Social profiles saved to ${path.join(process.cwd(), 'output/social_profiles.json')}`);
-    }
     
     return socialProfiles;
   } catch (error) {
