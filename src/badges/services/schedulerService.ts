@@ -1,8 +1,6 @@
 import { fetchTokenHolderProfiles } from '../profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../profiles/sendResults';
 import { loadTokensConfig } from '../utils/helpers';
-import * as fs from 'fs';
-import * as path from 'path';
 
 interface SchedulerConfig {
   intervalMs?: number;

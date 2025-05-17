@@ -35,5 +35,7 @@
       "upgraded": "bad-bois"
     },
     "excludeBasicForUpgraded": true
-  }
+  },
+  "walletMappingFile": "mappings/boi_wallet_mapping.json",
+  "sumOfBalances": false
 }

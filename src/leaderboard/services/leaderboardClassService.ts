@@ -3,16 +3,29 @@ import * as path from 'path';
 import { ethers } from 'ethers';
 import * as dotenv from 'dotenv';
 
-import { TokenHolder, NftHolder } from '../../types/interfaces';
+import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
 import { LeaderboardConfig, HolderPoints, Leaderboard } from '../../types/leaderboard';
 import { BaseLeaderboard } from '../../types/leaderboardClasses';
-import { MuLeaderboard } from '../../implementations/leaderboards/muLeaderboard';
-import { StandardLeaderboard } from '../../implementations/leaderboards/standardLeaderboard';
-import { fetchNftHoldersFromEthers, fetchNftHoldersWithoutTotalSupply } from '../../api/blockchain';
-import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
-import { processHoldersWithSocials, SocialProfileInfo } from '../../services/socialProfiles';
+import { MuLeaderboard } from '../implementations/muLeaderboard';
+import { StandardLeaderboard } from '../implementations/standardLeaderboard';
+import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
-import { formatTokenBalance, sleep } from '../../utils/helpers';
+
+// Import from API modules
+import {
+  fetchNftHoldersWithoutTotalSupply,
+  fetchTokenBalancesWithEthers
+} from '../../api/blockchain';
+
+// Import shared utility functions
+import {
+  saveLeaderboard,
+  combineTokenHoldersByHandle,
+  combineNftHoldersByHandle
+} from '../utils/leaderboardUtils';
+import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
+import { fetchTwitterProfilePicture } from '../../api/arenabook';
+import { sleep } from '../../utils/helpers';
 
 // Load environment variables
 dotenv.config();
@@ -29,184 +42,6 @@ const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_K
 
 // Setup ethers provider for Avalanche
 const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
-
-// ERC-20 ABI (minimal for balanceOf function)
-const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)"
-];
-
-/**
- * Load the leaderboard configuration
- */
-export function loadLeaderboardConfig(): LeaderboardConfig {
-  try {
-    const configPath = path.join(__dirname, '../../config/leaderboard.json');
-    const configData = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(configData) as LeaderboardConfig;
-  } catch (error) {
-    console.error('Error loading leaderboard config:', error);
-    throw new Error('Failed to load leaderboard configuration');
-  }
-}
-
-/**
- * Fetch token balance for a specific address using ethers.js
- */
-async function fetchTokenBalanceWithEthers(
-  tokenAddress: string,
-  holderAddress: string,
-  tokenDecimals: number,
-  verbose: boolean = false
-): Promise<number> {
-  const MAX_RETRIES = 3;
-  let retryCount = 0;
-  let lastError: any = null;
-
-  while (retryCount <= MAX_RETRIES) {
-    try {
-      // Create contract instance
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-      
-      // Get balance
-      const balance = await tokenContract.balanceOf(holderAddress);
-      
-      // Convert to formatted balance using our safe formatter
-      return formatTokenBalance(balance.toString(), tokenDecimals);
-    } catch (error) {
-      lastError = error;
-      retryCount++;
-      
-      if (retryCount <= MAX_RETRIES) {
-        // Calculate backoff time: 500ms, 1000ms, 2000ms, etc.
-        const backoffTime = 500 * Math.pow(2, retryCount - 1);
-        
-        if (verbose) {
-          console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
-        }
-        
-        // Wait before retrying with exponential backoff
-        await sleep(backoffTime);
-      } else {
-        console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
-      }
-    }
-  }
-  
-  // If all retries failed, return 0
-  return 0;
-}
-
-/**
- * Fetch token balances for multiple addresses using ethers.js
- */
-async function fetchTokenBalancesWithEthers(
-  tokenAddress: string,
-  tokenSymbol: string,
-  holderAddresses: string[],
-  tokenDecimals: number,
-  verbose: boolean = false
-): Promise<TokenHolder[]> {
-  const holders: TokenHolder[] = [];
-  let processedCount = 0;
-  
-  if (verbose) console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
-  
-  // Process in batches to avoid rate limiting
-  const batchSize = 10;
-  const MAX_BATCH_RETRIES = 2; // Max retries for entire batch failures
-  
-  for (let i = 0; i < holderAddresses.length; i += batchSize) {
-    const batch = holderAddresses.slice(i, i + batchSize);
-    let batchRetries = 0;
-    let batchSuccess = false;
-    
-    while (!batchSuccess && batchRetries <= MAX_BATCH_RETRIES) {
-      try {
-        const batchPromises = batch.map(async (address) => {
-          // Individual address balance fetching with retries is handled in fetchTokenBalanceWithEthers
-          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals, verbose);
-          
-          return {
-            address,
-            balance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
-            balanceFormatted: balance,
-            tokenSymbol
-          };
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        holders.push(...batchResults);
-        batchSuccess = true;
-      } catch (error) {
-        batchRetries++;
-        if (batchRetries <= MAX_BATCH_RETRIES) {
-          console.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
-          // Exponential backoff for batch retries
-          const batchBackoffTime = 1000 * Math.pow(2, batchRetries - 1);
-          if (verbose) console.log(`Retrying batch after ${batchBackoffTime}ms...`);
-          await sleep(batchBackoffTime);
-        } else {
-          console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
-          // Add empty results for this batch to maintain address count
-          const emptyResults = batch.map(address => ({
-            address,
-            balance: "0",
-            balanceFormatted: 0,
-            tokenSymbol
-          }));
-          holders.push(...emptyResults);
-        }
-      }
-    }
-    
-    processedCount += batch.length;
-    if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
-      if (verbose) console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
-    }
-    
-    // Add delay between batches to avoid rate limiting
-    if (i + batchSize < holderAddresses.length) {
-      const batchDelayTime = 500; // Base delay between batches
-      if (verbose) console.log(`Waiting ${batchDelayTime}ms before next batch...`);
-      await sleep(batchDelayTime);
-    }
-  }
-  
-  // Count non-zero balances for logging
-  const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
-  if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
-  
-  return holders;
-}
-
-/**
- * Process holders with socials
- * @param eligibleAddressesArray Array of eligible addresses
- * @param outputPath Path to save the output
- * @param processingName Name of the processing
- * @param verbose Whether to show verbose logs
- * @returns Map of addresses to social info
- */
-async function processHoldersWithSocialsWrapper(
-  eligibleAddressesArray: { address: string }[],
-  outputPath: string,
-  processingName: string,
-  verbose: boolean = false
-): Promise<Map<string, SocialProfileInfo>> {
-  return processHoldersWithSocials(
-    eligibleAddressesArray,
-    outputPath,
-    processingName,
-    (holder, social) => ({
-      address: holder.address,
-      twitter_handle: social?.twitter_handle || null,
-      twitter_pfp_url: social?.twitter_pfp_url || null
-    }),
-    verbose
-  );
-}
 
 /**
  * Safely get weights from leaderboard config, handling undefined values
@@ -280,29 +115,16 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     for (const tokenWeight of leaderboardConfig.weights.tokens) {
       if (verbose) console.log(`Fetching ${tokenWeight.symbol} token holders...`);
       
-      // Calculate dynamic minimum balance for this token
+      // Calculate minimum balance for this token
       let minBalance = tokenWeight.minBalance;
       
-      // For tokens with dynamic minimum balances, calculate the correct value
-      if (leaderboard instanceof MuLeaderboard && tokenWeight.minBalance === 0) {
-        switch (tokenWeight.symbol) {
-          case 'MU':
-            minBalance = 100;
-            break;
-          case 'MUG':
-            minBalance = 100 / mugMuPrice;
-            break;
-          case 'MUO':
-            minBalance = 100 / (1.1 * mugMuPrice);
-            break;
-          case 'MUV':
-            minBalance = 100 / (10 * 1.1 * mugMuPrice);
-            break;
-        }
-        
-        if (verbose) {
-          console.log(`Using dynamic minimum balance for ${tokenWeight.symbol}: ${minBalance}`);
-        }
+      // For MU leaderboard, use dynamic minimum balance calculation
+      if (leaderboard instanceof MuLeaderboard) {
+        minBalance = await leaderboard.calculateDynamicMinimumBalance(
+          tokenWeight.symbol,
+          tokenWeight.minBalance,
+          verbose
+        );
       }
       
       // Fetch token holders directly from Moralis with minimum balance filter
@@ -322,20 +144,48 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       }
     }
     
-    if (verbose) console.log(`\nTotal eligible addresses: ${eligibleAddresses.size}`);
-    else console.log(`Total eligible addresses: ${eligibleAddresses.size}`);
-    
-    // Step 3: Fetch social profiles for eligible addresses
-    if (verbose) console.log('\nFetching social profiles for eligible addresses...');
+    console.log(`\nTotal eligible addresses: ${eligibleAddresses.size}`);
     
     // Convert eligible addresses to array
     const eligibleAddressesArray = Array.from(eligibleAddresses);
     
+    // Extract project name from the leaderboard instance
+    let projectName = '';
+    if (leaderboard instanceof MuLeaderboard) {
+      projectName = 'mu';
+    } else {
+      // For other leaderboard types, extract from the output file name
+      const outputFileName = leaderboard.getOutputFileName();
+      projectName = outputFileName.split('_')[0];
+    }
+    
+    if (verbose) console.log(`Loading wallet mapping from mappings/${projectName}_wallet_mapping.json for social profile matching...`);
+    
+    let walletMapping: Record<string, string> = {};
+    const walletMappingPath = path.join(process.cwd(), `config/mappings/${projectName}_wallet_mapping.json`);
+    
+    if (fs.existsSync(walletMappingPath)) {
+      if (verbose) console.log(`Loading wallet mapping from path: ${walletMappingPath}`);
+      try {
+        const walletMappingData = fs.readFileSync(walletMappingPath, 'utf8');
+        walletMapping = JSON.parse(walletMappingData);
+        if (verbose) console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
+      } catch (error) {
+        console.error(`Error loading wallet mapping from ${walletMappingPath}:`, error);
+      }
+    } else if (verbose) {
+      console.log(`No wallet mapping file found at ${walletMappingPath}`);
+    }
+    
     // Process holders with socials
-    const socialProfiles = await processHoldersWithSocialsWrapper(
+    const socialProfiles = await processHoldersWithSocials(
       eligibleAddressesArray.map(address => ({ address })),
-      path.join(process.cwd(), 'output/social_profiles.json'),
-      'Eligible Holders',
+      (holder: { address: string }, social: ArenabookUserResponse | null) => ({
+        address: holder.address,
+        twitter_handle: social?.twitter_handle || null,
+        twitter_pfp_url: social?.twitter_pfp_url || null
+      }),
+      walletMapping,
       verbose
     );
     
@@ -387,6 +237,20 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       }
     }
     
+    // Check if sumOfBalances is enabled in the configuration
+    const sumOfBalances = leaderboardConfig.sumOfBalances;
+    if (verbose && sumOfBalances) {
+      console.log('\nWallet combining is enabled (sumOfBalances=true)');
+    }
+    
+    // Create a mapping of Twitter handles to wallet addresses
+    const handleToWallet: Record<string, string> = {};
+    for (const [address, social] of socialProfiles.entries()) {
+      if (social.twitter_handle) {
+        handleToWallet[social.twitter_handle.toLowerCase()] = address.toLowerCase();
+      }
+    }
+    
     // Step 6: Calculate token points
     if (verbose) console.log('\nCalculating token points...');
     
@@ -397,13 +261,34 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       const addressesToCheck = Array.from(addressesWithSocial);
       
       // Fetch token balances for addresses with social profiles
-      const tokenHolders = await fetchTokenBalancesWithEthers(
+      let tokenHolders = await fetchTokenBalancesWithEthers(
         tokenWeight.address,
         tokenWeight.symbol,
         addressesToCheck,
         tokenWeight.decimals || 18,
         verbose
       );
+      
+      // Combine token holders by Twitter handle if sumOfBalances is enabled
+      if (sumOfBalances) {
+        if (verbose) console.log(`Combining token holders by Twitter handle for ${tokenWeight.symbol}...`);
+        
+        // Maps to store Twitter handle information
+        const addressToTwitterHandle = new Map<string, string>();
+        const combinedAddressesMap = new Map<string, string[]>();
+        
+        // Combine token holders by Twitter handle
+        tokenHolders = await combineTokenHoldersByHandle(
+          tokenHolders,
+          walletMapping,
+          sumOfBalances,
+          addressToTwitterHandle,
+          combinedAddressesMap,
+          verbose
+        );
+        
+        if (verbose) console.log(`After combining, found ${tokenHolders.length} ${tokenWeight.symbol} token holders`);
+      }
       
       // Process token holders and calculate points
       for (const holder of tokenHolders) {
@@ -435,7 +320,30 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       if (verbose) console.log(`\nCalculating points for ${nftWeight.name}...`);
       
       // Get the cached NFT holders
-      const nftHolders = nftHoldersByName.get(nftWeight.name) || [];
+      let nftHolders = nftHoldersByName.get(nftWeight.name) || [];
+      
+      // Combine NFT holders by Twitter handle if sumOfBalances is enabled
+      if (sumOfBalances) {
+        if (verbose) console.log(`Combining NFT holders by Twitter handle for ${nftWeight.name}...`);
+        
+        // Maps to store Twitter handle information
+        const twitterHandleMap = new Map<string, string>();
+        const combinedAddressesMap = new Map<string, string[]>();
+        
+        // Combine NFT holders by Twitter handle
+        nftHolders = await combineNftHoldersByHandle(
+          nftHolders,
+          walletMapping,
+          handleToWallet,
+          nftWeight.minBalance || 0,
+          sumOfBalances,
+          twitterHandleMap,
+          combinedAddressesMap,
+          verbose
+        );
+        
+        if (verbose) console.log(`After combining, found ${nftHolders.length} ${nftWeight.name} NFT holders`);
+      }
       
       // Process NFT holders and calculate points
       for (const holder of nftHolders) {
@@ -481,24 +389,62 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
   }
 }
 
+
 /**
- * Save the leaderboard to a file
+ * Fetch Twitter profile pictures for leaderboard entries that don't have one
+ * @param leaderboard The leaderboard to update
+ * @param verbose Whether to log verbose output
+ * @returns The updated leaderboard
  */
-export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): void {
-  try {
-    // Ensure the directory exists
-    const outputDir = path.dirname(outputPath);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard, verbose: boolean = false): Promise<Leaderboard> {
+  if (verbose) console.log('\nFetching Twitter profile pictures for leaderboard entries...');
+  
+  let updatedCount = 0;
+  const batchSize = 10;
+  
+  // Process entries in batches to avoid rate limiting
+  for (let i = 0; i < leaderboard.entries.length; i += batchSize) {
+    const batch = leaderboard.entries.slice(i, i + batchSize);
+    const batchPromises = [];
+    
+    for (const entry of batch) {
+      // Only process entries that have a Twitter handle but no profile picture
+      if (entry.twitterHandle && !entry.profileImageUrl) {
+        batchPromises.push((async () => {
+          try {
+            if (verbose) console.log(`Fetching profile picture for ${entry.twitterHandle}...`);
+            const profilePicture = await fetchTwitterProfilePicture(entry.twitterHandle);
+            
+            if (profilePicture) {
+              entry.profileImageUrl = profilePicture;
+              updatedCount++;
+              if (verbose) console.log(`Found profile picture for ${entry.twitterHandle}`);
+            } else if (verbose) {
+              console.log(`No profile picture found for ${entry.twitterHandle}`);
+            }
+          } catch (error) {
+            console.error(`Error fetching profile picture for ${entry.twitterHandle}:`, error);
+          }
+        })());
+      }
     }
     
-    // Save the leaderboard to a file
-    fs.writeFileSync(outputPath, JSON.stringify(leaderboard, null, 2));
-    console.log(`Leaderboard saved to ${outputPath}`);
-  } catch (error) {
-    console.error('Error saving leaderboard:', error);
-    throw error;
+    // Wait for all promises in the batch to complete
+    await Promise.all(batchPromises);
+    
+    // Log progress
+    if (verbose && i + batchSize < leaderboard.entries.length) {
+      console.log(`Processed ${i + batchSize} of ${leaderboard.entries.length} entries (${updatedCount} profile pictures added)`);
+    }
+    
+    // Add a small delay between batches to avoid rate limiting
+    if (i + batchSize < leaderboard.entries.length) {
+      await sleep(500);
+    }
   }
+  
+  console.log(`Added ${updatedCount} Twitter profile pictures to leaderboard entries`);
+  return leaderboard;
 }
 
 /**
@@ -514,12 +460,7 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
     // Create MuLeaderboard instance
     const muLeaderboard = new MuLeaderboard(provider);
     
-    // Calculate holder points
-    if (verbose) {
-      console.log('Calculating holder points using MuLeaderboard implementation...');
-    } else {
       console.log('Calculating holder points...');
-    }
     
     const holderPoints = await calculateHolderPoints(muLeaderboard, verbose);
     
@@ -530,18 +471,16 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
       console.log('Loaded MU leaderboard configuration');
     }
     
-    // Generate leaderboard - include all entries (pass 0 for maxEntries)
-    if (verbose) {
-      console.log('Generating MU leaderboard...');
-    } else {
-      console.log('Generating leaderboard...');
-    }
+    console.log('Generating leaderboard...');
     
     const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, 0);
     
     if (verbose) {
       console.log(`Generated MU leaderboard with ${leaderboard.entries.length} entries`);
     }
+    
+    // Fetch Twitter profile pictures for entries that don't have one
+    await fetchProfilePicturesForLeaderboard(leaderboard, verbose);
     
     // Create output directory if it doesn't exist
     const outputDir = path.join(process.cwd(), 'output', 'leaderboards');
@@ -640,6 +579,9 @@ export async function generateAndSaveStandardLeaderboard(verbose: boolean = fals
     if (verbose) {
       console.log(`Generated standard leaderboard with ${leaderboard.entries.length} entries`);
     }
+    
+    // Fetch Twitter profile pictures for entries that don't have one
+    await fetchProfilePicturesForLeaderboard(leaderboard, verbose);
     
     // Create output directory if it doesn't exist
     const outputDir = path.join(process.cwd(), 'output', 'leaderboards');

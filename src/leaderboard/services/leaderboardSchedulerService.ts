@@ -56,14 +56,6 @@ export interface LeaderboardSchedulerConfig {
   verbose?: boolean;
 }
 
-// Interface for the scheduler configuration from config file
-interface SchedulerConfig {
-  badgeIntervalHours: number;
-  enableLeaderboard: boolean;
-  leaderboardIntervalHours: number;
-  leaderboardTypes: string[];
-}
-
 // Default configuration
 const DEFAULT_CONFIG: LeaderboardSchedulerConfig = {
   leaderboardTypes: [LeaderboardType.MU],
@@ -220,7 +212,6 @@ export async function runLeaderboardGeneration(types: LeaderboardType[], verbose
 export function startLeaderboardScheduler(config: LeaderboardSchedulerConfig = DEFAULT_CONFIG): void {
   // Load configuration from config file
   const appConfig = loadAppConfig();
-  const schedulerConfig: SchedulerConfig = appConfig.scheduler || { intervalHours: 24 };
   
   // Check if leaderboard generation is enabled
   const enableLeaderboard = appConfig.scheduler.enableLeaderboard !== undefined 

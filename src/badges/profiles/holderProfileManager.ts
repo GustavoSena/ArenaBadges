@@ -9,7 +9,6 @@ dotenv.config();
 
 // File paths
 const OUTPUT_DIR = path.join(process.cwd(), 'output');
-const PROFILES_PATH = path.join(OUTPUT_DIR, 'holder_profiles.json');
 
 /**
  * Ensure the output directory exists
@@ -42,13 +41,21 @@ export async function fetchAndSaveHolderProfiles(): Promise<HolderResults> {
     const results = await fetchTokenHolderProfiles();
     
     // Save results to files
-    const nftOutputData = { handles: results.nftHolders };
-    saveToJsonFile(nftOutputData, path.join(OUTPUT_DIR, 'nft_holders.json'));
-    console.log(`Saved ${results.nftHolders.length} NFT-only holder Twitter handles to ${path.join(OUTPUT_DIR, 'nft_holders.json')}`);
+    if (results.nftHolders && results.nftHolders.length > 0) {
+      const nftOutputData = { handles: results.nftHolders };
+      saveToJsonFile(nftOutputData, path.join(OUTPUT_DIR, 'nft_holders.json'));
+      console.log(`Saved ${results.nftHolders.length} NFT-only holder Twitter handles to ${path.join(OUTPUT_DIR, 'nft_holders.json')}`);
+    } else {
+      console.log('No NFT holders to save.');
+    }
     
-    const combinedOutputData = { handles: results.combinedHolders };
-    saveToJsonFile(combinedOutputData, path.join(OUTPUT_DIR, 'combined_holders.json'));
-    console.log(`Saved ${results.combinedHolders.length} combined holder Twitter handles to ${path.join(OUTPUT_DIR, 'combined_holders.json')}`);
+    if (results.combinedHolders && results.combinedHolders.length > 0) {
+      const combinedOutputData = { handles: results.combinedHolders };
+      saveToJsonFile(combinedOutputData, path.join(OUTPUT_DIR, 'combined_holders.json'));
+      console.log(`Saved ${results.combinedHolders.length} combined holder Twitter handles to ${path.join(OUTPUT_DIR, 'combined_holders.json')}`);
+    } else {
+      console.log('No combined holders to save.');
+    }
     
     return results;
   } catch (error) {

@@ -1,8 +1,6 @@
 import { TokenHolder, NftHolder } from './interfaces';
 import { Leaderboard, LeaderboardEntry, HolderPoints, LeaderboardConfig } from './leaderboard';
 import { ethers } from 'ethers';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * Interface for excluded accounts configuration

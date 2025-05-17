@@ -40,6 +40,8 @@
       {
         "name": "Mu Pups",
         "weight": 20,
+        "pointsPerToken": 20,
+        "minBalance": 1,
         "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0"
       }
     ]
@@ -85,5 +87,7 @@
       }
     ]
   },
-  "excludedAccounts": ["mucoinofficial"]
+  "excludedAccounts": ["mucoinofficial"],
+  "sumOfBalances": true,
+  "walletMappingFile": "mappings/mu_wallet_mapping.json"
 }

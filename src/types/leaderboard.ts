@@ -1,5 +1,3 @@
-import { TokenHolder, NftHolder } from './interfaces';
-
 export interface LeaderboardConfig {
   weights: {
     tokens: TokenWeight[];
@@ -9,6 +7,8 @@ export interface LeaderboardConfig {
   excludedAccounts?: string[];
   title?: string;
   description?: string;
+  sumOfBalances?: boolean;
+  walletMappingFile?: string;
 }
 
 export interface TokenWeight {

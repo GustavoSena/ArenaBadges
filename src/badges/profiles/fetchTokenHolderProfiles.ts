@@ -3,11 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
-import axios from 'axios';
-import { sleep as sleepUtil } from '../../utils/helpers';
-import { TokenHolder, NftHolder } from '../../types/interfaces';
-import { SocialProfileInfo } from '../../services/socialProfiles';
+import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
 import { loadAppConfig } from '../../utils/config';
+import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
+import { processHoldersWithSocials } from '../../services/socialProfiles';
+import { fetchArenabookSocial } from '../../api/arenabook';
+import { fetchNftHoldersFromEthers } from '../../api/blockchain';
+import { fetchTokenHoldersFromSnowtrace } from '../../api/snowtrace';
 
 // Load environment variables
 dotenv.config();
@@ -18,15 +20,10 @@ export interface HolderResults {
   upgradedHolders: string[];
   basicAddresses: string[];
   upgradedAddresses: string[];
+  // Additional properties used in the API service
+  nftHolders?: string[];
+  combinedHolders?: string[];
 }
-
-// Configuration will be loaded when the function is called with the project name
-
-// Permanent accounts are now loaded from project configuration
-
-// Flag to control whether holders can be in both lists
-// If false, upgraded badge holders will be removed from the NFT-only list
-const ALLOW_DUPLICATE_HOLDERS = true;
 
 // For backward compatibility, define the same interfaces
 interface TokenConfig {
@@ -36,40 +33,15 @@ interface TokenConfig {
   minBalance: number;
 }
 
-interface NftConfig {
-  address: string;
-  name: string;
-  minBalance: number;
-  collectionSize?: number;
-}
-
-// Badge configurations will be loaded in the function
-
-// Define types
-interface ArenabookUserResponse {
-  twitter_username: string | null;
-  twitter_handle: string | null;
-}
-
-interface HolderWithSocial extends TokenHolder {
-  twitter_handle: string | null;
-}
-
-interface NftHolderWithSocial extends NftHolder {
-  twitter_handle: string | null;
-}
-
 // File paths
 const OUTPUT_DIR = path.join(process.cwd(), 'output');
 const NFT_HOLDERS_PATH = path.join(OUTPUT_DIR, 'nft_holders.json');
 const UPGRADED_HOLDERS_PATH = path.join(OUTPUT_DIR, 'upgraded_holders.json');
 
 // Constants
-const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
 const REQUEST_DELAY_MS = 500; // 500ms delay between requests
 
 // Constants for token balance mappings
-const MIN_TOKEN_BALANCES: { [key: string]: number } = {};
 const TOKEN_SYMBOLS: { [key: string]: string } = {};
 const TOKEN_DECIMALS: { [key: string]: number } = {};
 
@@ -110,432 +82,332 @@ function formatTokenBalance(balance: string, tokenAddress: string): number {
  */
 function hasMinimumBalance(balance: string, minBalance: number, tokenAddress: string): boolean {
   const formattedBalance = formatTokenBalance(balance, tokenAddress);
-  console.log(`Comparing balance: ${balance} (formatted: ${formattedBalance}) with min: ${minBalance}`);
+  //console.log(`Comparing balance: ${balance} (formatted: ${formattedBalance}) with min: ${minBalance}`);
   return formattedBalance >= minBalance;
 }
 
+// Moved to src/api/snowtrace.ts
+
+// Moved to src/api/blockchain.ts
+
+// fetchArenabookSocial is now imported from ../../api/arenabook
+
 /**
- * Fetch token holders using Snowtrace API
+ * Helper function to combine token holders with the same Twitter handle
  */
-async function fetchTokenHoldersFromSnowtrace(tokenAddress: string): Promise<TokenHolder[]> {
-  try {
-    const lowerAddress = tokenAddress.toLowerCase();
-    const symbol = TOKEN_SYMBOLS[lowerAddress] || 'Unknown Token';
+async function combineTokenHolders(
+  holders: TokenHolder[], 
+  walletMapping: Record<string, string>,
+  handleToWallet: Record<string, string>,
+  minBalance: number,
+  tokenAddress: string,
+  sumOfBalances: boolean
+): Promise<TokenHolder[]> {
+  // If sumOfBalances is false, just return the original holders
+  if (!sumOfBalances) {
+    return holders.filter(holder => 
+      hasMinimumBalance(holder.balance, minBalance, tokenAddress)
+    );
+  }
+  
+  console.log(`Combining token holders with sumOfBalances enabled...`);
+  
+  // Step 1: Identify holders with at least 50% of min balance
+  const potentialHolders = holders.filter(holder => {
+    const formattedBalance = formatTokenBalance(holder.balance, tokenAddress);
+    const requiredBalance = minBalance * 0.5;
+    return formattedBalance >= requiredBalance;
+  });
+  
+  console.log(`Found ${potentialHolders.length} holders with at least 50% of minimum balance`);
+  
+  // Step 2: Group holders by Twitter handle
+  const holdersByHandle: Record<string, TokenHolder[]> = {};
+  const arenaApiCache: Record<string, string | null> = {};
+  
+  // Process each potential holder
+  for (const holder of potentialHolders) {
+    const address = holder.address.toLowerCase();
     
-    console.log(`Fetching holders for ${symbol} (${tokenAddress}) from Snowtrace...`);
-    
-    // Check if we have an API key for Snowtrace
-    const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY || '';
-    if (!SNOWTRACE_API_KEY) {
-      console.warn('No SNOWTRACE_API_KEY found in .env file. API rate limits may be lower.');
-    }
-    
-    // For testing, let's try to use the Covalent API as a fallback
-    // This is a temporary solution for testing purposes
-    console.log('Attempting to use mock data for testing...');
-    
-    // Create some mock holders for testing
-    const mockHolders: TokenHolder[] = [
-      { address: '0x1234567890123456789012345678901234567890', balance: '1000000000000000000000', balanceFormatted: 1000, tokenSymbol: symbol }, // 1000 tokens with 18 decimals
-      { address: '0x2345678901234567890123456789012345678901', balance: '500000000000000000000', balanceFormatted: 500, tokenSymbol: symbol },  // 500 tokens
-      { address: '0x3456789012345678901234567890123456789012', balance: '250000000000000000000', balanceFormatted: 250, tokenSymbol: symbol },  // 250 tokens
-      { address: '0x4567890123456789012345678901234567890123', balance: '125000000000000000000', balanceFormatted: 125, tokenSymbol: symbol },  // 125 tokens
-      { address: '0x5678901234567890123456789012345678901234', balance: '100000000000000000000', balanceFormatted: 100, tokenSymbol: symbol },  // 100 tokens
-      { address: '0x6789012345678901234567890123456789012345', balance: '75000000000000000000', balanceFormatted: 75, tokenSymbol: symbol },   // 75 tokens
-      { address: '0x7890123456789012345678901234567890123456', balance: '50000000000000000000', balanceFormatted: 50, tokenSymbol: symbol },   // 50 tokens
-      { address: '0x8901234567890123456789012345678901234567', balance: '25000000000000000000', balanceFormatted: 25, tokenSymbol: symbol },   // 25 tokens
-      { address: '0x9012345678901234567890123456789012345678', balance: '10000000000000000000', balanceFormatted: 10, tokenSymbol: symbol },   // 10 tokens
-      { address: '0x0123456789012345678901234567890123456789', balance: '5000000000000000000', balanceFormatted: 5, tokenSymbol: symbol },    // 5 tokens
-    ];
-    
-    console.log(`Using ${mockHolders.length} mock holders for testing`);
-    
-    // Try the real API call as well for comparison
-    const holders: TokenHolder[] = [];
-    let page = 1;
-    const pageSize = 100;
-    let hasMorePages = true;
-    
-    try {
-      while (hasMorePages && page <= 5) { // Allow up to 5 pages of results
-        console.log(`Fetching page ${page} of token holders...`);
-        
-        // Construct the Snowtrace API URL
-        const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${SNOWTRACE_API_KEY ? `&apikey=${SNOWTRACE_API_KEY}` : ''}`;
-        
-        console.log(`Making request to: ${apiUrl.replace(/apikey=([^&]*)/, 'apikey=***')}`);
-        
-        try {
-          const response = await axios.get(apiUrl);
-          console.log(`Response status: ${response.status}`);
-          console.log(`Response data status: ${response.data.status}`);
-          console.log(`Response data message: ${response.data.message}`);
-          console.log(`Response data result length: ${response.data.result ? response.data.result.length : 'undefined'}`);
-          
-          if (response.data.status === '1' && response.data.result && response.data.result.length > 0) {
-            const holdersData = response.data.result;
-            
-            // Add holders to the list
-            holdersData.forEach((holder: any) => {
-              const balance = holder.value || holder.TokenHolderQuantity;
-              const balanceFormatted = formatTokenBalance(balance, tokenAddress);
-              
-              holders.push({
-                address: holder.address || holder.TokenHolderAddress,
-                balance: balance,
-                balanceFormatted: balanceFormatted,
-                tokenSymbol: symbol
-              });
-            });
-            
-            console.log(`Found ${holdersData.length} holders on page ${page}`);
-            
-            // Check if there are more pages
-            if (holdersData.length < pageSize) {
-              hasMorePages = false;
-            } else {
-              page++;
-              // Add a delay to avoid rate limiting
-              await sleep(REQUEST_DELAY_MS);
-            }
-          } else {
-            console.log(`No more holders found or API error on page ${page}`);
-            console.log('Full response:', JSON.stringify(response.data, null, 2));
-            hasMorePages = false;
-          }
-        } catch (error) {
-          console.error(`Error fetching token holders on page ${page}:`, error);
-          hasMorePages = false;
-        }
+    // Check if this address is in our wallet mapping
+    if (walletMapping[address]) {
+      const handle = walletMapping[address].toLowerCase();
+      if (!holdersByHandle[handle]) {
+        holdersByHandle[handle] = [];
       }
-    } catch (apiError) {
-      console.error('Error with Snowtrace API, falling back to mock data:', apiError);
+      holdersByHandle[handle].push(holder);
+      continue;
     }
     
-    // If we didn't get any real holders, use the mock data
+    // Fetch social profile from Arenabook
+    try {
+      const social = await fetchArenabookSocial(address);
+      if (social && social.twitter_handle) {
+        const handle = social.twitter_handle.toLowerCase();
+        if (!holdersByHandle[handle]) {
+          holdersByHandle[handle] = [];
+        }
+        holdersByHandle[handle].push(holder);
+        
+        // Check if there's another wallet for this handle in our mapping
+        if (handleToWallet[handle] && handleToWallet[handle].toLowerCase() !== address) {
+          // We already have this handle with a different address, so we'll combine them later
+          console.log(`Found additional wallet ${address} for handle ${handle}`);
+        }
+      } else if (walletMapping[address]) {
+        // If the address is in our wallet mapping but doesn't have a social profile
+        const handle = walletMapping[address].toLowerCase();
+        if (!holdersByHandle[handle]) {
+          holdersByHandle[handle] = [];
+        }
+        holdersByHandle[handle].push(holder);
+      }
+    } catch (error) {
+      console.error(`Error fetching social profile for ${address}:`, error);
+    }
+    
+    // Add a small delay to avoid rate limiting
+    await sleep(REQUEST_DELAY_MS);
+  }
+  
+  // Step 3: For handles in our mapping that don't have an Arena profile, fetch from Arena API
+  for (const [address, handle] of Object.entries(walletMapping)) {
+    const lowerHandle = handle.toLowerCase();
+    const lowerAddress = address.toLowerCase();
+    
+    // Skip if we already have this handle
+    if (holdersByHandle[lowerHandle]) {
+      continue;
+    }
+    
+    // Check if this address is in our potential holders
+    const existingHolder = potentialHolders.find(h => h.address.toLowerCase() === lowerAddress);
+    if (existingHolder) {
+      if (!holdersByHandle[lowerHandle]) {
+        holdersByHandle[lowerHandle] = [];
+      }
+      holdersByHandle[lowerHandle].push(existingHolder);
+      continue;
+    }
+    
+    // If not, try to fetch the Arena address for this handle
+    if (!arenaApiCache[lowerHandle]) {
+      try {
+        const arenaAddress = await getArenaAddressForHandle(handle);
+        arenaApiCache[lowerHandle] = arenaAddress;
+        
+        if (arenaAddress) {
+          // Check if this address is in our potential holders
+          const arenaHolder = potentialHolders.find(h => h.address.toLowerCase() === arenaAddress.toLowerCase());
+          if (arenaHolder) {
+            if (!holdersByHandle[lowerHandle]) {
+              holdersByHandle[lowerHandle] = [];
+            }
+            holdersByHandle[lowerHandle].push(arenaHolder);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching Arena address for handle ${handle}:`, error);
+      }
+      
+      // Add a small delay to avoid rate limiting
+      await sleep(REQUEST_DELAY_MS);
+    }
+  }
+  
+  // Step 4: Combine balances for each handle
+  const combinedHolders: TokenHolder[] = [];
+  
+  for (const [handle, holders] of Object.entries(holdersByHandle)) {
     if (holders.length === 0) {
-      console.log('No holders found from API, using mock data for testing');
-      return mockHolders;
+      continue;
     }
     
-    console.log(`Found ${holders.length} total token holders`);
+    if (holders.length === 1) {
+      // If there's only one holder for this handle, just check if it meets the minimum
+      if (hasMinimumBalance(holders[0].balance, minBalance, tokenAddress)) {
+        combinedHolders.push(holders[0]);
+      }
+      continue;
+    }
     
-    // Sort holders by balance (descending)
-    holders.sort((a, b) => parseFloat(b.balance) - parseFloat(a.balance));
+    // Combine balances
+    let totalFormattedBalance = 0;
+    for (const holder of holders) {
+      totalFormattedBalance += formatTokenBalance(holder.balance, tokenAddress);
+    }
     
-    return holders;
-  } catch (error) {
-    console.error(`Error fetching token holders for ${tokenAddress}:`, error);
-    // Get the token symbol from the mapping or use a default
-    const tokenSymbol = TOKEN_SYMBOLS[tokenAddress.toLowerCase()] || 'TOKEN';
-    
-    // Return mock data as a fallback with the correct token symbol
-    return [
-      { address: '0x1234567890123456789012345678901234567890', balance: '1000000000000000000000', balanceFormatted: 1000, tokenSymbol: tokenSymbol }, // 1000 tokens
-      { address: '0x2345678901234567890123456789012345678901', balance: '500000000000000000000', balanceFormatted: 500, tokenSymbol: tokenSymbol },  // 500 tokens
-      { address: '0x3456789012345678901234567890123456789012', balance: '250000000000000000000', balanceFormatted: 250, tokenSymbol: tokenSymbol },  // 250 tokens
-    ];
+    // Check if the combined balance meets the minimum
+    if (totalFormattedBalance >= minBalance) {
+      // Use the first holder as the base and update its balance
+      const combinedHolder = { ...holders[0] };
+      combinedHolder.balanceFormatted = totalFormattedBalance;
+      // Convert back to raw balance string
+      const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
+      combinedHolder.balance = (totalFormattedBalance * Math.pow(10, decimals)).toString();
+      
+      console.log(`Combined ${holders.length} wallets for ${handle} with total balance: ${totalFormattedBalance}`);
+      combinedHolders.push(combinedHolder);
+    }
   }
-}
-
-/**
- * Fetch NFT holders using ethers.js and Alchemy provider
- */
-async function fetchNftHoldersFromEthers(nftAddress: string, nftName: string, minNftBalance: number, collectionSize: number): Promise<NftHolder[]> {
-  try {
-    console.log(`Fetching holders for ${nftName} (${nftAddress}) using ethers.js...`);
-    console.log(`Collection size from config: ${collectionSize}`);
-    
-    // Create a new contract instance
-    const nftContract = new ethers.Contract(nftAddress, ERC721_ABI, provider);
-    
-    // Holders map to track unique holders and their token counts
-    const holdersMap = new Map<string, number>();
-    
-    // Batch size for token ID processing
-    const batchSize = 10;
-    let validTokenCount = 0;
-    let invalidTokenCount = 0;
-    
-    // Process token IDs in batches
-    for (let i = 0; i < collectionSize; i += batchSize) {
-      const batchPromises = [];
-      
-      // Create a batch of promises for token ID lookups
-      for (let j = 0; j < batchSize && i + j < collectionSize; j++) {
-        const tokenId = i + j;
-        
-        if (tokenId >= collectionSize) {
-          break;
-        }
-        
-        // Add promise to batch
-        batchPromises.push(
-          (async () => {
-            try {
-              // Get owner of token ID
-              const owner = await nftContract.ownerOf(tokenId);
-              validTokenCount++;
-              
-              // Update holder's token count
-              const normalizedAddress = owner.toLowerCase();
-              const currentCount = holdersMap.get(normalizedAddress) || 0;
-              holdersMap.set(normalizedAddress, currentCount + 1);
-              
-              return { tokenId, owner: normalizedAddress, valid: true };
-            } catch (error) {
-              // Token ID doesn't exist or other error
-              invalidTokenCount++;
-              return { tokenId, owner: null, valid: false };
-            }
-          })()
-        );
-      }
-      
-      // Wait for all promises in the batch to resolve
-      await Promise.all(batchPromises);
-      
-      // Add a small delay between batches to avoid rate limiting
-      await sleep(100);
-      
-      // Log progress every 50 tokens
-      if (i % 50 === 0 || i + batchSize >= collectionSize) {
-        console.log(`Processed token IDs ${i} to ${Math.min(i + batchSize - 1, collectionSize - 1)}`);
-        console.log(`Valid tokens: ${validTokenCount}, Invalid tokens: ${invalidTokenCount}`);
-      }
-    }
-    
-    console.log(`\nFinished processing all token IDs.`);
-    console.log(`Total valid tokens: ${validTokenCount}, Total invalid tokens: ${invalidTokenCount}`);
-    console.log(`Found ${holdersMap.size} unique holders.`);
-    
-    // Convert the holders map to an array of NftHolder objects
-    // Convert to our NftHolder format
-    const holders: NftHolder[] = [];
-    for (const [address, tokenCount] of holdersMap.entries()) {
-      if (tokenCount >= minNftBalance) {
-        holders.push({
-          address,
-          tokenCount,
-          tokenName: nftName
-        });
-      }
-    }
-    
-    // Sort holders by token count (descending)
-    holders.sort((a, b) => b.tokenCount - a.tokenCount);
-    
-    console.log(`Found ${holders.length} holders with at least ${minNftBalance} ${nftName}`);
-    return holders;
-  } catch (error) {
-    console.error(`Error fetching NFT holders for ${nftAddress}:`, error);
-    
-    // Propagate retry-related errors
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('Failed to get owner') || 
-        errorMessage.includes('after 5 retries') || 
-        errorMessage.includes('max retries exceeded') || 
-        errorMessage.includes('rate limit') ||
-        errorMessage.includes('Retry failure')) {
-      throw error; // Propagate the error up
-    }
-    
-    // For other errors, return empty array
-    return [];
-  }
-}
-
-/**
- * Fetch Arenabook social profile for a given address
- */
-async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
-  const MAX_RETRIES = 3;
-  let retryCount = 0;
   
-  while (retryCount <= MAX_RETRIES) {
+  console.log(`After combining, found ${combinedHolders.length} holders meeting minimum balance`);
+  return combinedHolders;
+}
+
+/**
+ * Helper function to combine NFT holders with the same Twitter handle
+ */
+async function combineNftHolders(
+  holders: NftHolder[], 
+  walletMapping: Record<string, string>,
+  handleToWallet: Record<string, string>,
+  minBalance: number,
+  sumOfBalances: boolean
+): Promise<NftHolder[]> {
+  // If sumOfBalances is false, just return the original holders
+  if (!sumOfBalances) {
+    return holders.filter(holder => holder.tokenCount >= minBalance);
+  }
+  
+  console.log(`Combining NFT holders with sumOfBalances enabled...`);
+  
+  // Step 1: Identify holders with at least 50% of min balance
+  const potentialHolders = holders.filter(holder => holder.tokenCount >= Math.ceil(minBalance * 0.5));
+  
+  console.log(`Found ${potentialHolders.length} NFT holders with at least 50% of minimum balance`);
+  
+  // Step 2: Group holders by Twitter handle
+  const holdersByHandle: Record<string, NftHolder[]> = {};
+  const arenaApiCache: Record<string, string | null> = {};
+  
+  // Process each potential holder
+  for (const holder of potentialHolders) {
+    const address = holder.address.toLowerCase();
+    
+    // Check if this address is in our wallet mapping
+    if (walletMapping[address]) {
+      const handle = walletMapping[address].toLowerCase();
+      if (!holdersByHandle[handle]) {
+        holdersByHandle[handle] = [];
+      }
+      holdersByHandle[handle].push(holder);
+      continue;
+    }
+    
+    // Fetch social profile from Arenabook
     try {
-      const response = await axios.get<ArenabookUserResponse[]>(`${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`);
-
-      // The API returns an array, but we expect only one result for a specific address
-      if (response.data && response.data.length > 0) {
-        return response.data[0];
+      const social = await fetchArenabookSocial(address);
+      if (social && social.twitter_handle) {
+        const handle = social.twitter_handle.toLowerCase();
+        if (!holdersByHandle[handle]) {
+          holdersByHandle[handle] = [];
+        }
+        holdersByHandle[handle].push(holder);
+        
+        // Check if there's another wallet for this handle in our mapping
+        if (handleToWallet[handle] && handleToWallet[handle].toLowerCase() !== address) {
+          // We already have this handle with a different address, so we'll combine them later
+          console.log(`Found additional wallet ${address} for handle ${handle}`);
+        }
+      } else if (walletMapping[address]) {
+        // If the address is in our wallet mapping but doesn't have a social profile
+        const handle = walletMapping[address].toLowerCase();
+        if (!holdersByHandle[handle]) {
+          holdersByHandle[handle] = [];
+        }
+        holdersByHandle[handle].push(holder);
       }
-      return null; // No profile found, but this is not an error
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        if (error.response.status === 404) {
-          console.log(`No social profile found for ${address}`);
-          // No need to retry for 404 errors
-          return null;
-        } else if (error.response.status === 429) {
-          // Rate limit error - always propagate these
-          retryCount++;
-          if (retryCount <= MAX_RETRIES) {
-            console.log(`Rate limit error fetching Arenabook profile for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleepUtil(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
-          } else {
-            const errorMsg = `Arena API rate limit exceeded after ${MAX_RETRIES} retries for ${address}`;
-            console.error(errorMsg);
-            throw new Error(errorMsg);
-          }
-        } else {
-          retryCount++;
-          if (retryCount <= MAX_RETRIES) {
-            console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleepUtil(REQUEST_DELAY_MS);
-          } else {
-            const errorMsg = `Arena API error (${error.response.status}) after ${MAX_RETRIES} retries for ${address}`;
-            console.error(errorMsg, error.response.statusText);
-            throw new Error(errorMsg);
-          }
-        }
-      } else {
-        retryCount++;
-        if (retryCount <= MAX_RETRIES) {
-          console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-          await sleepUtil(REQUEST_DELAY_MS);
-        } else {
-          const errorMsg = `Arena API unexpected error after ${MAX_RETRIES} retries for ${address}`;
-          console.error(errorMsg, error);
-          throw new Error(errorMsg);
-        }
+      console.error(`Error fetching social profile for ${address}:`, error);
+    }
+    
+    // Add a small delay to avoid rate limiting
+    await sleep(REQUEST_DELAY_MS);
+  }
+  
+  // Step 3: For handles in our mapping that don't have an Arena profile, fetch from Arena API
+  for (const [address, handle] of Object.entries(walletMapping)) {
+    const lowerHandle = handle.toLowerCase();
+    const lowerAddress = address.toLowerCase();
+    
+    // Skip if we already have this handle
+    if (holdersByHandle[lowerHandle]) {
+      continue;
+    }
+    
+    // Check if this address is in our potential holders
+    const existingHolder = potentialHolders.find(h => h.address.toLowerCase() === lowerAddress);
+    if (existingHolder) {
+      if (!holdersByHandle[lowerHandle]) {
+        holdersByHandle[lowerHandle] = [];
       }
+      holdersByHandle[lowerHandle].push(existingHolder);
+      continue;
+    }
+    
+    // If not, try to fetch the Arena address for this handle
+    if (!arenaApiCache[lowerHandle]) {
+      try {
+        const arenaAddress = await getArenaAddressForHandle(handle);
+        arenaApiCache[lowerHandle] = arenaAddress;
+        
+        if (arenaAddress) {
+          // Check if this address is in our potential holders
+          const arenaHolder = potentialHolders.find(h => h.address.toLowerCase() === arenaAddress.toLowerCase());
+          if (arenaHolder) {
+            if (!holdersByHandle[lowerHandle]) {
+              holdersByHandle[lowerHandle] = [];
+            }
+            holdersByHandle[lowerHandle].push(arenaHolder);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching Arena address for handle ${handle}:`, error);
+      }
+      
+      // Add a small delay to avoid rate limiting
+      await sleep(REQUEST_DELAY_MS);
     }
   }
   
-  // This should never be reached, but just in case
-  throw new Error(`Arena API max retries exceeded for ${address}`);
-}
-
-/**
- * Process holders and fetch their social profiles
- */
-async function processHoldersWithSocials<T extends { address: string }>(
-  holders: T[],
-  outputPath: string,
-  processingName: string,
-  transformFn: (holder: T, social: ArenabookUserResponse | null) => any
-): Promise<Map<string, string | null>> {
-  console.log(`\nProcessing ${processingName}...`);
+  // Step 4: Combine balances for each handle
+  const combinedHolders: NftHolder[] = [];
   
-  const holdersWithSocials: any[] = [];
-  let socialCount = 0;
-  const addressToTwitterHandle = new Map<string, string | null>();
-  const batchSize = 10;
-  
-  // Track if we've encountered any Arena API errors
-  let hasArenaApiError = false;
-  
-  for (let i = 0; i < holders.length; i += batchSize) {
-    // If we've already encountered an Arena API error, don't process more batches
-    if (hasArenaApiError) {
-      console.error('Skipping remaining batches due to previous Arena API errors');
-      break;
+  for (const [handle, holders] of Object.entries(holdersByHandle)) {
+    if (holders.length === 0) {
+      continue;
     }
     
-    const batch = holders.slice(i, i + batchSize);
-    const batchPromises = [];
-    
-    for (const holder of batch) {
-      batchPromises.push((async () => {
-        try {
-          console.log(`\n[${i + batch.indexOf(holder) + 1}/${holders.length}] Checking social profile for ${holder.address}...`);
-          
-          // Check if we already have this address's social profile
-          let social: ArenabookUserResponse | null = null;
-          
-          if (addressToTwitterHandle.has(holder.address.toLowerCase())) {
-            const twitterHandle = addressToTwitterHandle.get(holder.address.toLowerCase());
-            if (twitterHandle) {
-              social = { twitter_handle: twitterHandle, twitter_username: null };
-              console.log(`Using cached Twitter handle: ${twitterHandle}`);
-            } else {
-              console.log(`Using cached result: No social profile found`);
-            }
-          } else {
-            try {
-              social = await fetchArenabookSocial(holder.address);
-              
-              if (social) {
-                socialCount++;
-                console.log(`Found Twitter handle: ${social.twitter_handle || 'None'}`);
-              } else {
-                console.log(`No social profile found`);
-              }
-              
-              // Cache the result
-              addressToTwitterHandle.set(holder.address.toLowerCase(), social?.twitter_handle || null);
-            } catch (error) {
-              // Detect Arena API errors and propagate them
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
-                console.error(`Arena API error detected: ${errorMessage}`);
-                hasArenaApiError = true;
-                throw new Error(`Arena API error during social profile fetch: ${errorMessage}`);
-              }
-              // For other errors, log but continue
-              console.error(`Error fetching social profile for ${holder.address}:`, error);
-              // Don't cache errors
-            }
-          }
-          
-          const holderWithSocial = transformFn(holder, social);
-          return holderWithSocial;
-        } catch (error) {
-          // Rethrow Arena API errors to stop the entire process
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
-            throw error;
-          }
-          // For other errors, return a placeholder
-          console.error(`Error processing holder ${holder.address}:`, error);
-          return transformFn(holder, null);
-        }
-      })());
-    }
-    
-    try {
-      const batchResults = await Promise.all(batchPromises);
-      holdersWithSocials.push(...batchResults);
-    } catch (error) {
-      // If we get an Arena API error, propagate it
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('Arena API') || errorMessage.includes('rate limit')) {
-        console.error('Arena API error detected during batch processing. Aborting further processing.');
-        hasArenaApiError = true;
-        throw new Error(`Arena API error during batch processing: ${errorMessage}`);
+    if (holders.length === 1) {
+      // If there's only one holder for this handle, just check if it meets the minimum
+      if (holders[0].tokenCount >= minBalance) {
+        combinedHolders.push(holders[0]);
       }
-      // For other errors, log and continue with the next batch
-      console.error('Error processing batch:', error);
+      continue;
     }
     
-    // Save intermediate results every batch
-    const holdersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
-    const twitterHandles = holdersWithTwitter.map(h => h.twitter_handle);
-    const outputData = { handles: twitterHandles };
-    fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), 'utf8');
-    console.log(`Saved intermediate results after ${i + batchSize} addresses (${holdersWithTwitter.length} with Twitter handles)`);
+    // Combine balances
+    let totalTokenCount = 0;
+    for (const holder of holders) {
+      totalTokenCount += holder.tokenCount;
+    }
     
-    // Delay before next batch
-    if (i + batchSize < holders.length) {
-      await sleepUtil(REQUEST_DELAY_MS);
+    // Check if the combined balance meets the minimum
+    if (totalTokenCount >= minBalance) {
+      // Use the first holder as the base and update its token count
+      const combinedHolder = { ...holders[0] };
+      combinedHolder.tokenCount = totalTokenCount;
+      
+      console.log(`Combined ${holders.length} wallets for ${handle} with total NFT count: ${totalTokenCount}`);
+      combinedHolders.push(combinedHolder);
     }
   }
   
-  // Save final results
-  const finalHoldersWithTwitter = holdersWithSocials.filter(h => h.twitter_handle !== null);
-  const finalTwitterHandles = finalHoldersWithTwitter.map(h => h.twitter_handle);
-  const finalOutputData = { handles: finalTwitterHandles };
-  fs.writeFileSync(outputPath, JSON.stringify(finalOutputData, null, 2), 'utf8');
-  
-  // Log statistics
-  console.log(`\nFinal statistics for ${processingName}:`);
-  console.log(`Total holders processed: ${holders.length}`);
-  console.log(`Holders with social profiles: ${socialCount}`);
-  console.log(`Holders with Twitter handles: ${finalHoldersWithTwitter.length}`);
-  
-  return addressToTwitterHandle;
+  console.log(`After combining, found ${combinedHolders.length} NFT holders meeting minimum balance`);
+  return combinedHolders;
 }
+
 
 /**
  * Main function to fetch token holder profiles
@@ -623,6 +495,30 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
     console.error('Error loading permanent accounts:', error);
   }
   
+  // Check if sum of balances feature is enabled
+  const sumOfBalances = appConfig.sumOfBalances || appConfig.badges?.sumOfBalances || false;
+  
+  // Initialize wallet mapping variables
+  let walletMapping: Record<string, string> = {};
+  let handleToWallet: Record<string, string> = {};
+  
+  // Get wallet mapping file path from config (if it exists)
+  const walletMappingFile = appConfig.walletMappingFile || appConfig.badges?.walletMappingFile;
+  
+  if (walletMappingFile) {
+    if (sumOfBalances) {
+      console.log(`Sum of balances feature is enabled. Loading wallet mapping from ${walletMappingFile}...`);
+    } else {
+      console.log(`Loading wallet mapping from ${walletMappingFile} for social profile matching...`);
+    }
+    
+    walletMapping = loadWalletMapping(walletMappingFile, projectName);
+    handleToWallet = getHandleToWalletMapping(walletMapping);
+    console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
+  } else {
+    console.log(`No wallet mapping file specified. Skipping wallet mapping.`);
+  }
+  
   try {
     // Create output directory if it doesn't exist
     if (!fs.existsSync(OUTPUT_DIR)) {
@@ -646,7 +542,51 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
       console.log(`Basic min balance: ${basicBalance}, Upgraded min balance: ${upgradedBalance}`);
       
       // Fetch token holders from Snowtrace
-      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress);
+      const symbol = TOKEN_SYMBOLS[tokenAddress.toLowerCase()] || 'Unknown Token';
+      const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
+      const rawTokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, symbol, 0, decimals);
+      
+      // Process token holders with wallet mapping
+      if (walletMappingFile) {
+        if (sumOfBalances) {
+          console.log('Sum of balances feature is enabled for tokens. Processing token holders with wallet mapping...');
+          
+          // Process basic token holders
+          if (basicBalance > 0) {
+            const basicTokenHolders = await combineTokenHolders(
+              rawTokenHolders,
+              walletMapping,
+              handleToWallet,
+              basicBalance,
+              tokenAddress,
+              sumOfBalances
+            );
+            console.log(`After combining, found ${basicTokenHolders.length} token holders meeting basic minimum balance`);
+          }
+          
+          // Process upgraded token holders
+          if (upgradedBalance > 0) {
+            const upgradedTokenHolders = await combineTokenHolders(
+              rawTokenHolders,
+              walletMapping,
+              handleToWallet,
+              upgradedBalance,
+              tokenAddress,
+              sumOfBalances
+            );
+            console.log(`After combining, found ${upgradedTokenHolders.length} token holders meeting upgraded minimum balance`);
+          }
+        } else {
+          console.log('Using wallet mapping for social profile matching without combining balances...');
+          // When sumOfBalances is false, we still want to use the wallet mapping for social profile matching
+          // but we don't want to combine balances
+        }
+      } else {
+        console.log('No wallet mapping file specified, using raw token holders...');
+      }
+      
+      // Use the raw token holders for further processing regardless of sumOfBalances setting
+      tokenHolders = rawTokenHolders;
     } else {
       console.log('No token addresses configured, skipping token holder fetching');
     }
@@ -655,12 +595,24 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
     let nftHolders: NftHolder[] = [];
     if (NFT_CONTRACT) {
       console.log(`NFT to check: ${NFT_NAME} (${NFT_CONTRACT}) (min balance: ${MIN_NFT_BALANCE})`);
-      if (verbose) {
-        console.log(`Using Alchemy API key: ${ALCHEMY_API_KEY ? ALCHEMY_API_KEY.substring(0, 5) + '...' : 'Not set'}`);
-      }
       
       // Pass all required parameters to fetchNftHoldersFromEthers
-      nftHolders = await fetchNftHoldersFromEthers(NFT_CONTRACT, NFT_NAME, MIN_NFT_BALANCE, NFT_COLLECTION_SIZE);
+      const rawNftHolders = await fetchNftHoldersFromEthers(NFT_CONTRACT, NFT_NAME, MIN_NFT_BALANCE, true); // Set verbose to true
+      
+      // Process NFT holders with wallet mapping if sum of balances is enabled
+      if (sumOfBalances) {
+        console.log('Sum of balances feature is enabled for NFTs. Processing NFT holders with wallet mapping...');
+        nftHolders = await combineNftHolders(
+          rawNftHolders,
+          walletMapping,
+          handleToWallet,
+          MIN_NFT_BALANCE,
+          sumOfBalances
+        );
+      } else {
+        // If sum of balances is disabled, just use the raw NFT holders
+        nftHolders = rawNftHolders;
+      }
     } else {
       console.log('No NFT contract configured, skipping NFT holder fetching');
     }
@@ -697,8 +649,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
           if (hasEnough) {
             qualifyingHolders.push(holder);
           }
-          // Uncomment this to see all balance checks (can be verbose)
-          // console.log(`Basic check - Address: ${holder.address}, Balance: ${formattedBalance}, Required: ${requiredBalance}, Qualifies: ${hasEnough}`);
         }
         
         console.log(`Found ${qualifyingHolders.length} addresses that qualify for the basic badge`);
@@ -719,8 +669,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
           if (hasEnough) {
             qualifyingHolders.push(holder);
           }
-          // Uncomment this to see all balance checks (can be verbose)
-          // console.log(`Basic check - Address: ${holder.address}, Balance: ${formattedBalance}, Required: ${requiredBalance}, Qualifies: ${hasEnough}`);
         }
         console.log(`Basic badge holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
         
@@ -772,8 +720,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
           if (hasEnough) {
             qualifyingHolders.push(holder);
           }
-          // Uncomment this to see all balance checks (can be verbose)
-          // console.log(`Upgraded check - Address: ${holder.address}, Balance: ${formattedBalance}, Required: ${requiredBalance}, Qualifies: ${hasEnough}`);
         }
         
         console.log(`Found ${qualifyingHolders.length} addresses that qualify for the upgraded badge`);
@@ -794,8 +740,6 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
           if (hasEnough) {
             qualifyingHolders.push(holder);
           }
-          // Uncomment this to see all balance checks (can be verbose)
-          // console.log(`Upgraded check - Address: ${holder.address}, Balance: ${formattedBalance}, Required: ${requiredBalance}, Qualifies: ${hasEnough}`);
         }
         
         console.log(`Holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
@@ -847,15 +791,24 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
     console.log(`Fetching social profiles for ${addressesToProcess.length} qualifying addresses (${allQualifyingAddresses.size} unique addresses)`);
     
     // Process all qualifying addresses to get their Twitter handles
-    const addressToTwitterHandle = await processHoldersWithSocials<typeof addressesToProcess[0]>(
+    const socialInfoMap = await processHoldersWithSocials<typeof addressesToProcess[0]>(
       addressesToProcess,
-      path.join(OUTPUT_DIR, 'qualifying_holders.json'),
-      'qualifying token holders',
-      (holder, social) => ({
+      (holder: typeof addressesToProcess[0], social: ArenabookUserResponse | null) => ({
         ...holder,
-        twitter_handle: social?.twitter_handle || null
-      })
+        twitter_handle: social?.twitter_handle || null,
+        twitter_pfp_url: social?.twitter_pfp_url || null
+      }),
+      // Pass wallet mapping regardless of sumOfBalances setting
+      walletMapping,
+      // Not verbose
+      false
     );
+    
+    // Convert SocialProfileInfo map to simple twitter handle map for backward compatibility
+    const addressToTwitterHandle = new Map<string, string | null>();
+    for (const [address, socialInfo] of socialInfoMap.entries()) {
+      addressToTwitterHandle.set(address, socialInfo.twitter_handle);
+    }
     
     // Get Twitter handles for basic badge holders and their corresponding addresses
     const basicHandlesAndAddresses = [...basicAddresses]
@@ -935,9 +888,4 @@ export async function fetchTokenHolderProfiles(projectNameOrVerbose?: string | b
       upgradedAddresses: []
     };
   }
-}
-
-// Run the main function only if this file is executed directly
-if (typeof require !== 'undefined' && require.main === module) {
-  fetchTokenHolderProfiles().catch(console.error);
 }

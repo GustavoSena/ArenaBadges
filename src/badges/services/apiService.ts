@@ -64,14 +64,19 @@ export async function sendResultsToApi(
     }
     
     return response.data;
-  } catch (error: any) {
-    // If the error is a 304 Not Modified, it means no changes were detected
-    if (error.response && error.response.status === 304) {
+  } catch (error) {
+    // If the error is an Axios error with a 304 status, it means no changes were detected
+    if (axios.isAxiosError(error) && error.response && error.response.status === 304) {
       console.log('No changes detected. API update skipped.');
       return null;
     }
     
-    console.error('Error sending results to API:', error.message);
+    // Handle other errors
+    const errorMessage = axios.isAxiosError(error) 
+      ? `Error sending results to API: ${error.message}` 
+      : `Error sending results to API: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    
+    console.error(errorMessage);
     throw error;
   }
 }

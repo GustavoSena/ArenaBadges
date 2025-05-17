@@ -22,7 +22,9 @@
           "decimals": 18
         }
       ]
-    }
+    },
+    "sumOfBalances": true,
+    "walletMappingFile": "mappings/mu_wallet_mapping.json"
   },
   "excludedAccounts": [],
   "permanentAccounts": [

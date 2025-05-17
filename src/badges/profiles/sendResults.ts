@@ -8,8 +8,6 @@ import { loadAppConfig } from '../../utils/config';
 // Load environment variables
 dotenv.config();
 
-// We'll load the project-specific configuration in the sendResults function
-
 // Parse the BADGE_KEYS environment variable
 let badgeKeys: { [key: string]: string } = {};
 let API_KEY: string | undefined;
@@ -73,10 +71,16 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
     // Prepare basic badge data
     let basicHandles;
     if (EXCLUDE_BASIC_FOR_UPGRADED) {
-      // Exclude basic badge holders who also have the upgraded badge
+      // Get permanent accounts from config
+      const permanentAccounts = appConfig.permanentAccounts || [];
+      const permanentAccountsSet = new Set(permanentAccounts.map(handle => handle.toLowerCase()));
+      
+      // Exclude basic badge holders who also have the upgraded badge, but preserve permanent accounts
       const upgradedSet = new Set(data.upgradedHolders);
-      basicHandles = data.basicHolders.filter((handle: string) => !upgradedSet.has(handle));
-      console.log(`Excluding upgraded badge holders from basic list (${basicHandles.length} basic-only handles)`);
+      basicHandles = data.basicHolders.filter((handle: string) => 
+        !upgradedSet.has(handle) || permanentAccountsSet.has(handle.toLowerCase())
+      );
+      console.log(`Excluding upgraded badge holders from basic list (${basicHandles.length} basic-only handles, permanent accounts preserved)`);
     } else {
       // Include all basic badge holders regardless of upgraded status
       basicHandles = [...new Set([...data.basicHolders])];
@@ -194,24 +198,5 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
   } catch (error: any) {
     console.error('Error sending results:', error.message || String(error));
     throw error;
-  }
-}
-
-// Run a test if this file is executed directly
-if (typeof require !== 'undefined' && require.main === module) {
-  if (API_KEY) {
-    const testData = {
-      basicHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
-      upgradedHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
-      timestamp: new Date().toISOString()
-    };
-    
-    console.log('Sending test data to API...');
-    sendResults(testData)
-      .then(result => console.log('API response:', result))
-      .catch(error => console.error('Error in test:', error));
-  } else {
-    console.log('This is a module for sending results to an API endpoint.');
-    console.log('Set API_KEY environment variable to run a test.');
   }
 }

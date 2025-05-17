@@ -14,9 +14,17 @@ export interface NftHolder {
 
 // Social profile interfaces
 export interface ArenabookUserResponse {
-  twitter_username: string | null;
-  twitter_handle: string | null;
+  twitter_handle: string | null;  
   twitter_pfp_url: string | null;
+}
+
+// Stars Arena API response interface
+export interface StarsArenaUserResponse {
+  user: {
+    id: string;
+    twitterHandle: string;
+    twitterPicture: string;
+  };
 }
 
 export interface HolderWithSocial extends TokenHolder {

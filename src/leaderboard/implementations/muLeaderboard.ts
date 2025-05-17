@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { loadLeaderboardConfig } from '../../utils/config';
 import { BaseLeaderboard } from '../../types/leaderboardClasses';
 import { LeaderboardConfig } from '../../types/leaderboard';
@@ -159,6 +157,50 @@ export class MuLeaderboard extends BaseLeaderboard {
       // Default fallback price if contract call fails
       return 2.0;
     }
+  }
+  
+  /**
+   * Calculate dynamic minimum balance for a token based on MUG/MU price
+   * @param tokenSymbol The token symbol
+   * @param defaultMinBalance The default minimum balance
+   * @param verbose Whether to log verbose output
+   * @returns The calculated minimum balance
+   */
+  public async calculateDynamicMinimumBalance(tokenSymbol: string, defaultMinBalance: number, verbose: boolean = false): Promise<number> {
+    // If a default minimum balance is provided and not zero, use it
+    if (defaultMinBalance !== 0) {
+      return defaultMinBalance;
+    }
+    
+    // Get the MUG/MU price
+    const mugMuPrice = await this.getMugMuPrice();
+    
+    // Calculate dynamic minimum balance based on token symbol
+    let minBalance = 0;
+    
+    switch (tokenSymbol) {
+      case 'MU':
+        minBalance = 100;
+        break;
+      case 'MUG':
+        minBalance = 100 / mugMuPrice;
+        break;
+      case 'MUO':
+        minBalance = 100 / (1.1 * mugMuPrice);
+        break;
+      case 'MUV':
+        minBalance = 100 / (10 * 1.1 * mugMuPrice);
+        break;
+      default:
+        // For other tokens, use the default minimum balance
+        minBalance = defaultMinBalance;
+    }
+    
+    if (verbose) {
+      console.log(`Using dynamic minimum balance for ${tokenSymbol}: ${minBalance}`);
+    }
+    
+    return minBalance;
   }
   
   /**

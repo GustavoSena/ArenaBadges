@@ -19,7 +19,11 @@ describe('schedulerService', () => {
   };
   const mockHolderResults = {
     basicHolders: ['user1', 'user2', 'user3'],
-    upgradedHolders: ['user4', 'user5']
+    upgradedHolders: ['user4', 'user5'],
+    basicAddresses: ['0x1', '0x2', '0x3'],
+    upgradedAddresses: ['0x4', '0x5'],
+    nftHolders: [],
+    combinedHolders: []
   };
   const mockProjectName = 'mu';
   
@@ -72,7 +76,7 @@ describe('schedulerService', () => {
 
     // Verify fetchTokenHolderProfiles was called
     expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
-    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledWith(false);
+    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledWith("mu", false);
 
     // Verify sendResults was called with the correct arguments
     expect(mockedSendResults).toHaveBeenCalledTimes(1);
@@ -96,8 +100,10 @@ describe('schedulerService', () => {
     expect(mockedSendResults).toHaveBeenCalledWith({
       basicHolders: mockHolderResults.basicHolders,
       upgradedHolders: mockHolderResults.upgradedHolders,
+      basicAddresses: mockHolderResults.basicAddresses,
+      upgradedAddresses: mockHolderResults.upgradedAddresses,
       timestamp: expect.any(String)
-    }, { dryRun: true, projectName: mockProjectName });
+    }, { dryRun: true, projectName: mockProjectName, exportAddresses: false });
   });
 
   test('should run once when runOnce is true', async () => {
@@ -129,6 +135,6 @@ describe('schedulerService', () => {
     expect(mockedSendResults).not.toHaveBeenCalled();
     
     // Verify the error type is returned
-    expect(result).toBe(ErrorType.OTHER);
+    expect(result).toBe(ErrorType.RETRY_FAILURE);
   });
 });

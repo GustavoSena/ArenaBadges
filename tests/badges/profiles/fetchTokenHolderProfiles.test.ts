@@ -91,19 +91,24 @@ jest.mock('../../../src/badges/profiles/fetchTokenHolderProfiles', () => {
     // Using any type for the parameters to avoid TypeScript errors
     async (...args: any[]) => {
       const holders = args[0];
-      // Create a map of address to Twitter handle
-      const addressToTwitterHandle = new Map<string, any>();
+      // Create a map of address to SocialProfileInfo
+      const addressToSocialInfo = new Map<string, any>();
       
       // For each holder, create a mock Twitter handle based on the address
       if (Array.isArray(holders)) {
         holders.forEach(holder => {
           const address = holder.address.toLowerCase();
           // Create Twitter handles for all test addresses
-          addressToTwitterHandle.set(address, `twitter_${address.substring(0, 6)}`);
+          const twitterHandle = `twitter_${address.substring(0, 6)}`;
+          addressToSocialInfo.set(address, {
+            twitter_handle: twitterHandle,
+            twitter_pfp_url: null,
+            source: 'arena'
+          });
         });
       }
       
-      return addressToTwitterHandle;
+      return addressToSocialInfo;
     }
   );
   

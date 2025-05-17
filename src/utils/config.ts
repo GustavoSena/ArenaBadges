@@ -1,6 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { LeaderboardConfig, TokenWeight, NftWeight, LeaderboardOutput } from '../types/leaderboard';
+import { LeaderboardConfig } from '../types/leaderboard';
+
+// Cache for configurations to avoid multiple disk reads
+const configCache: {
+  appConfig: { [key: string]: AppConfig | null };
+  leaderboardConfig: { [key: string]: LeaderboardConfig | null };
+  badgeConfig: { [key: string]: any | null };
+} = {
+  appConfig: {},
+  leaderboardConfig: {},
+  badgeConfig: {}
+};
 
 // Token configuration
 export interface TokenConfig {
@@ -28,6 +39,8 @@ export interface BadgeRequirement {
 export interface BadgeConfig {
   basic: BadgeRequirement;
   upgraded?: BadgeRequirement;
+  sumOfBalances?: boolean;
+  walletMappingFile?: string;
 }
 
 // Scheduler configuration
@@ -57,6 +70,12 @@ export interface ProjectConfig {
   activeProject?: string;  // Name of the active project configuration to use
 }
 
+// Leaderboard configuration
+export interface LeaderboardAppConfig {
+  sumOfBalances?: boolean;
+  walletMappingFile?: string;
+}
+
 // Main application config
 export interface AppConfig {
   projectName: string;
@@ -65,6 +84,11 @@ export interface AppConfig {
   api: ApiConfig;
   excludedAccounts: string[];
   permanentAccounts?: string[];
+  // For balance summing feature
+  sumOfBalances?: boolean;
+  walletMappingFile?: string;
+  // Leaderboard specific configuration
+  leaderboard?: LeaderboardAppConfig;
   // For backward compatibility
   tokens?: TokenConfig[];
   nfts?: NftConfig[];
@@ -76,6 +100,13 @@ export interface AppConfig {
  * @returns The application configuration
  */
 export function loadAppConfig(projectId?: string): AppConfig {
+  const cacheKey = projectId || 'default';
+  
+  // Check if we have this config in cache
+  if (configCache.appConfig[cacheKey]) {
+    return configCache.appConfig[cacheKey] as AppConfig;
+  }
+  
   try {
     // Use the project ID provided as parameter
     const targetProject = projectId;
@@ -89,6 +120,8 @@ export function loadAppConfig(projectId?: string): AppConfig {
         
         if (fs.existsSync(badgeConfigPath)) {
           const badgeConfig = JSON.parse(fs.readFileSync(badgeConfigPath, 'utf8'));
+          // Cache the result
+          configCache.appConfig[cacheKey] = badgeConfig as AppConfig;
           return badgeConfig as AppConfig;
         } else {
           console.error(`Badge config file not found for project ${targetProject} at ${badgeConfigPath}`);
@@ -103,64 +136,19 @@ export function loadAppConfig(projectId?: string): AppConfig {
       const mainConfigPath = path.join(process.cwd(), 'config', 'config.json');
       console.log(`Loading app config from ${mainConfigPath}`);
       const mainConfig = JSON.parse(fs.readFileSync(mainConfigPath, 'utf8')) as AppConfig & ProjectConfig;
+      // Cache the result
+      configCache.appConfig[cacheKey] = mainConfig;
       return mainConfig;
     } catch (mainConfigError) {
       console.error('Error loading main config:', mainConfigError);
     }
     
-    // If all else fails, return the default configuration
-    return getDefaultConfig();
+    // If all else fails, throw an error
+    throw new Error(`Configuration not found for project ${projectId || 'default'}`);
   } catch (error) {
     console.error('Error in loadAppConfig:', error);
-    return getDefaultConfig();
+    throw new Error(`Failed to load application configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-}
-
-/**
- * Get the default configuration
- * @returns Default application configuration
- */
-function getDefaultConfig(): AppConfig {
-  return {
-    projectName: "Default",
-    tokens: [],
-    nfts: [],
-    scheduler: {
-      badgeIntervalHours: 6,
-      enableLeaderboard: true,
-      leaderboardIntervalHours: 3,
-      leaderboardTypes: ['standard'],
-      badgeRetryIntervalHours: 2,
-      leaderboardRetryIntervalHours: 2
-    },
-    api: {
-      baseUrl: 'http://api.example.com/badges',
-      endpoints: {
-        basic: 'basic-endpoint',
-        upgraded: 'upgraded-endpoint'
-      },
-      excludeBasicForUpgraded: false
-    },
-    badges: {
-      basic: {
-        nfts: [{
-          name: 'Example NFT',
-          address: '0x0000000000000000000000000000000000000000',
-          minBalance: 1
-        }]
-      },
-      upgraded: {
-        tokens: [{
-          symbol: 'TOKEN',
-          address: '0x0000000000000000000000000000000000000000',
-          minBalance: 100,
-          decimals: 18
-        }]
-      }
-    },
-    excludedAccounts: [],
-    permanentAccounts: []
-  };
 }
 
 /**
@@ -169,6 +157,11 @@ function getDefaultConfig(): AppConfig {
  * @returns The leaderboard configuration
  */
 export function loadLeaderboardConfig(type: string): LeaderboardConfig {
+  // Check if we have this config in cache
+  if (configCache.leaderboardConfig[type]) {
+    return configCache.leaderboardConfig[type] as LeaderboardConfig;
+  }
+  
   try {
     // First try to load from the new project-specific configuration system
     try {
@@ -182,7 +175,11 @@ export function loadLeaderboardConfig(type: string): LeaderboardConfig {
       // Try to load from the leaderboards directory first (for backward compatibility)
       const configPath = path.join(process.cwd(), 'config', 'leaderboards', `${type}.json`);
       console.log(`Loading ${type} leaderboard config from ${configPath}`);
-      return JSON.parse(fs.readFileSync(configPath, 'utf8')) as LeaderboardConfig;
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LeaderboardConfig;
+      
+      // Cache the result
+      configCache.leaderboardConfig[type] = config;
+      return config;
     } catch (projectError) {
       console.error(`Error loading ${type} leaderboard config from project:`, projectError);
       throw projectError;
@@ -225,17 +222,30 @@ export function getAvailableLeaderboardTypes(): string[] {
  * @returns The badge configuration or null if not found
  */
 export function loadBadgeConfig(type: string): any | null {
+  // Check if we have this config in cache
+  if (configCache.badgeConfig[type] !== undefined) {
+    return configCache.badgeConfig[type];
+  }
+  
   try {
     const configPath = path.join(process.cwd(), 'config', 'badges', `${type}.json`);
     if (!fs.existsSync(configPath)) {
       console.log(`Badge config for ${type} not found at ${configPath}`);
+      // Cache the null result
+      configCache.badgeConfig[type] = null;
       return null;
     }
     
     console.log(`Loading ${type} badge config from ${configPath}`);
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    
+    // Cache the result
+    configCache.badgeConfig[type] = config;
+    return config;
   } catch (error) {
     console.error(`Error loading ${type} badge config:`, error);
+    // Cache the null result
+    configCache.badgeConfig[type] = null;
     return null;
   }
 }

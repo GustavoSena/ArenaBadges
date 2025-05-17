@@ -1,4 +1,3 @@
-import Moralis from 'moralis';
 import * as dotenv from 'dotenv';
 import { TokenHolder } from '../types/interfaces';
 import { formatTokenBalance, sleep } from '../utils/helpers';
@@ -77,25 +76,6 @@ function rotateToNextMoralisApiKey(): boolean {
   
   console.log(`Rotating to Moralis API key #${currentKeyIndex + 1}`);
   return true;
-}
-
-/**
- * Initialize Moralis with the current API key
- * This should only be called once
- */
-async function initializeMoralis(): Promise<void> {
-  if (!isMoralisInitialized) {
-    try {
-      await Moralis.start({
-        apiKey: getCurrentMoralisApiKey()
-      });
-      isMoralisInitialized = true;
-      console.log(`Moralis initialized with API key #${currentKeyIndex + 1}`);
-    } catch (error) {
-      console.error('Error initializing Moralis:', error);
-      throw error;
-    }
-  }
 }
 
 /**

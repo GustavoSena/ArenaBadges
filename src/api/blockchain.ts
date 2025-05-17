@@ -24,6 +24,13 @@ const ERC721_ABI = [
   "function ownerOf(uint256 tokenId) view returns (address)"
 ];
 
+// ERC-20 ABI (minimal for balanceOf function)
+const ERC20_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)"
+];
+
 /**
  * Fetch NFT holders using sequential token ID scanning with robust error handling and retries
  * @param contractAddress The NFT contract address
@@ -218,4 +225,177 @@ function shortenAddress(address: string): string {
 
 // For backward compatibility
 export const fetchNftHoldersFromEthers = fetchNftHolders;
-export const fetchNftHoldersWithoutTotalSupply = fetchNftHolders;
+
+/**
+ * Fetch NFT holders without using total supply
+ * @param contractAddress NFT contract address
+ * @param tokenName NFT token name
+ * @param minBalance Minimum balance required
+ * @param verbose Whether to show verbose logs
+ * @returns Array of NFT holders
+ */
+export async function fetchNftHoldersWithoutTotalSupply(
+  contractAddress: string,
+  tokenName: string,
+  minBalance: number = 1,
+  verbose: boolean = false
+): Promise<NftHolder[]> {
+  try {
+    if (verbose) console.log(`Fetching holders for ${tokenName} (${contractAddress})...`);
+    
+    // Fetch NFT holders from Ethers
+    const nftHolders = await fetchNftHoldersFromEthers(
+      contractAddress,
+      tokenName,
+      minBalance,
+      verbose
+    );
+    
+    if (verbose) console.log(`Found ${nftHolders.length} holders with at least ${minBalance} ${tokenName}`);
+    
+    return nftHolders;
+  } catch (error) {
+    console.error(`Error fetching NFT holders for ${tokenName}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Fetch token balance for a specific address using ethers.js
+ * @param tokenAddress The token contract address
+ * @param holderAddress The address to check balance for
+ * @param tokenDecimals The number of decimals for the token
+ * @param verbose Whether to show verbose logs
+ * @returns Formatted token balance as a number
+ */
+export async function fetchTokenBalanceWithEthers(
+  tokenAddress: string,
+  holderAddress: string,
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<number> {
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+
+  while (retryCount <= MAX_RETRIES) {
+    try {
+      // Create contract instance
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      
+      // Get balance
+      const balance = await tokenContract.balanceOf(holderAddress);
+      
+      // Convert to formatted balance
+      const formattedBalance = parseFloat(ethers.formatUnits(balance, tokenDecimals));
+      return formattedBalance;
+    } catch (error) {
+      retryCount++;
+      
+      if (retryCount <= MAX_RETRIES) {
+        // Calculate backoff time: 500ms, 1000ms, 2000ms, etc.
+        const backoffTime = 500 * Math.pow(2, retryCount - 1);
+        
+        if (verbose) {
+          console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
+        }
+        
+        // Wait before retrying with exponential backoff
+        await sleep(backoffTime);
+      } else {
+        console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
+      }
+    }
+  }
+  
+  // If all retries failed, return 0
+  return 0;
+}
+
+/**
+ * Fetch token balances for multiple addresses using ethers.js
+ * @param tokenAddress The token contract address
+ * @param tokenSymbol The token symbol
+ * @param holderAddresses Array of addresses to check balances for
+ * @param tokenDecimals The number of decimals for the token
+ * @param verbose Whether to show verbose logs
+ * @returns Array of token holders with their balances
+ */
+export async function fetchTokenBalancesWithEthers(
+  tokenAddress: string,
+  tokenSymbol: string,
+  holderAddresses: string[],
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<any[]> {
+  const holders: any[] = [];
+  let processedCount = 0;
+  
+  if (verbose) console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
+  
+  // Process in batches to avoid rate limiting
+  const batchSize = 10;
+  const MAX_BATCH_RETRIES = 2; // Max retries for entire batch failures
+  
+  for (let i = 0; i < holderAddresses.length; i += batchSize) {
+    const batch = holderAddresses.slice(i, i + batchSize);
+    let batchRetries = 0;
+    let batchSuccess = false;
+    
+    while (!batchSuccess && batchRetries <= MAX_BATCH_RETRIES) {
+      try {
+        const batchPromises = batch.map(async (address) => {
+          // Individual address balance fetching with retries is handled in fetchTokenBalanceWithEthers
+          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals, verbose);
+          
+          return {
+            address,
+            balance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
+            balanceFormatted: balance,
+            tokenSymbol
+          };
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        holders.push(...batchResults);
+        batchSuccess = true;
+      } catch (error) {
+        batchRetries++;
+        if (batchRetries <= MAX_BATCH_RETRIES) {
+          console.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
+          // Exponential backoff for batch retries
+          const batchBackoffTime = 1000 * Math.pow(2, batchRetries - 1);
+          if (verbose) console.log(`Retrying batch after ${batchBackoffTime}ms...`);
+          await sleep(batchBackoffTime);
+        } else {
+          console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
+          // Add empty results for this batch to maintain address count
+          const emptyResults = batch.map(address => ({
+            address,
+            balance: "0",
+            balanceFormatted: 0,
+            tokenSymbol
+          }));
+          holders.push(...emptyResults);
+        }
+      }
+    }
+    
+    processedCount += batch.length;
+    if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
+      if (verbose) console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
+    }
+    
+    // Add delay between batches to avoid rate limiting
+    if (i + batchSize < holderAddresses.length) {
+      const batchDelayTime = 500; // Base delay between batches
+      if (verbose) console.log(`Waiting ${batchDelayTime}ms before next batch...`);
+      await sleep(batchDelayTime);
+    }
+  }
+  
+  // Count non-zero balances for logging
+  const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
+  if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
+  
+  return holders;
+}
