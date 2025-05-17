@@ -90,6 +90,7 @@ export async function fetchTwitterProfilePicture(twitterHandle: string): Promise
  * Fetch Arenabook social profile for a given address
  */
 export async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
+  if (!address) return null;
   try {
     const data = await makeApiRequestWithRetry<ArenabookUserResponse[]>(
       `${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`,

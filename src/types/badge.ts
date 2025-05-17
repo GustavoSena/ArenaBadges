@@ -1,39 +1,13 @@
-
-/**
- * Token configuration for badge requirements
- */
-export interface BadgeTokenConfig {
-  symbol: string;
-  /** Token contract address */
-  address: string;
-  /** Minimum balance required for badge qualification */
-  minBalance: number;
-  /** Token decimals (typically 18 for most ERC20 tokens) */
-  decimals: number;
-}
-
-/**
- * NFT configuration for badge requirements
- */
-export interface BadgeNftConfig {
-  /** NFT collection name */
-  name: string;
-  /** NFT contract address */
-  address: string;
-  /** Size of the NFT collection (maximum token ID) */
-  collectionSize?: number;
-  /** Minimum number of NFTs required for badge qualification */
-  minBalance: number;
-}
+import { TokenConfig, NftConfig } from "./interfaces";
 
 /**
  * Badge requirement configuration
  */
 export interface BadgeRequirement {
   /** Token requirements for this badge tier */
-  tokens?: BadgeTokenConfig[];
+  tokens?: TokenConfig[];
   /** NFT requirements for this badge tier */
-  nfts?: BadgeNftConfig[];
+  nfts?: NftConfig[];
 }
 
 export interface BadgeConfig {

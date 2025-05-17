@@ -1,6 +1,5 @@
 import axios from 'axios';
 import * as dotenv from 'dotenv';
-import { ethers } from 'ethers';
 import { TokenHolder } from '../types/interfaces';
 import { sleep, formatTokenBalance } from '../utils/helpers';
 
@@ -19,7 +18,8 @@ export async function fetchTokenHoldersFromSnowtrace(
   tokenAddress: string, 
   tokenSymbol?: string,
   minBalance: number = 0,
-  tokenDecimals?: number
+  tokenDecimals?: number,
+  verbose: boolean = false
 ): Promise<TokenHolder[]> {
   try {
     // Use default token symbol if not provided
@@ -36,62 +36,71 @@ export async function fetchTokenHoldersFromSnowtrace(
     let page = 1;
     const pageSize = 100;
     let hasMorePages = true;
-    const MAX_PAGES = 5; // Limit to 5 pages to avoid excessive API calls
+    let consecutiveLowBalanceHolders = 0;
     
-    while (hasMorePages && page <= MAX_PAGES) {
+    while (hasMorePages) {
       console.log(`Fetching page ${page} of token holders...`);
       
       // Construct the Snowtrace API URL with API key if available
       const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${SNOWTRACE_API_KEY ? `&apikey=${SNOWTRACE_API_KEY}` : ''}`;
       
-      console.log(`Making request to: ${apiUrl.replace(/apikey=([^&]*)/, 'apikey=***')}`);
+      if (verbose) console.log(`Making request to: ${apiUrl.replace(/apikey=([^&]*)/, 'apikey=***')}`);
 
       try {
         const response = await axios.get(apiUrl);
-        console.log(`Response status: ${response.status}`);
-        console.log(`Response data status: ${response.data.status}`);
-        console.log(`Response data message: ${response.data.message}`);
-        console.log(`Response data result length: ${response.data.result ? response.data.result.length : 'undefined'}`);
+        if (verbose) {
+          console.log(`Response status: ${response.status}`);
+          console.log(`Response data status: ${response.data.status}`);
+          console.log(`Response data message: ${response.data.message}`);
+          console.log(`Response data result length: ${response.data.result ? response.data.result.length : 'undefined'}`);
+        }
         
         if (response.data.status === '1' && response.data.result && response.data.result.length > 0) {
           const holdersData = response.data.result;
-          let belowMinimumBalanceFound = false;
           
           // Process each holder
+          let lowBalanceInThisPage = 0;
+          
           for (const holderData of holdersData) {
             const address = holderData.address || holderData.TokenHolderAddress;
             const balance = holderData.value || holderData.TokenHolderQuantity;
+                   
+            let balanceFormatted = formatTokenBalance(balance, tokenDecimals);
             
-            // Format the balance - handle optional tokenDecimals
-            let balanceFormatted: number;
-            if (typeof tokenDecimals === 'number') {
-              balanceFormatted = formatTokenBalance(balance, tokenDecimals);
-            } else {
-              balanceFormatted = formatTokenBalance(balance);
-            }
-            
-            // Only include holders with balance >= minBalance
+            // Check if holder meets minimum balance requirement
             if (balanceFormatted >= minBalance) {
+              // Reset consecutive low balance counter when we find a valid holder
+              consecutiveLowBalanceHolders = 0;
+              
               holders.push({
                 address,
-                balance,
-                balanceFormatted,
-                tokenSymbol: symbol
+                tokenSymbol: symbol,
+                balance: balance,
+                balanceFormatted: balanceFormatted
               });
             } else {
-              // Since results are ordered by balance, once we find one holder below
-              // the minimum, we can stop processing
-              belowMinimumBalanceFound = true;
-              break;
+              // Increment consecutive low balance counter
+              consecutiveLowBalanceHolders++;
+              lowBalanceInThisPage++;
+              
+              // Stop if we've found 3 consecutive holders with low balance
+              if (consecutiveLowBalanceHolders >= 3) {
+                console.log(`Found 3 consecutive holders with balance < ${minBalance}, stopping search`);
+                hasMorePages = false;
+                break;
+              }
             }
           }
           
+          // Log how many holders were skipped in this page
+          if (lowBalanceInThisPage > 0) {
+            console.log(`Skipped ${lowBalanceInThisPage} holders with balance < ${minBalance} on page ${page}`);
+          }
+          
           // Check if we should fetch more pages
-          if (holdersData.length < pageSize || belowMinimumBalanceFound) {
+          if (holdersData.length < pageSize) {
+            console.log(`Reached end of results at page ${page} (fewer results than page size)`);
             hasMorePages = false;
-            if (belowMinimumBalanceFound) {
-              console.log(`Stopped fetching at page ${page} - found holder below minimum balance of ${minBalance} ${symbol}`);
-            }
           } else {
             page++;
             // Add delay between pages to avoid rate limiting
@@ -106,7 +115,7 @@ export async function fetchTokenHoldersFromSnowtrace(
       }
     }
     
-    // Sort holders by balance (descending) - though they should already be sorted
+    // Sort holders by balance (descending)
     holders.sort((a, b) => b.balanceFormatted - a.balanceFormatted);
     
     console.log(`Found ${holders.length} holders with balance >= ${minBalance} ${tokenSymbol}`);

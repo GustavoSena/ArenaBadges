@@ -1,4 +1,7 @@
-export interface LeaderboardTokenConfig {
+import { NftConfig, NftHolder, TokenConfig, TokenHolder } from "./interfaces";
+import { ethers } from 'ethers';
+
+export interface LeaderboardTokenConfig extends TokenConfig {
   /** Token symbol */
   symbol: string;
   /** Weight multiplier for points calculation */
@@ -13,7 +16,7 @@ export interface LeaderboardTokenConfig {
   description?: string;
 }
 
-export interface LeaderboardNftConfig {
+export interface LeaderboardNftConfig extends NftConfig{
   /** NFT collection name */
   name: string;
   /** Weight multiplier for points calculation */
@@ -117,4 +120,92 @@ export interface LeaderboardEntry {
 export interface Leaderboard {
   timestamp: string;
   entries: LeaderboardEntry[];
+}
+
+
+/**
+ * Base leaderboard class with common functionality
+ */
+export abstract class BaseLeaderboard {
+  protected provider: ethers.JsonRpcProvider;
+  protected excludedAccounts: string[] = [];
+  
+  constructor(provider: ethers.JsonRpcProvider, excludedAccounts: string[]) {
+    this.provider = provider;
+    this.excludedAccounts = excludedAccounts;
+  }
+  
+  /**
+   * Calculate points for each token and NFT holding
+   * @param tokenHoldings Token holdings for a holder
+   * @param nftHoldings NFT holdings for a holder
+   */
+  abstract calculatePoints(
+    tokenHoldings: TokenHolder[],
+    nftHoldings: NftHolder[],
+    tokens: LeaderboardTokenConfig[],
+    nfts: LeaderboardNftConfig[]
+  ): Promise<number>;
+  
+  /**
+   * Check if a holder meets the minimum balance requirements
+   * @param tokenHoldings Token holdings for a holder
+   * @param nftHoldings NFT holdings for a holder
+   */
+  abstract checkEligibility(
+    tokenHoldings: TokenHolder[],
+    nftHoldings: NftHolder[],
+    tokens: LeaderboardTokenConfig[],
+    nfts: LeaderboardNftConfig[]
+  ): Promise<boolean>;
+  
+  /**
+   * Get the output file name
+   */
+  abstract getOutputFileName(): string;
+  
+  /**
+   * Generate a leaderboard from holder points
+   * @param holderPoints Holder points
+   * @param maxEntries Maximum number of entries to include (0 for all)
+   */
+  generateLeaderboard(holderPoints: HolderPoints[], maxEntries: number = 0): Leaderboard {
+    try {
+      // Filter out excluded accounts
+      const filteredHolders = holderPoints.filter(holder => {
+        if (holder.twitterHandle && this.excludedAccounts.includes(holder.twitterHandle.toLowerCase())) {
+          console.log(`Excluding account from leaderboard: ${holder.twitterHandle}`);
+          return false;
+        }
+        return true;
+      });
+      
+      // Sort holders by total points (descending)
+      const sortedHolders = filteredHolders.sort((a, b) => b.totalPoints - a.totalPoints);
+      
+      // Generate leaderboard entries with rankings
+      // If maxEntries is 0, include all entries
+      const entriesToInclude = maxEntries === 0 ? sortedHolders.length : maxEntries;
+      const entries: LeaderboardEntry[] = sortedHolders.slice(0, entriesToInclude).map((holder, index) => ({
+        rank: index + 1,
+        twitterHandle: holder.twitterHandle as string, // We already filtered for non-null handles
+        profileImageUrl: holder.profileImageUrl,
+        address: holder.address,
+        totalPoints: holder.totalPoints,
+        tokenPoints: holder.tokenPoints,
+        nftPoints: holder.nftPoints
+      }));
+      
+      // Create the leaderboard
+      const leaderboard: Leaderboard = {
+        timestamp: new Date().toISOString(),
+        entries
+      };
+      
+      return leaderboard;
+    } catch (error) {
+      console.error('Error generating leaderboard:', error);
+      throw error;
+    }
+  }
 }

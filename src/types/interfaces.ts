@@ -1,3 +1,16 @@
+export interface Holding{
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenBalance: string;
+}
+
+export interface NftHolding extends Holding{
+}
+
+export interface TokenHolding extends Holding{
+  tokenDecimals: number;
+}
+
 // Token holder interfaces
 export interface TokenHolder {
   address: string;
@@ -49,9 +62,6 @@ export interface NftConfig {
   address: string;
   name: string;
   minBalance: number;
-}
-
-// Output interfaces
-export interface TwitterHandlesOutput {
-  handles: string[];
+  /** Size of the NFT collection (maximum token ID) */
+  collectionSize?: number;
 }

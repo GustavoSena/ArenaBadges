@@ -1,66 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
+import { TokenHolder, NftHolder } from '../../types/interfaces';
 import { Leaderboard } from '../../types/leaderboard';
-import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { fetchArenabookSocial } from '../../api/arenabook';
 
-/**
- * Process eligible addresses to get social profiles
- * @param eligibleAddresses Set of eligible addresses
- * @param projectName Project name for wallet mapping
- * @param verbose Whether to show verbose logs
- * @returns Map of addresses to social profiles
- */
-export async function processSocialProfiles(
-  eligibleAddresses: Set<string>,
-  projectName: string,
-  verbose: boolean = false
-): Promise<Map<string, any>> {
-  try {
-    console.log(`\nTotal eligible addresses: ${eligibleAddresses.size}`);
-    
-    // Convert eligible addresses to array
-    const eligibleAddressesArray = Array.from(eligibleAddresses);
-    
-    // Load wallet mapping for social profile matching
-    if (verbose) console.log(`Loading wallet mapping from mappings/${projectName}_wallet_mapping.json for social profile matching...`);
-    
-    let walletMapping: Record<string, string> = {};
-    const walletMappingPath = path.join(process.cwd(), `config/mappings/${projectName}_wallet_mapping.json`);
-    
-    if (fs.existsSync(walletMappingPath)) {
-      if (verbose) console.log(`Loading wallet mapping from path: ${walletMappingPath}`);
-      try {
-        const walletMappingData = fs.readFileSync(walletMappingPath, 'utf8');
-        walletMapping = JSON.parse(walletMappingData);
-        if (verbose) console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
-      } catch (error) {
-        console.error(`Error loading wallet mapping from ${walletMappingPath}:`, error);
-      }
-    } else if (verbose) {
-      console.log(`No wallet mapping file found at ${walletMappingPath}`);
-    }
-    
-    // Process holders with socials
-    const socialProfiles = await processHoldersWithSocials(
-      eligibleAddressesArray.map(address => ({ address })),
-      (holder: { address: string }, social: ArenabookUserResponse | null) => ({
-        address: holder.address,
-        twitter_handle: social?.twitter_handle || null,
-        twitter_pfp_url: social?.twitter_pfp_url || null
-      }),
-      walletMapping,
-      verbose
-    );
-    
-    return socialProfiles;
-  } catch (error) {
-    console.error('Error processing social profiles:', error);
-    return new Map();
-  }
-}
+
 
 /**
  * Save the leaderboard to a file
@@ -89,25 +34,16 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
  * Helper function to combine token holders based on Twitter handles
  * @param tokenHolders Array of token holders
  * @param walletMapping Mapping of wallet addresses to Twitter handles
- * @param sumOfBalances Whether to sum balances for the same Twitter handle
- * @param addressToTwitterHandle Map of addresses to Twitter handles
- * @param combinedAddressesMap Map of representative addresses to all combined addresses
  * @returns Combined token holders
  */
 export async function combineTokenHoldersByHandle(
   tokenHolders: TokenHolder[],
   walletMapping: Record<string, string>,
-  sumOfBalances: boolean,
-  addressToTwitterHandle: Map<string, string> = new Map<string, string>(),
-  combinedAddressesMap: Map<string, string[]> = new Map<string, string[]>(),
   verbose: boolean = false
 ): Promise<TokenHolder[]> {
-  // Skip if sum of balances is disabled
-  if (!sumOfBalances) {
-    if (verbose) console.log(`Token wallet mapping skipped: sumOfBalances=${sumOfBalances}`);
-    return tokenHolders;
-  }
-  
+
+  const addressToTwitterHandle: Map<string, string> = new Map<string, string>();
+  const combinedAddressesMap: Map<string, string[]> = new Map<string, string[]>();
   // Even if there are no wallet mappings, we still want to combine based on social profiles
   if (Object.keys(walletMapping).length === 0 && verbose) {
     console.log(`No wallet mappings found. Will combine token holders based on social profiles only.`);
@@ -116,7 +52,7 @@ export async function combineTokenHoldersByHandle(
   if (verbose) {
     console.log(`\n==== COMBINING TOKEN HOLDERS BY TWITTER HANDLE ====`);
     console.log(`Starting with ${tokenHolders.length} token holders`);
-    console.log(`sumOfBalances: ${sumOfBalances}, wallet mappings: ${Object.keys(walletMapping).length}`);
+    console.log(`wallet mappings: ${Object.keys(walletMapping).length}`);
       
     if (Object.keys(walletMapping).length === 0) {
       console.log(`No wallet mappings found. Will combine based on social profiles only.`);

@@ -1,5 +1,9 @@
 import * as fs from 'fs';
 import { ethers } from 'ethers';
+import { NftHolder, TokenHolder } from '../types/interfaces';
+import { fetchTokenHoldersFromMoralis } from '../api/moralis';
+import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
+
 
 /**
  * Sleep function to introduce delay between API requests
@@ -34,4 +38,28 @@ export function ensureOutputDirectory(dirPath: string): void {
  */
 export function saveToJsonFile(filePath: string, data: any): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+export async function fetchTokenHolders(
+  tokenAddress: string, 
+  tokenSymbol: string,
+  minBalance: number = 0,
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<TokenHolder[]> {
+  let tokenHolders: TokenHolder[] = [];
+  try{
+    console.log(`Fetching token holders for ${tokenAddress} from Moralis...`);
+    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
+  }catch(error){
+    console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+    try {
+      console.log(`Fetching token holders for ${tokenAddress} from Snowtrace...`);
+      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
+    } catch (error) {
+      console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+      return [];
+    }
+  }
+  return tokenHolders;
 }

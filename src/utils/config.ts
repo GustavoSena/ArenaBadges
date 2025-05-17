@@ -134,21 +134,3 @@ export function loadBadgeConfig(type: string): any | null {
     throw new Error(`Failed to load ${type} badge configuration`);
   }
 }
-
-/**
- * Check if a project exists by checking for badge and leaderboard configurations
- * @param projectName The name of the project to check
- * @returns An object with flags indicating which configurations exist
- */
-export function checkProjectExists(projectName: string): { badge: boolean, leaderboard: boolean } {
-  const badgeConfigPath = path.join(process.cwd(), 'config', 'badges', `${projectName}.json`);
-  const leaderboardConfigPath = path.join(process.cwd(), 'config', 'leaderboards', `${projectName}.json`);
-  
-  const badgeExists = fs.existsSync(badgeConfigPath);
-  const leaderboardExists = fs.existsSync(leaderboardConfigPath);
-  
-  return {
-    badge: badgeExists,
-    leaderboard: leaderboardExists
-  };
-}

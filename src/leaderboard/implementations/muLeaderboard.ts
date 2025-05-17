@@ -1,6 +1,4 @@
-import { loadLeaderboardConfig } from '../../utils/config';
-import { BaseLeaderboard } from '../../types/leaderboardClasses';
-import { LeaderboardConfig } from '../../types/leaderboard';
+import { BaseLeaderboard } from '../../types/leaderboard';
 import { TokenHolder, NftHolder } from '../../types/interfaces';
 import { ethers } from 'ethers';
 
@@ -15,8 +13,8 @@ export class MuLeaderboard extends BaseLeaderboard {
    * Constructor for the MU leaderboard
    * @param provider The ethers provider for blockchain interactions
    */
-  constructor(provider: ethers.JsonRpcProvider) {
-    super(provider);
+  constructor(provider: ethers.JsonRpcProvider, excludedAccounts: string[]) {
+    super(provider, excludedAccounts);
     
     // ABI for the price provider contract
     const priceProviderAbi = [
@@ -201,14 +199,6 @@ export class MuLeaderboard extends BaseLeaderboard {
     }
     
     return minBalance;
-  }
-  
-  /**
-   * Load the leaderboard configuration
-   * @returns The leaderboard configuration
-   */
-  loadConfig(): LeaderboardConfig {
-    return loadLeaderboardConfig('mu');
   }
   
   /**

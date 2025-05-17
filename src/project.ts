@@ -207,31 +207,3 @@ async function runProject(
     process.exit(1);
   }
 }
-
-/**
- * Load scheduler configuration
- * @returns Object with scheduler intervals in hours
- */
-function loadSchedulerConfig(): { badge: number, leaderboard: number } {
-  const configPath = path.join(process.cwd(), 'config', 'scheduler.json');
-  const defaultConfig = {
-    badge: 3,
-    leaderboard: 3
-  };
-  
-  try {
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(configData);
-      
-      return {
-        badge: config.intervals?.badge || defaultConfig.badge,
-        leaderboard: config.intervals?.leaderboard || defaultConfig.leaderboard
-      };
-    }
-  } catch (error) {
-    console.warn('Could not load scheduler.json, using default interval values');
-  }
-  
-  return defaultConfig;
-}

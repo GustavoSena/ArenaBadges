@@ -4,8 +4,8 @@ import { ethers } from 'ethers';
 import * as dotenv from 'dotenv';
 
 import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
-import { LeaderboardConfig, HolderPoints, Leaderboard } from '../../types/leaderboard';
-import { BaseLeaderboard } from '../../types/leaderboardClasses';
+import { HolderPoints, Leaderboard } from '../../types/leaderboard';
+import { BaseLeaderboard } from '../../types/leaderboard';
 import { MuLeaderboard } from '../implementations/muLeaderboard';
 import { StandardLeaderboard } from '../implementations/standardLeaderboard';
 import { processHoldersWithSocials } from '../../services/socialProfiles';
@@ -13,7 +13,7 @@ import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
 
 // Import from API modules
 import {
-  fetchNftHoldersWithoutTotalSupply,
+  fetchNftHoldersFromEthers,
   fetchTokenBalancesWithEthers
 } from '../../api/blockchain';
 
@@ -23,9 +23,10 @@ import {
   combineTokenHoldersByHandle,
   combineNftHoldersByHandle
 } from '../utils/leaderboardUtils';
-import { fetchTokenHoldersFromMoralis } from '../../api/moralis';
+import { fetchTokenHolders } from '../../utils/helpers';
 import { fetchTwitterProfilePicture } from '../../api/arenabook';
 import { sleep } from '../../utils/helpers';
+import { AppConfig } from '../../utils/config';
 
 // Load environment variables
 dotenv.config();
@@ -44,29 +45,23 @@ const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_K
 const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
 
 /**
- * Safely get weights from leaderboard config, handling undefined values
- * @param leaderboardConfig The leaderboard configuration
- * @returns Safe weights object with empty arrays as fallbacks
- */
-function getSafeWeights(leaderboardConfig: LeaderboardConfig) {
-  return {
-    tokens: leaderboardConfig.weights?.tokens || [],
-    nfts: leaderboardConfig.weights?.nfts || []
-  };
-}
-
-/**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
  * @param leaderboard The leaderboard implementation to use
  * @param verbose Whether to show verbose logs
  * @returns Array of holder points
  */
-export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbose: boolean = false): Promise<HolderPoints[]> {
+export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: BaseLeaderboard, verbose: boolean = false): Promise<HolderPoints[]> {
   try {
     // Load leaderboard configuration
-    const leaderboardConfig = leaderboard.loadConfig();
+    const leaderboardConfig = appConfig.leaderboardConfig;
+    if (!leaderboardConfig) {
+      throw new Error('Leaderboard configuration not found');
+    }
     
+    const leaderboardTokens = leaderboardConfig.weights.tokens;
+    const leaderboardNfts = leaderboardConfig.weights.nfts;
+
     // Map to store holder points by address
     const holderPointsMap = new Map<string, HolderPoints>();
     
@@ -79,14 +74,11 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     // Fetch all eligible NFT holders first
     const eligibleAddresses = new Set<string>();
     
-    // Get safe weights from the configuration
-    const safeWeights = getSafeWeights(leaderboardConfig);
-    
-    for (const nftWeight of safeWeights.nfts) {
+    for (const nftWeight of leaderboardConfig.weights.nfts) {
       if (verbose) console.log(`Checking ${nftWeight.name} NFT holders...`);
       
       // Always use the fallback method (going through NFT IDs) instead of checking total supply
-      const nftHolders = await fetchNftHoldersWithoutTotalSupply(
+      const nftHolders = await fetchNftHoldersFromEthers(
         nftWeight.address,
         nftWeight.name,
         nftWeight.minBalance,
@@ -105,13 +97,6 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     // Step 2: Fetch token holders for eligibility check
     if (verbose) console.log('\nFetching token holders for eligibility check...');
     
-    // Get MUG/MU price for dynamic minimum balance calculations
-    let mugMuPrice = 30; // Default fallback value
-    if (leaderboard instanceof MuLeaderboard) {
-      mugMuPrice = await leaderboard.getMugMuPrice();
-      if (verbose) console.log(`Using MUG/MU price: ${mugMuPrice} for dynamic minimum balances`);
-    }
-    
     for (const tokenWeight of leaderboardConfig.weights.tokens) {
       if (verbose) console.log(`Fetching ${tokenWeight.symbol} token holders...`);
       
@@ -128,7 +113,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       }
       
       // Fetch token holders directly from Moralis with minimum balance filter
-      const tokenHolders = await fetchTokenHoldersFromMoralis(
+      const tokenHolders = await fetchTokenHolders(
         tokenWeight.address,
         tokenWeight.symbol,
         tokenWeight.decimals || 18,
@@ -150,14 +135,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
     const eligibleAddressesArray = Array.from(eligibleAddresses);
     
     // Extract project name from the leaderboard instance
-    let projectName = '';
-    if (leaderboard instanceof MuLeaderboard) {
-      projectName = 'mu';
-    } else {
-      // For other leaderboard types, extract from the output file name
-      const outputFileName = leaderboard.getOutputFileName();
-      projectName = outputFileName.split('_')[0];
-    }
+    let projectName = appConfig.projectName;
     
     if (verbose) console.log(`Loading wallet mapping from mappings/${projectName}_wallet_mapping.json for social profile matching...`);
     
@@ -199,9 +177,8 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
         addressesWithSocial.add(address.toLowerCase());
       }
     }
-    
-    if (verbose) console.log(`Found ${addressesWithSocial.size} addresses with social profiles`);
-    else console.log(`Addresses with social profiles: ${addressesWithSocial.size}`);
+
+    console.log(`Addresses with social profiles: ${addressesWithSocial.size}`);
     
     // Step 5: Initialize holder points for addresses with social profiles
     if (verbose) console.log('\nInitializing holder points...');
@@ -257,17 +234,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
       if (sumOfBalances) {
         if (verbose) console.log(`Combining token holders by Twitter handle for ${tokenWeight.symbol}...`);
         
-        // Maps to store Twitter handle information
-        const addressToTwitterHandle = new Map<string, string>();
-        const combinedAddressesMap = new Map<string, string[]>();
-        
         // Combine token holders by Twitter handle
         tokenHolders = await combineTokenHoldersByHandle(
           tokenHolders,
           walletMapping,
-          sumOfBalances,
-          addressToTwitterHandle,
-          combinedAddressesMap,
           verbose
         );
         
@@ -282,11 +252,8 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
           // Get holder points
           const holderPoints = holderPointsMap.get(address)!;
           
-          // Calculate points for this token
-          const tokenHoldings = [holder];
-          
           // Calculate points using the leaderboard implementation
-          const points = await leaderboard.calculatePoints(tokenHoldings, []);
+          const points = await leaderboard.calculatePoints([holder], [], leaderboardTokens, leaderboardNfts);
           
           // Update holder points
           holderPoints.tokenPoints[tokenWeight.symbol] = points;
@@ -337,16 +304,12 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, verbos
           // Get holder points
           const holderPoints = holderPointsMap.get(address)!;
           
-          // Calculate points for this NFT using the leaderboard implementation
-          const tokenHoldings: TokenHolder[] = [];
-          const nftHoldings = [holder];
-          
           // Check eligibility using the leaderboard implementation
-          const isEligible = await leaderboard.checkEligibility(tokenHoldings, nftHoldings);
+          const isEligible = await leaderboard.checkEligibility([], [holder], leaderboardTokens, leaderboardNfts);
           
           if (isEligible) {
             // Calculate points using the leaderboard implementation
-            const points = await leaderboard.calculatePoints([], nftHoldings);
+            const points = await leaderboard.calculatePoints([], [holder], leaderboardTokens, leaderboardNfts);
             
             // Update holder points
             holderPoints.nftPoints[nftWeight.name] = points;
@@ -435,21 +398,24 @@ async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard, verb
  * Generate and save MU leaderboard
  * @param verbose Whether to log verbose output
  */
-export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
+export async function generateAndSaveMuLeaderboard(appConfig: AppConfig, verbose: boolean = false): Promise<Leaderboard> {
   try {
     if (verbose) {
       console.log('Starting MU leaderboard generation...');
     }
     
+    const leaderboardConfig = appConfig.leaderboardConfig;
+    if (!leaderboardConfig) {
+      throw new Error('Leaderboard configuration not found');
+    }
+    
     // Create MuLeaderboard instance
-    const muLeaderboard = new MuLeaderboard(provider);
+    const muLeaderboard = new MuLeaderboard(provider, leaderboardConfig.excludedAccounts);
     
       console.log('Calculating holder points...');
     
-    const holderPoints = await calculateHolderPoints(muLeaderboard, verbose);
+    const holderPoints = await calculateHolderPoints(appConfig, muLeaderboard, verbose);
     
-    // Get the config
-    const config = muLeaderboard.loadConfig();
     
     if (verbose) {
       console.log('Loaded MU leaderboard configuration');
@@ -485,14 +451,14 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
     
     // Save leaderboard to HTML file with index.html filename
     const htmlOutputPath = path.join(outputDir, 'index.html');
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, leaderboardConfig.output);
     
     if (verbose) {
       console.log(`Saved MU leaderboard HTML to ${htmlOutputPath}`);
     }
     
     // Copy logo file to assets directory if specified in config
-    if (config.output && config.output.logoPath) {
+    if (leaderboardConfig.output && leaderboardConfig.output.logoPath) {
       const assetsDir = path.join(outputDir, 'assets');
       if (!fs.existsSync(assetsDir)) {
         fs.mkdirSync(assetsDir, { recursive: true });
@@ -502,8 +468,8 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
       }
       
       // Copy logo file
-      const logoSource = path.join(process.cwd(), 'assets', config.output.logoPath);
-      const logoTarget = path.join(assetsDir, config.output.logoPath);
+      const logoSource = path.join(process.cwd(), 'assets', leaderboardConfig.output.logoPath);
+      const logoTarget = path.join(assetsDir, leaderboardConfig.output.logoPath);
       fs.copyFileSync(logoSource, logoTarget);
       
       if (verbose) {
@@ -526,14 +492,19 @@ export async function generateAndSaveMuLeaderboard(verbose: boolean = false): Pr
  * Generate and save standard leaderboard
  * @param verbose Whether to log verbose output
  */
-export async function generateAndSaveStandardLeaderboard(verbose: boolean = false): Promise<Leaderboard> {
+export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, verbose: boolean = false): Promise<Leaderboard> {
   try {
     if (verbose) {
       console.log('Starting standard leaderboard generation...');
     }
     
+    const leaderboardConfig = appConfig.leaderboardConfig;
+    if (!leaderboardConfig) {
+      throw new Error('Leaderboard configuration not found');
+    }
+    
     // Create StandardLeaderboard instance
-    const standardLeaderboard = new StandardLeaderboard(provider);
+    const standardLeaderboard = new StandardLeaderboard(provider, leaderboardConfig.excludedAccounts);
     
     // Calculate holder points
     if (verbose) {
@@ -542,10 +513,7 @@ export async function generateAndSaveStandardLeaderboard(verbose: boolean = fals
       console.log('Calculating holder points...');
     }
     
-    const holderPoints = await calculateHolderPoints(standardLeaderboard, verbose);
-    
-    // Get the config
-    const config = standardLeaderboard.loadConfig();
+    const holderPoints = await calculateHolderPoints(appConfig, standardLeaderboard, verbose);
     
     if (verbose) {
       console.log('Loaded standard leaderboard configuration');
@@ -586,14 +554,14 @@ export async function generateAndSaveStandardLeaderboard(verbose: boolean = fals
     
     // Save leaderboard to HTML file
     const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, config.output);
+    saveLeaderboardHtml(leaderboard, htmlOutputPath, leaderboardConfig.output);
     
     if (verbose) {
       console.log(`Saved standard leaderboard HTML to ${htmlOutputPath}`);
     }
     
     // Copy logo file to assets directory if specified in config
-    if (config.output && config.output.logoPath) {
+    if (leaderboardConfig.output && leaderboardConfig.output.logoPath) {
       const assetsDir = path.join(outputDir, 'assets');
       if (!fs.existsSync(assetsDir)) {
         fs.mkdirSync(assetsDir, { recursive: true });
@@ -603,8 +571,8 @@ export async function generateAndSaveStandardLeaderboard(verbose: boolean = fals
       }
       
       // Copy logo file
-      const logoSource = path.join(process.cwd(), 'assets', config.output.logoPath);
-      const logoTarget = path.join(assetsDir, config.output.logoPath);
+      const logoSource = path.join(process.cwd(), 'assets', leaderboardConfig.output.logoPath);
+      const logoTarget = path.join(assetsDir, leaderboardConfig.output.logoPath);
       fs.copyFileSync(logoSource, logoTarget);
       
       if (verbose) {

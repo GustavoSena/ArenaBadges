@@ -1,11 +1,10 @@
 // Token Holder Profiles Fetcher
-import { TokenHolder, NftHolder, ArenabookUserResponse } from '../../types/interfaces';
+import { TokenHolder, NftHolder, ArenabookUserResponse, TokenConfig } from '../../types/interfaces';
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
 import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
-import { fetchTokenHoldersFromSnowtrace } from '../../api/snowtrace';
-import { formatTokenBalance, sleep } from '../../utils/helpers';
+import { formatTokenBalance, sleep, fetchTokenHolders } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
 
 // Export the HolderResults interface for use in other files
@@ -16,23 +15,8 @@ export interface HolderResults {
   upgradedAddresses: string[];
 }
 
-// For backward compatibility, define the same interfaces
-interface TokenConfig {
-  address: string;
-  symbol: string;
-  decimals: number;
-  minBalance: number;
-}
-
 // Constants
 const REQUEST_DELAY_MS = 500; // 500ms delay between requests
-
-/**
- * Check if a token balance meets the minimum requirement
- */
-function hasMinimumBalance(balance: string, minBalance: number): boolean {
-  return formatTokenBalance(balance) >= minBalance;
-}
 
 /**
  * Helper function to combine token holders with the same Twitter handle
@@ -41,15 +25,9 @@ async function combineTokenHolders(
   holders: TokenHolder[], 
   walletMapping: Record<string, string>,
   handleToWallet: Record<string, string>,
-  minBalance: number,
-  sumOfBalances: boolean
+  minBalance: number
 ): Promise<TokenHolder[]> {
-  // If sumOfBalances is false, just return the original holders
-  if (!sumOfBalances) {
-    return holders.filter(holder => 
-      hasMinimumBalance(holder.balance, minBalance)
-    );
-  }
+
   
   console.log(`Combining token holders with sumOfBalances enabled...`);
   
@@ -166,7 +144,7 @@ async function combineTokenHolders(
     
     if (holders.length === 1) {
       // If there's only one holder for this handle, just check if it meets the minimum
-      if (hasMinimumBalance(holders[0].balance, minBalance)) {
+      if (formatTokenBalance(holders[0].balance) >= minBalance) {
         combinedHolders.push(holders[0]);
       }
       continue;
@@ -202,13 +180,8 @@ async function combineNftHolders(
   holders: NftHolder[], 
   walletMapping: Record<string, string>,
   handleToWallet: Record<string, string>,
-  minBalance: number,
-  sumOfBalances: boolean
+  minBalance: number
 ): Promise<NftHolder[]> {
-  // If sumOfBalances is false, just return the original holders
-  if (!sumOfBalances) {
-    return holders.filter(holder => holder.tokenCount >= minBalance);
-  }
   
   console.log(`Combining NFT holders with sumOfBalances enabled...`);
   
@@ -377,6 +350,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
   // Create separate mappings for basic and upgraded token balances
   const BASIC_TOKEN_BALANCES: { [key: string]: number } = {};
   const UPGRADED_TOKEN_BALANCES: { [key: string]: number } = {};
+
   
   // Initialize token mappings from basic requirements
   if (basicRequirements.tokens) {
@@ -464,7 +438,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
       // Fetch token holders from Snowtrace
       const symbol = TOKEN_SYMBOLS[tokenAddress.toLowerCase()] || 'Unknown Token';
       const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
-      const rawTokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, symbol, 0, decimals);
+      const rawTokenHolders = await fetchTokenHolders(tokenAddress, symbol, 0, decimals);
       
       // Process token holders with wallet mapping
       if (walletMappingFile) {
@@ -477,8 +451,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
               rawTokenHolders,
               walletMapping,
               handleToWallet,
-              basicBalance,
-              sumOfBalances
+              basicBalance
             );
             console.log(`After combining, found ${basicTokenHolders.length} token holders meeting basic minimum balance`);
           }
@@ -489,8 +462,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
               rawTokenHolders,
               walletMapping,
               handleToWallet,
-              upgradedBalance,
-              sumOfBalances
+              upgradedBalance
             );
             console.log(`After combining, found ${upgradedTokenHolders.length} token holders meeting upgraded minimum balance`);
           }
@@ -524,8 +496,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
           rawNftHolders,
           walletMapping,
           handleToWallet,
-          MIN_NFT_BALANCE,
-          sumOfBalances
+          MIN_NFT_BALANCE
         );
       } else {
         // If sum of balances is disabled, just use the raw NFT holders
@@ -708,7 +679,6 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
         twitter_handle: social?.twitter_handle || null,
         twitter_pfp_url: social?.twitter_pfp_url || null
       }),
-      // Pass wallet mapping regardless of sumOfBalances setting
       walletMapping,
       false
     );
