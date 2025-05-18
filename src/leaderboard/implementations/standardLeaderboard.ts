@@ -1,6 +1,6 @@
 import { BaseLeaderboard } from '../../types/leaderboard';
-import { LeaderboardTokenConfig, LeaderboardNftConfig } from '../../types/leaderboard';
-import { TokenHolder, NftHolder } from '../../types/interfaces';
+import { LeaderboardTokenConfig, LeaderboardNftConfig, HolderPoints } from '../../types/leaderboard';
+import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { ethers } from 'ethers';
 
 /**
@@ -17,26 +17,33 @@ export class StandardLeaderboard extends BaseLeaderboard {
    * @param nftHoldings The NFT holdings for the holder
    * @returns The calculated points
    */
-  async calculatePoints(tokenHoldings: TokenHolder[], nftHoldings: NftHolder[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[]): Promise<number> {
-    let totalPoints = 0;
+  async calculatePoints(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[]): Promise<HolderPoints> {
+    let holderPoints: HolderPoints = {
+      totalPoints: 0,
+      tokenPoints: {},
+      nftPoints: {}
+    };
+    
     
     // Calculate token points
     for (const holding of tokenHoldings) {
       const token = tokens.find((t: LeaderboardTokenConfig) => t.symbol === holding.tokenSymbol);
       if (token) {
-        totalPoints += holding.balanceFormatted * token.weight;
+        holderPoints.tokenPoints[holding.tokenSymbol] = parseFloat(holding.tokenBalance)/Math.pow(10, holding.tokenDecimals) * token.weight;
+        holderPoints.totalPoints += holderPoints.tokenPoints[holding.tokenSymbol];
       }
     }
     
     // Calculate NFT points
     for (const holding of nftHoldings) {
-      const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenName);
+      const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenSymbol);
       if (nft) {
-        totalPoints += holding.tokenCount * nft.weight;
+        holderPoints.nftPoints[holding.tokenSymbol] = Number(holding.tokenBalance) * nft.weight;
+        holderPoints.totalPoints += holderPoints.nftPoints[holding.tokenSymbol];
       }
     }
     
-    return totalPoints;
+    return holderPoints;
   }
   
   /**
@@ -45,27 +52,34 @@ export class StandardLeaderboard extends BaseLeaderboard {
    * @param nftHoldings The NFT holdings for the holder
    * @returns Whether the holder meets the minimum balance requirements
    */
-  async checkEligibility(tokenHoldings: TokenHolder[], nftHoldings: NftHolder[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[]): Promise<boolean> {
+  async checkEligibility(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[]): Promise<boolean> {
     
     // Check token eligibility
     for (const holding of tokenHoldings) {
       const token = tokens.find((t: LeaderboardTokenConfig) => t.symbol === holding.tokenSymbol);
-      if (token && holding.balanceFormatted >= token.minBalance) {
+      if (token && parseFloat(holding.tokenBalance)/Math.pow(10, holding.tokenDecimals) >= token.minBalance) {
         return true;
       }
     }
     
     // Check NFT eligibility
     for (const holding of nftHoldings) {
-      const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenName);
-      if (nft && holding.tokenCount >= nft.minBalance) {
+      const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenSymbol);
+      if (nft && Number(holding.tokenBalance) >= nft.minBalance) {
         return true;
       }
     }
     
     return false;
   }
-  
+    /**
+   * Calculate dynamic minimum balance for a token based on MUG/MU price
+   * @param tokenSymbol The token symbol
+   * @returns The calculated minimum balance
+   */
+    public async calculateDynamicMinimumBalance(tokenSymbol?: string): Promise<number> {
+      return 100;
+    }
   /**
    * Get the output file name for this leaderboard
    * @returns The output file name

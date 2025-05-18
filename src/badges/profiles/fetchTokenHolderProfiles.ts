@@ -1,11 +1,12 @@
 // Token Holder Profiles Fetcher
-import { TokenHolder, NftHolder, ArenabookUserResponse, TokenConfig } from '../../types/interfaces';
+import { TokenHolder, NftHolder, ArenabookUserResponse, TokenConfig, NftConfig, TokenHolding, NftHolding, AddressHoldings } from '../../types/interfaces';
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
 import { processHoldersWithSocials } from '../../services/socialProfiles';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
 import { formatTokenBalance, sleep, fetchTokenHolders } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
+import { fetchTokenBalanceWithEthers } from '../../api/blockchain';
 
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
@@ -73,13 +74,6 @@ async function combineTokenHolders(
           // We already have this handle with a different address, so we'll combine them later
           console.log(`Found additional wallet ${address} for handle ${handle}`);
         }
-      } else if (walletMapping[address]) {
-        // If the address is in our wallet mapping but doesn't have a social profile
-        const handle = walletMapping[address].toLowerCase();
-        if (!holdersByHandle[handle]) {
-          holdersByHandle[handle] = [];
-        }
-        holdersByHandle[handle].push(holder);
       }
     } catch (error) {
       console.error(`Error fetching social profile for ${address}:`, error);
@@ -138,17 +132,6 @@ async function combineTokenHolders(
   const combinedHolders: TokenHolder[] = [];
   
   for (const [handle, holders] of Object.entries(holdersByHandle)) {
-    if (holders.length === 0) {
-      continue;
-    }
-    
-    if (holders.length === 1) {
-      // If there's only one holder for this handle, just check if it meets the minimum
-      if (formatTokenBalance(holders[0].balance) >= minBalance) {
-        combinedHolders.push(holders[0]);
-      }
-      continue;
-    }
     
     // Combine balances
     let totalFormattedBalance = 0;
@@ -328,433 +311,616 @@ async function combineNftHolders(
 export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: boolean): Promise<HolderResults> {
   console.log(`Fetching token holder profiles for project: ${appConfig.projectName}`);
   
-  // Get badge configurations with the project-specific config
-  const basicRequirements = appConfig.badgeConfig.badges?.basic || { nfts: [], tokens: [] };
-  const upgradedRequirements = appConfig.badgeConfig.badges?.upgraded || { nfts: [], tokens: [] };
-  
-  // Get NFT configurations
-  const BASIC_NFT_CONFIG = basicRequirements.nfts && basicRequirements.nfts.length > 0 ? basicRequirements.nfts[0] : null;
-  const UPGRADED_NFT_CONFIG = upgradedRequirements.nfts && upgradedRequirements.nfts.length > 0 ? upgradedRequirements.nfts[0] : null;
-  
-  // Use basic NFT config if available, otherwise use upgraded NFT config
-  const NFT_CONFIG = BASIC_NFT_CONFIG || UPGRADED_NFT_CONFIG;
-  const NFT_CONTRACT = NFT_CONFIG?.address || '';
-  const NFT_NAME = NFT_CONFIG?.name || 'Unknown NFT';
-  const MIN_NFT_BALANCE = NFT_CONFIG?.minBalance || 1;
-  const NFT_COLLECTION_SIZE = NFT_CONFIG?.collectionSize || 1000; // Default to 1000 if not specified
-  
-  // Create mappings from configuration
-  const TOKEN_SYMBOLS: { [key: string]: string } = {};
-  const TOKEN_DECIMALS: { [key: string]: number } = {};
-  
-  // Create separate mappings for basic and upgraded token balances
-  const BASIC_TOKEN_BALANCES: { [key: string]: number } = {};
-  const UPGRADED_TOKEN_BALANCES: { [key: string]: number } = {};
-
-  
-  // Initialize token mappings from basic requirements
-  if (basicRequirements.tokens) {
-    console.log(`Found ${basicRequirements.tokens.length} tokens in basic requirements`);
-    basicRequirements.tokens.forEach((token: TokenConfig) => {
-      console.log(`Processing basic token: ${token.symbol} (${token.address}) with min balance: ${token.minBalance}`);
-      const lowerAddress = token.address.toLowerCase();
-      BASIC_TOKEN_BALANCES[lowerAddress] = token.minBalance;
-      TOKEN_SYMBOLS[lowerAddress] = token.symbol;
-      TOKEN_DECIMALS[lowerAddress] = token.decimals;
-    });
-  } else {
-    console.log('No tokens found in basic requirements');
-  }
-  
-  // Initialize token mappings from upgraded requirements
-  if (upgradedRequirements.tokens) {
-    console.log(`Found ${upgradedRequirements.tokens.length} tokens in upgraded requirements`);
-    upgradedRequirements.tokens.forEach((token: TokenConfig) => {
-      console.log(`Processing upgraded token: ${token.symbol} (${token.address}) with min balance: ${token.minBalance}`);
-      const lowerAddress = token.address.toLowerCase();
-      UPGRADED_TOKEN_BALANCES[lowerAddress] = token.minBalance;
-      TOKEN_SYMBOLS[lowerAddress] = token.symbol;
-      TOKEN_DECIMALS[lowerAddress] = token.decimals;
-    });
-  } else {
-    console.log('No tokens found in upgraded requirements');
-  }
-  
-  // Get permanent accounts from project configuration
-  let PERMANENT_ACCOUNTS: string[] = [];
   try {
-    // Get from project configuration
-    if (appConfig && appConfig.badgeConfig.permanentAccounts && Array.isArray(appConfig.badgeConfig.permanentAccounts)) {
-      PERMANENT_ACCOUNTS = appConfig.badgeConfig.permanentAccounts;
-      console.log(`Loaded ${PERMANENT_ACCOUNTS.length} permanent accounts from project config: ${PERMANENT_ACCOUNTS.join(', ')}`);
+    // Get badge configurations with the project-specific config
+    const basicRequirements = appConfig.badgeConfig.badges.basic;
+    const upgradedRequirements = appConfig.badgeConfig.badges.upgraded || null;
+    
+    // Check if sum of balances feature is enabled
+    const sumOfBalances = appConfig.badgeConfig.sumOfBalances || false;
+    console.log(`Sum of balances feature is ${sumOfBalances ? 'enabled' : 'disabled'}`);
+    
+    // Get permanent accounts from project configuration
+    const permanentAccounts = appConfig.badgeConfig.permanentAccounts || [];
+    console.log(`Loaded ${permanentAccounts.length} permanent accounts: ${permanentAccounts.join(', ')}`);
+    
+    // Check if basic badges should be excluded for upgraded badge holders
+    const excludeBasicForUpgraded = appConfig.badgeConfig.excludeBasicForUpgraded || false;
+    console.log(`Exclude basic badges for upgraded badge holders: ${excludeBasicForUpgraded ? 'yes' : 'no'}`);
+    
+    // Get wallet mapping file path from config (if it exists)
+    const walletMappingFile = appConfig.projectConfig.walletMappingFile;
+    
+    // Initialize wallet mapping variables
+    let walletMapping: Record<string, string> = {};
+    let handleToWallet: Record<string, string> = {};
+    
+    if (walletMappingFile) {
+      console.log(`Loading wallet mapping from ${walletMappingFile}...`);
+      walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
+      handleToWallet = getHandleToWalletMapping(walletMapping);
+      console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
     } else {
-      console.log('No permanent accounts found in project config');
-    }
-  } catch (error) {
-    console.error('Error loading permanent accounts:', error);
-  }
-  
-  // Check if sum of balances feature is enabled
-  const sumOfBalances = appConfig.badgeConfig.sumOfBalances || false;
-  
-  // Initialize wallet mapping variables
-  let walletMapping: Record<string, string> = {};
-  let handleToWallet: Record<string, string> = {};
-  
-  // Get wallet mapping file path from config (if it exists)
-  const walletMappingFile = appConfig.projectConfig.walletMappingFile;
-  
-  if (walletMappingFile) {
-    if (sumOfBalances) {
-      console.log(`Sum of balances feature is enabled. Loading wallet mapping from ${walletMappingFile}...`);
-    } else {
-      console.log(`Loading wallet mapping from ${walletMappingFile} for social profile matching...`);
+      console.log(`No wallet mapping file specified. Skipping wallet mapping.`);
     }
     
-    walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
-    handleToWallet = getHandleToWalletMapping(walletMapping);
-    console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
-  } else {
-    console.log(`No wallet mapping file specified. Skipping wallet mapping.`);
-  }
-  
-  try {
-    // Fetch token holders first (since we'll filter by token balance before fetching social profiles)
-    let tokenHolders: TokenHolder[] = [];
+    // Step 1: Collect all unique tokens and NFTs from both badge tiers
+    const allTokens = new Set<TokenConfig>();
+    const allNfts = new Set<NftConfig>();
     
-    // Combine token addresses from both basic and upgraded requirements
-    const basicTokenAddresses = Object.keys(BASIC_TOKEN_BALANCES);
-    const upgradedTokenAddresses = Object.keys(UPGRADED_TOKEN_BALANCES);
-    const tokenAddresses = [...new Set([...basicTokenAddresses, ...upgradedTokenAddresses])];
+    // Add tokens and NFTs from basic requirements
+    if (basicRequirements.tokens) {
+      basicRequirements.tokens.forEach(token => allTokens.add(token));
+    }
+    if (basicRequirements.nfts) {
+      basicRequirements.nfts.forEach(nft => allNfts.add(nft));
+    }
     
-    if (tokenAddresses.length > 0) {
-      // Use the first token for now (can be expanded to support multiple tokens)
-      const tokenAddress = tokenAddresses[0];
-      const basicBalance = BASIC_TOKEN_BALANCES[tokenAddress] || 0;
-      const upgradedBalance = UPGRADED_TOKEN_BALANCES[tokenAddress] || 0;
-      console.log(`Token to check: ${TOKEN_SYMBOLS[tokenAddress]} (${tokenAddress})`);
-      console.log(`Basic min balance: ${basicBalance}, Upgraded min balance: ${upgradedBalance}`);
-      
-      // Fetch token holders from Snowtrace
-      const symbol = TOKEN_SYMBOLS[tokenAddress.toLowerCase()] || 'Unknown Token';
-      const decimals = TOKEN_DECIMALS[tokenAddress.toLowerCase()] || 18;
-      const rawTokenHolders = await fetchTokenHolders(tokenAddress, symbol, 0, decimals);
-      
-      // Process token holders with wallet mapping
-      if (walletMappingFile) {
+    // Add tokens and NFTs from upgraded requirements (if they exist)
+    if (upgradedRequirements?.tokens) {
+      upgradedRequirements.tokens.forEach(token => allTokens.add(token));
+    }
+    if (upgradedRequirements?.nfts) {
+      upgradedRequirements.nfts.forEach(nft => allNfts.add(nft));
+    }
+    
+    console.log(`Found ${allTokens.size} unique tokens and ${allNfts.size} unique NFTs across all badge tiers`);
+    
+    // Step 2: Create a map of token address to minimum balance required
+    // If a token appears in both basic and upgraded, use the lower balance
+    const tokenMinBalances = new Map<string, { minBalance: number, token: TokenConfig }>();
+    
+    // Process tokens from basic requirements
+    if (basicRequirements.tokens) {
+      for (const token of basicRequirements.tokens) {
+        const lowerAddress = token.address.toLowerCase();
+        let minBalance = token.minBalance;
+        
+        // If sumOfBalances is enabled, we can use half the minimum balance when fetching
         if (sumOfBalances) {
-          console.log('Sum of balances feature is enabled for tokens. Processing token holders with wallet mapping...');
-          
-          // Process basic token holders
-          if (basicBalance > 0) {
-            const basicTokenHolders = await combineTokenHolders(
-              rawTokenHolders,
-              walletMapping,
-              handleToWallet,
-              basicBalance
-            );
-            console.log(`After combining, found ${basicTokenHolders.length} token holders meeting basic minimum balance`);
-          }
-          
-          // Process upgraded token holders
-          if (upgradedBalance > 0) {
-            const upgradedTokenHolders = await combineTokenHolders(
-              rawTokenHolders,
-              walletMapping,
-              handleToWallet,
-              upgradedBalance
-            );
-            console.log(`After combining, found ${upgradedTokenHolders.length} token holders meeting upgraded minimum balance`);
+          minBalance = minBalance / 2;
+        }
+        
+        tokenMinBalances.set(lowerAddress, { minBalance, token });
+      }
+    }
+    
+    // Process tokens from upgraded requirements (if they exist)
+    if (upgradedRequirements?.tokens) {
+      for (const token of upgradedRequirements.tokens) {
+        const lowerAddress = token.address.toLowerCase();
+        let minBalance = token.minBalance;
+        
+        // If sumOfBalances is enabled, we can use half the minimum balance when fetching
+        if (sumOfBalances) {
+          minBalance = minBalance / 2;
+        }
+        
+        // If token already exists in the map, use the lower of the two balances
+        if (tokenMinBalances.has(lowerAddress)) {
+          const existingEntry = tokenMinBalances.get(lowerAddress)!;
+          if (minBalance < existingEntry.minBalance) {
+            tokenMinBalances.set(lowerAddress, { minBalance, token });
           }
         } else {
-          console.log('Using wallet mapping for social profile matching without combining balances...');
-          // When sumOfBalances is false, we still want to use the wallet mapping for social profile matching
-          // but we don't want to combine balances
+          tokenMinBalances.set(lowerAddress, { minBalance, token });
         }
-      } else {
-        console.log('No wallet mapping file specified, using raw token holders...');
       }
-      
-      // Use the raw token holders for further processing regardless of sumOfBalances setting
-      tokenHolders = rawTokenHolders;
-    } else {
-      console.log('No token addresses configured, skipping token holder fetching');
     }
     
-    // Fetch NFT holders if needed
-    let nftHolders: NftHolder[] = [];
-    if (NFT_CONTRACT) {
-      console.log(`NFT to check: ${NFT_NAME} (${NFT_CONTRACT}) (min balance: ${MIN_NFT_BALANCE})`);
-      
-      // Pass all required parameters to fetchNftHoldersFromEthers
-      const rawNftHolders = await fetchNftHoldersFromEthers(NFT_CONTRACT, NFT_NAME, MIN_NFT_BALANCE, true); // Set verbose to true
-      
-      // Process NFT holders with wallet mapping if sum of balances is enabled
-      if (sumOfBalances) {
-        console.log('Sum of balances feature is enabled for NFTs. Processing NFT holders with wallet mapping...');
-        nftHolders = await combineNftHolders(
-          rawNftHolders,
-          walletMapping,
-          handleToWallet,
-          MIN_NFT_BALANCE
-        );
-      } else {
-        // If sum of balances is disabled, just use the raw NFT holders
-        nftHolders = rawNftHolders;
-      }
-    } else {
-      console.log('No NFT contract configured, skipping NFT holder fetching');
-    }
+    // Step 3: Create mappings to store token and NFT holdings by wallet address
+    const walletToTokenHoldings = new Map<string, Map<string, TokenHolding>>();
+    const walletToNftHoldings = new Map<string, Map<string, NftHolding>>();
     
-    // First, determine which addresses qualify for basic and upgraded badges
-    
-    // For basic badge, start with NFT holders
-    let basicAddresses = new Set<string>();
-    
-    // If basic requirements include NFTs
-    if (BASIC_NFT_CONFIG) {
-      console.log("Basic badge requires NFT holdings");
-      basicAddresses = new Set(nftHolders.map(h => h.address.toLowerCase()));
-    }
-    
-    // If basic requirements include tokens
-    if (basicRequirements.tokens && basicRequirements.tokens.length > 0) {
-      console.log("Basic badge requires token holdings");
-      const requiredToken = basicRequirements.tokens[0];
-      const requiredBalance = requiredToken.minBalance;
+    // Step 4: Fetch all addresses that have the minimum balance for each token
+    console.log('Fetching token holders...');
+    for (const [tokenAddress, { minBalance, token }] of tokenMinBalances.entries()) {
+      console.log(`Fetching holders for ${token.symbol} (${tokenAddress}) with min balance ${minBalance}...`);
       
-      // Log the basic token balance requirement
-      console.log(`Basic badge token requirement: ${requiredToken.symbol} (${requiredToken.address}) with min balance: ${requiredBalance}`);
+      // Fetch token holders with the minimum balance
+      const tokenHolders = await fetchTokenHolders(
+        tokenAddress,
+        token.symbol,
+        minBalance,
+        token.decimals
+      );
       
-      if (basicAddresses.size === 0) {
-        // If no NFT requirement, use token holders directly
-        console.log('Checking token balances for basic badge qualification:');
+      console.log(`Found ${tokenHolders.length} holders for ${token.symbol} with balance >= ${minBalance}`);
+      
+      // Store token holdings for each wallet
+      for (const holder of tokenHolders) {
+        const walletAddress = holder.address.toLowerCase();
         
-        // Check each holder against the BASIC token balance requirement
-        const qualifyingHolders = [];
-        for (const holder of tokenHolders) {
-          if (formatTokenBalance(holder.balance) >= requiredBalance) {
-            qualifyingHolders.push(holder);
+        // Initialize token holdings map for this wallet if it doesn't exist
+        if (!walletToTokenHoldings.has(walletAddress)) {
+          walletToTokenHoldings.set(walletAddress, new Map<string, TokenHolding>());
+        }
+        
+        // Add token holding to the wallet's map
+        const tokenHolding: TokenHolding = {
+          tokenAddress: tokenAddress,
+          tokenSymbol: token.symbol,
+          tokenBalance: holder.balance,
+          tokenDecimals: token.decimals
+        };
+        
+        walletToTokenHoldings.get(walletAddress)!.set(tokenAddress, tokenHolding);
+      }
+    }
+    
+    // Step 5: Fetch all NFT holders for each NFT
+    console.log('Fetching NFT holders...');
+    for (const nft of allNfts) {
+      const nftAddress = nft.address.toLowerCase();
+      const minNftBalance = nft.minBalance;
+      const collectionSize = nft.collectionSize || 1000; // Default to 1000 if not specified
+      
+      console.log(`Fetching holders for ${nft.name} (${nftAddress}) with min balance ${minNftBalance}...`);
+      
+      // Fetch NFT holders
+      const nftHolders = await fetchNftHoldersFromEthers(
+        nftAddress,
+        nft.name,
+        minNftBalance,
+        verbose,
+        collectionSize
+      );
+      
+      console.log(`Found ${nftHolders.length} holders for ${nft.name} with balance >= ${minNftBalance}`);
+      
+      // Store NFT holdings for each wallet
+      for (const holder of nftHolders) {
+        const walletAddress = holder.address.toLowerCase();
+        
+        // Initialize NFT holdings map for this wallet if it doesn't exist
+        if (!walletToNftHoldings.has(walletAddress)) {
+          walletToNftHoldings.set(walletAddress, new Map<string, NftHolding>());
+        }
+        
+        // Add NFT holding to the wallet's map
+        const nftHolding: NftHolding = {
+          tokenAddress: nftAddress,
+          tokenSymbol: nft.name,
+          tokenBalance: holder.tokenCount.toString()
+        };
+        
+        walletToNftHoldings.get(walletAddress)!.set(nftAddress, nftHolding);
+      }
+    }
+    
+    // Step 6: Create a map of Twitter handle to address holdings
+    const userHoldings = new Map<string, AddressHoldings[]>();
+    
+    // Step 7: Process wallets from the mapping file first
+    if (Object.keys(walletMapping).length > 0) {
+      console.log('Processing wallets from mapping file...');
+      
+      for (const [walletAddress, twitterHandle] of Object.entries(walletMapping)) {
+        const lowerWalletAddress = walletAddress.toLowerCase();
+        
+        // Skip wallets that don't have any token or NFT holdings
+        if (!walletToTokenHoldings.has(lowerWalletAddress) && !walletToNftHoldings.has(lowerWalletAddress)) {
+          if (verbose) {
+            console.log(`Wallet ${lowerWalletAddress} from mapping has no token or NFT holdings, skipping...`);
+          }
+          continue;
+        }
+        
+        // Create address holdings object
+        const addressHoldings: AddressHoldings = {
+          address: lowerWalletAddress,
+          tokenHoldings: {},
+          nftHoldings: {},
+          fromMapping: true
+        };
+        
+        // Add token holdings
+        if (walletToTokenHoldings.has(lowerWalletAddress)) {
+          const tokenHoldings = walletToTokenHoldings.get(lowerWalletAddress)!;
+          for (const [tokenAddress, tokenHolding] of tokenHoldings.entries()) {
+            addressHoldings.tokenHoldings[tokenAddress] = tokenHolding;
           }
         }
         
-        console.log(`Found ${qualifyingHolders.length} addresses that qualify for the basic badge`);
-        console.log(`Basic badge holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
-        
-        basicAddresses = new Set(
-          qualifyingHolders.map(h => h.address.toLowerCase())
-        );
-      } else {
-        // If both NFT and token requirements, filter to addresses that have both
-        console.log('Checking token balances for basic badge qualification:');
-        
-        // Check each holder against the BASIC token balance requirement
-        const qualifyingHolders = [];
-        for (const holder of tokenHolders) {
-          if (formatTokenBalance(holder.balance) >= requiredBalance) {
-            qualifyingHolders.push(holder);
-          }
-        }
-        console.log(`Basic badge holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
-        
-        const tokenAddressesWithMinBalance = new Set(
-          qualifyingHolders.map(h => h.address.toLowerCase())
-        );
-        
-        const previousSize = basicAddresses.size;
-        basicAddresses = new Set(
-          [...basicAddresses].filter(address => tokenAddressesWithMinBalance.has(address))
-        );
-        console.log(`Addresses that have both NFT and tokens for basic badge: ${basicAddresses.size} (reduced from ${previousSize})`);
-      }
-    }
-    
-    console.log(`Found ${basicAddresses.size} addresses that qualify for the basic badge`);
-    
-    // For upgraded badge
-    let upgradedAddresses = new Set<string>();
-    
-    // If upgraded requirements include NFTs
-    if (UPGRADED_NFT_CONFIG) {
-      console.log("Upgraded badge requires NFT holdings");
-      upgradedAddresses = new Set(nftHolders.map(h => h.address.toLowerCase()));
-    }
-    
-    // If upgraded requirements include tokens
-    if (upgradedRequirements.tokens && upgradedRequirements.tokens.length > 0) {
-      console.log("Upgraded badge requires token holdings");
-      const requiredToken = upgradedRequirements.tokens[0];
-      const requiredBalance = requiredToken.minBalance;
-      
-      console.log(`Upgraded badge token requirement: ${requiredToken.symbol} (${requiredToken.address}) with min balance: ${requiredBalance}`);
-      console.log(`Token holders found: ${tokenHolders.length}`);
-      
-      if (tokenHolders.length === 0) {
-        console.log('WARNING: No token holders found. Check if the token address is correct and if the Snowtrace API is working.');
-      }
-      
-      if (upgradedAddresses.size === 0) {
-        // If no NFT requirement, use token holders directly
-        console.log('Checking token balances for upgraded badge qualification:');
-        
-        // Check each holder against the UPGRADED token balance requirement
-        const qualifyingHolders = [];
-        for (const holder of tokenHolders) {
-          if (formatTokenBalance(holder.balance) >= requiredBalance) {
-            qualifyingHolders.push(holder);
+        // Add NFT holdings
+        if (walletToNftHoldings.has(lowerWalletAddress)) {
+          const nftHoldings = walletToNftHoldings.get(lowerWalletAddress)!;
+          for (const [nftAddress, nftHolding] of nftHoldings.entries()) {
+            addressHoldings.nftHoldings[nftAddress] = nftHolding;
           }
         }
         
-        console.log(`Found ${qualifyingHolders.length} addresses that qualify for the upgraded badge`);
-        console.log(`Holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
-        
-        upgradedAddresses = new Set(
-          qualifyingHolders.map(h => h.address.toLowerCase())
-        );
-      } else {
-        // If both NFT and token requirements, filter to addresses that have both
-        console.log('Checking token balances for upgraded badge qualification:');
-        
-        // Check each holder against the UPGRADED token balance requirement
-        const qualifyingHolders = [];
-        for (const holder of tokenHolders) {
-          if (formatTokenBalance(holder.balance) >= requiredBalance) {
-            qualifyingHolders.push(holder);
-          }
+        // Add to user holdings map
+        if (!userHoldings.has(twitterHandle)) {
+          userHoldings.set(twitterHandle, []);
         }
         
-        console.log(`Holders with sufficient balance: ${qualifyingHolders.length}/${tokenHolders.length}`);
-        
-        const tokenAddressesWithMinBalance = new Set(
-          qualifyingHolders.map(h => h.address.toLowerCase())
-        );
-        
-        const previousSize = upgradedAddresses.size;
-        upgradedAddresses = new Set(
-          [...upgradedAddresses].filter(address => tokenAddressesWithMinBalance.has(address))
-        );
-        console.log(`Addresses that have both NFT and tokens: ${upgradedAddresses.size} (reduced from ${previousSize})`);
+        userHoldings.get(twitterHandle)!.push(addressHoldings);
       }
-    } else {
-      console.log("No token requirements found for upgraded badge");
     }
     
-    console.log(`Found ${upgradedAddresses.size} addresses that qualify for the upgraded badge`);
+    // Step 8: Process remaining wallets (not in mapping) by fetching Arena profiles
+    console.log('Processing remaining wallets by fetching Arena profiles...');
     
-    // Combine all qualifying addresses to fetch social profiles only for those
-    const allQualifyingAddresses = new Set<string>([...basicAddresses, ...upgradedAddresses]);
-    console.log(`Total unique qualifying addresses: ${allQualifyingAddresses.size}`);
+    // Collect all wallet addresses that have token or NFT holdings
+    const allWalletAddresses = new Set<string>();
+    for (const walletAddress of walletToTokenHoldings.keys()) {
+      allWalletAddresses.add(walletAddress);
+    }
+    for (const walletAddress of walletToNftHoldings.keys()) {
+      allWalletAddresses.add(walletAddress);
+    }
     
-    // Create a combined list of addresses to process for social profiles
-    // This includes both token holders and NFT holders
-    const addressesToProcess: { address: string, balance?: string, balanceFormatted?: number, tokenSymbol?: string, tokenCount?: number }[] = [];
-    
-    // Add qualifying token holders
-    tokenHolders.forEach(holder => {
-      if (allQualifyingAddresses.has(holder.address.toLowerCase())) {
-        addressesToProcess.push(holder);
-      }
-    });
-    
-    // Add NFT holders that aren't already in the list
-    const processedAddresses = new Set(addressesToProcess.map(a => a.address.toLowerCase()));
-    nftHolders.forEach(holder => {
-      if (allQualifyingAddresses.has(holder.address.toLowerCase()) && !processedAddresses.has(holder.address.toLowerCase())) {
-        addressesToProcess.push({
-          address: holder.address,
-          balance: holder.tokenCount.toString(),
-          balanceFormatted: holder.tokenCount,
-          tokenSymbol: NFT_NAME
-        });
-      }
-    });
-    
-    console.log(`Fetching social profiles for ${addressesToProcess.length} qualifying addresses (${allQualifyingAddresses.size} unique addresses)`);
-    
-    // Process all qualifying addresses to get their Twitter handles
-    const socialInfoMap = await processHoldersWithSocials<typeof addressesToProcess[0]>(
-      addressesToProcess,
-      (holder: typeof addressesToProcess[0], social: ArenabookUserResponse | null) => ({
-        ...holder,
-        twitter_handle: social?.twitter_handle || null,
-        twitter_pfp_url: social?.twitter_pfp_url || null
-      }),
-      walletMapping,
-      false
+    // Filter out wallets that are already in the mapping
+    const unmappedWallets = Array.from(allWalletAddresses).filter(
+      address => !Object.keys(walletMapping).map(a => a.toLowerCase()).includes(address.toLowerCase())
     );
     
-    // Convert SocialProfileInfo map to simple twitter handle map for backward compatibility
-    const addressToTwitterHandle = new Map<string, string | null>();
-    for (const [address, socialInfo] of socialInfoMap.entries()) {
-      addressToTwitterHandle.set(address, socialInfo.twitter_handle);
+    console.log(`Found ${unmappedWallets.length} unmapped wallets with token or NFT holdings`);
+    
+    // Process unmapped wallets in batches to avoid rate limiting
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < unmappedWallets.length; i += BATCH_SIZE) {
+      const batch = unmappedWallets.slice(i, i + BATCH_SIZE);
+      
+      if (verbose) {
+        console.log(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(unmappedWallets.length / BATCH_SIZE)}...`);
+      }
+      
+      // Process wallets in parallel with rate limiting
+      const promises = batch.map(async (walletAddress) => {
+        try {
+          // Fetch Arena profile for this wallet
+          const profile = await fetchArenabookSocial(walletAddress);
+          
+          // Skip wallets without a Twitter handle
+          if (!profile || !profile.twitter_handle) {
+            if (verbose) {
+              console.log(`No Twitter handle found for wallet ${walletAddress}, skipping...`);
+            }
+            return;
+          }
+          
+          const twitterHandle = profile.twitter_handle;
+          
+          // If sumOfBalances is false and we already have this Twitter handle, skip
+          if (!sumOfBalances && userHoldings.has(twitterHandle)) {
+            if (verbose) {
+              console.log(`Twitter handle ${twitterHandle} already exists and sumOfBalances is disabled, skipping wallet ${walletAddress}...`);
+            }
+            return;
+          }
+          
+          // Create address holdings object
+          const addressHoldings: AddressHoldings = {
+            address: walletAddress,
+            tokenHoldings: {},
+            nftHoldings: {},
+            fromMapping: false
+          };
+          
+          // Add token holdings
+          if (walletToTokenHoldings.has(walletAddress)) {
+            const tokenHoldings = walletToTokenHoldings.get(walletAddress)!;
+            for (const [tokenAddress, tokenHolding] of tokenHoldings.entries()) {
+              addressHoldings.tokenHoldings[tokenAddress] = tokenHolding;
+            }
+          }
+          
+          // Add NFT holdings
+          if (walletToNftHoldings.has(walletAddress)) {
+            const nftHoldings = walletToNftHoldings.get(walletAddress)!;
+            for (const [nftAddress, nftHolding] of nftHoldings.entries()) {
+              addressHoldings.nftHoldings[nftAddress] = nftHolding;
+            }
+          }
+          
+          // Add to user holdings map
+          if (!userHoldings.has(twitterHandle)) {
+            userHoldings.set(twitterHandle, []);
+          }
+          
+          userHoldings.get(twitterHandle)!.push(addressHoldings);
+          
+        } catch (error) {
+          console.error(`Error processing wallet ${walletAddress}:`, error);
+        }
+        
+        // Add delay between requests to avoid rate limiting
+        await sleep(REQUEST_DELAY_MS);
+      });
+      
+      await Promise.all(promises);
+    }
+  
+    // Step 9: Check eligibility for basic and upgraded badges
+    console.log('Checking eligibility for badges...');
+    
+    // Initialize sets to store eligible Twitter handles
+    const basicEligibleHandles = new Set<string>();
+    const upgradedEligibleHandles = new Set<string>();
+    
+    // Check eligibility for each Twitter handle
+    for (const [twitterHandle, addressHoldings] of userHoldings.entries()) {
+      // Skip checking if this is a permanent account (they'll be added later)
+      if (permanentAccounts.includes(twitterHandle)) {
+        continue;
+      }
+      
+      // Check basic badge eligibility
+      if (basicRequirements) {
+        let isBasicEligible = true;
+        
+        // Check token requirements
+        if (basicRequirements.tokens && basicRequirements.tokens.length > 0) {
+          for (const tokenConfig of basicRequirements.tokens) {
+            const tokenAddress = tokenConfig.address.toLowerCase();
+            const requiredBalance = tokenConfig.minBalance;
+            
+            let totalBalance = 0;
+            
+            if (sumOfBalances) {
+              // Sum balances across all addresses for this user
+              for (const holdings of addressHoldings) {
+                // Check if we already have this token's balance
+                if (holdings.tokenHoldings[tokenAddress]) {
+                  const balanceStr = holdings.tokenHoldings[tokenAddress].tokenBalance;
+                  const formattedBalance = formatTokenBalance(balanceStr, tokenConfig.decimals);
+                  totalBalance += formattedBalance;
+                } else {
+                  // Fetch balance on-demand if not already fetched
+                  const fetchedBalance = await fetchTokenBalanceWithEthers(
+                    tokenAddress,
+                    holdings.address,
+                    tokenConfig.decimals,
+                    verbose
+                  );
+                  totalBalance += fetchedBalance;
+                }
+              }
+            } else {
+              // Use only the first address
+              const firstHolding = addressHoldings[0];
+              if (firstHolding) {
+                if (firstHolding.tokenHoldings[tokenAddress]) {
+                  const balanceStr = firstHolding.tokenHoldings[tokenAddress].tokenBalance;
+                  totalBalance = formatTokenBalance(balanceStr, tokenConfig.decimals);
+                } else {
+                  // Fetch balance on-demand if not already fetched
+                  totalBalance = await fetchTokenBalanceWithEthers(
+                    tokenAddress,
+                    firstHolding.address,
+                    tokenConfig.decimals,
+                    verbose
+                  );
+                }
+              }
+            }
+            
+            // Check if total balance meets requirement
+            if (totalBalance < requiredBalance) {
+              isBasicEligible = false;
+              if (verbose) {
+                console.log(`${twitterHandle} does not meet basic requirement for ${tokenConfig.symbol}: ${totalBalance} < ${requiredBalance}`);
+              }
+              break;
+            }
+          }
+        }
+        
+        // Check NFT requirements if still eligible
+        if (isBasicEligible && basicRequirements.nfts && basicRequirements.nfts.length > 0) {
+          for (const nftConfig of basicRequirements.nfts) {
+            const nftAddress = nftConfig.address.toLowerCase();
+            const requiredBalance = nftConfig.minBalance;
+            
+            let totalNfts = 0;
+            
+            if (sumOfBalances) {
+              // Sum NFT counts across all addresses for this user
+              for (const holdings of addressHoldings) {
+                if (holdings.nftHoldings[nftAddress]) {
+                  const nftCount = parseInt(holdings.nftHoldings[nftAddress].tokenBalance);
+                  totalNfts += nftCount;
+                }
+              }
+            } else {
+              // Use only the first address
+              const firstHolding = addressHoldings[0];
+              if (firstHolding && firstHolding.nftHoldings[nftAddress]) {
+                totalNfts = parseInt(firstHolding.nftHoldings[nftAddress].tokenBalance);
+              }
+            }
+            
+            // Check if total NFTs meets requirement
+            if (totalNfts < requiredBalance) {
+              isBasicEligible = false;
+              if (verbose) {
+                console.log(`${twitterHandle} does not meet basic requirement for ${nftConfig.name}: ${totalNfts} < ${requiredBalance}`);
+              }
+              break;
+            }
+          }
+        }
+        
+        // Add to basic eligible handles if all requirements are met
+        if (isBasicEligible) {
+          basicEligibleHandles.add(twitterHandle);
+          if (verbose) {
+            console.log(`${twitterHandle} is eligible for basic badge`);
+          }
+        }
+      }
+      
+      // Check upgraded badge eligibility (if it exists)
+      if (upgradedRequirements) {
+        let isUpgradedEligible = true;
+        
+        // Check token requirements
+        if (upgradedRequirements.tokens && upgradedRequirements.tokens.length > 0) {
+          for (const tokenConfig of upgradedRequirements.tokens) {
+            const tokenAddress = tokenConfig.address.toLowerCase();
+            const requiredBalance = tokenConfig.minBalance;
+            
+            let totalBalance = 0;
+            
+            if (sumOfBalances) {
+              // Sum balances across all addresses for this user
+              for (const holdings of addressHoldings) {
+                // Check if we already have this token's balance
+                if (holdings.tokenHoldings[tokenAddress]) {
+                  const balanceStr = holdings.tokenHoldings[tokenAddress].tokenBalance;
+                  const formattedBalance = formatTokenBalance(balanceStr, tokenConfig.decimals);
+                  totalBalance += formattedBalance;
+                } else {
+                  // Fetch balance on-demand if not already fetched
+                  const fetchedBalance = await fetchTokenBalanceWithEthers(
+                    tokenAddress,
+                    holdings.address,
+                    tokenConfig.decimals,
+                    verbose
+                  );
+                  totalBalance += fetchedBalance;
+                }
+              }
+            } else {
+              // Use only the first address
+              const firstHolding = addressHoldings[0];
+              if (firstHolding) {
+                if (firstHolding.tokenHoldings[tokenAddress]) {
+                  const balanceStr = firstHolding.tokenHoldings[tokenAddress].tokenBalance;
+                  totalBalance = formatTokenBalance(balanceStr, tokenConfig.decimals);
+                } else {
+                  // Fetch balance on-demand if not already fetched
+                  totalBalance = await fetchTokenBalanceWithEthers(
+                    tokenAddress,
+                    firstHolding.address,
+                    tokenConfig.decimals,
+                    verbose
+                  );
+                }
+              }
+            }
+            
+            // Check if total balance meets requirement
+            if (totalBalance < requiredBalance) {
+              isUpgradedEligible = false;
+              if (verbose) {
+                console.log(`${twitterHandle} does not meet upgraded requirement for ${tokenConfig.symbol}: ${totalBalance} < ${requiredBalance}`);
+              }
+              break;
+            }
+          }
+        }
+        
+        // Check NFT requirements if still eligible
+        if (isUpgradedEligible && upgradedRequirements.nfts && upgradedRequirements.nfts.length > 0) {
+          for (const nftConfig of upgradedRequirements.nfts) {
+            const nftAddress = nftConfig.address.toLowerCase();
+            const requiredBalance = nftConfig.minBalance;
+            
+            let totalNfts = 0;
+            
+            if (sumOfBalances) {
+              // Sum NFT counts across all addresses for this user
+              for (const holdings of addressHoldings) {
+                if (holdings.nftHoldings[nftAddress]) {
+                  const nftCount = parseInt(holdings.nftHoldings[nftAddress].tokenBalance);
+                  totalNfts += nftCount;
+                }
+              }
+            } else {
+              // Use only the first address
+              const firstHolding = addressHoldings[0];
+              if (firstHolding && firstHolding.nftHoldings[nftAddress]) {
+                totalNfts = parseInt(firstHolding.nftHoldings[nftAddress].tokenBalance);
+              }
+            }
+            
+            // Check if total NFTs meets requirement
+            if (totalNfts < requiredBalance) {
+              isUpgradedEligible = false;
+              if (verbose) {
+                console.log(`${twitterHandle} does not meet upgraded requirement for ${nftConfig.name}: ${totalNfts} < ${requiredBalance}`);
+              }
+              break;
+            }
+          }
+        }
+        
+        // Add to upgraded eligible handles if all requirements are met
+        if (isUpgradedEligible) {
+          upgradedEligibleHandles.add(twitterHandle);
+          if (verbose) {
+            console.log(`${twitterHandle} is eligible for upgraded badge`);
+          }
+        }
+      }
     }
     
-    // Get Twitter handles for basic badge holders and their corresponding addresses
-    const basicHandlesAndAddresses = [...basicAddresses]
-      .map(address => {
-        const handle = addressToTwitterHandle.get(address);
-        return { address, handle };
-      })
-      .filter(item => item.handle !== null);
-    
-    const basicHandles = basicHandlesAndAddresses.map(item => item.handle) as string[];
-    const basicSocialAddresses = basicHandlesAndAddresses.map(item => item.address);
-      
-    // Get Twitter handles for upgraded badge holders and their corresponding addresses
-    const upgradedHandlesAndAddresses = [...upgradedAddresses]
-      .map(address => {
-        const handle = addressToTwitterHandle.get(address);
-        return { address, handle };
-      })
-      .filter(item => item.handle !== null);
-    
-    const upgradedHandles = upgradedHandlesAndAddresses.map(item => item.handle) as string[];
-    const upgradedSocialAddresses = upgradedHandlesAndAddresses.map(item => item.address);
-    
-    // Flag to control whether holders can be in both lists
-    const excludeBasicForUpgraded = appConfig.badgeConfig.excludeBasicForUpgraded === true;
-    
-    // If excludeBasicForUpgraded is true, remove upgraded badge holders from basic badge list
-    // but NEVER remove permanent accounts
-    let filteredBasicHandles = basicHandles;
+    // Step 10: Apply excludeBasicForUpgraded flag if enabled
     if (excludeBasicForUpgraded) {
-      console.log('Removing upgraded badge holders from basic badge list due to excludeBasicForUpgraded flag');
-      // Create a set of upgraded handles for faster lookups
-      const upgradedHandlesSet = new Set(upgradedHandles);
-      // Create a set of permanent accounts for faster lookups
-      const permanentAccountsSet = new Set(PERMANENT_ACCOUNTS.map(handle => handle.toLowerCase()));
+      console.log('Applying excludeBasicForUpgraded flag...');
       
-      // Filter out basic handles that are also in upgraded handles, but keep permanent accounts
-      filteredBasicHandles = basicHandles.filter(handle => 
-        !upgradedHandlesSet.has(handle) || permanentAccountsSet.has(handle.toLowerCase())
-      );
-      console.log(`Removed ${basicHandles.length - filteredBasicHandles.length} handles from basic badge list (permanent accounts preserved)`);
-    } else {
-      console.log('Allowing addresses to be in both basic and upgraded badge lists');
+      // Remove handles from basic list if they are in the upgraded list
+      for (const handle of upgradedEligibleHandles) {
+        if (basicEligibleHandles.has(handle)) {
+          basicEligibleHandles.delete(handle);
+          if (verbose) {
+            console.log(`Removed ${handle} from basic list because they have an upgraded badge`);
+          }
+        }
+      }
     }
     
-    // Add permanent accounts to both lists
-    const finalBasicHandles = [...new Set([...filteredBasicHandles, ...PERMANENT_ACCOUNTS])];
-    const finalUpgradedHandles = [...new Set([...upgradedHandles, ...PERMANENT_ACCOUNTS])];
+    // Step 11: Add permanent accounts to both lists
+    console.log('Adding permanent accounts to badge lists...');
+    for (const handle of permanentAccounts) {
+      basicEligibleHandles.add(handle);
+      upgradedEligibleHandles.add(handle);
+    }
     
-    // Log permanent accounts
-    console.log("\nPermanent accounts added to both lists:", PERMANENT_ACCOUNTS.join(", "));
-    console.log(`Basic badge holders ${!excludeBasicForUpgraded ? 'can' : 'cannot'} also have upgraded badges`);
+    // Step 12: Collect wallet addresses for eligible handles
+    const basicEligibleAddresses = new Set<string>();
+    const upgradedEligibleAddresses = new Set<string>();
     
-    // Return both Twitter handles and wallet addresses (only for addresses with social profiles)
-    return {
-      basicHolders: finalBasicHandles,
-      upgradedHolders: finalUpgradedHandles,
-      basicAddresses: basicSocialAddresses,
-      upgradedAddresses: upgradedSocialAddresses
+    for (const [handle, holdings] of userHoldings.entries()) {
+      if (basicEligibleHandles.has(handle)) {
+        for (const holding of holdings) {
+          basicEligibleAddresses.add(holding.address);
+        }
+      }
+      
+      if (upgradedEligibleHandles.has(handle)) {
+        for (const holding of holdings) {
+          upgradedEligibleAddresses.add(holding.address);
+        }
+      }
+    }
+    
+    // Add addresses from wallet mapping for permanent accounts that might not have been processed
+    for (const handle of permanentAccounts) {
+      const address = handleToWallet[handle.toLowerCase()] ? handleToWallet[handle.toLowerCase()] : await getArenaAddressForHandle(handle);
+      if (address) {
+        basicEligibleAddresses.add(address);
+        upgradedEligibleAddresses.add(address);
+      }
+    }
+    
+    // Step 13: Return the results
+    const results: HolderResults = {
+      basicHolders: Array.from(basicEligibleHandles),
+      upgradedHolders: Array.from(upgradedEligibleHandles),
+      basicAddresses: Array.from(basicEligibleAddresses),
+      upgradedAddresses: Array.from(upgradedEligibleAddresses)
     };
+    
+    console.log(`Found ${results.basicHolders.length} eligible basic badge holders`);
+    console.log(`Found ${results.upgradedHolders.length} eligible upgraded badge holders`);
+    
+    return results;
   } catch (error) {
     console.error('Error in fetchTokenHolderProfiles:', error);
-    return {
-      basicHolders: PERMANENT_ACCOUNTS,
-      upgradedHolders: PERMANENT_ACCOUNTS,
-      basicAddresses: [],
-      upgradedAddresses: []
-    };
+    throw error; // Re-throw the error to be handled by the caller
   }
 }

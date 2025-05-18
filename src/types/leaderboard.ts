@@ -1,34 +1,18 @@
-import { NftConfig, NftHolder, TokenConfig, TokenHolder } from "./interfaces";
+import { NftConfig, NftHolding, TokenConfig, TokenHolding } from "./interfaces";
 import { ethers } from 'ethers';
 
 export interface LeaderboardTokenConfig extends TokenConfig {
-  /** Token symbol */
-  symbol: string;
   /** Weight multiplier for points calculation */
   weight: number;
-  /** Minimum balance required to earn points */
-  minBalance: number;
-  /** Token contract address */
-  address: string;
-  /** Token decimals */
-  decimals: number;
   /** Description of the token's role in the leaderboard */
   description?: string;
 }
 
 export interface LeaderboardNftConfig extends NftConfig{
-  /** NFT collection name */
-  name: string;
   /** Weight multiplier for points calculation */
   weight: number;
   /** Points awarded per NFT held */
   pointsPerToken: number;
-  /** Minimum number of NFTs required to earn points */
-  minBalance: number;
-  /** NFT contract address */
-  address: string;
-  /** Collection size */
-  collectionSize?: number;
 }
 
 export interface LeaderboardColumn {
@@ -90,10 +74,7 @@ export interface LeaderboardConfig {
   sumOfBalances: boolean;
 }
 
-export interface HolderPoints {
-  address: string;
-  twitterHandle: string | null;
-  profileImageUrl: string | null;
+export interface HolderPoints{
   totalPoints: number;
   tokenPoints: {
     [symbol: string]: number;
@@ -101,6 +82,13 @@ export interface HolderPoints {
   nftPoints: {
     [name: string]: number;
   };
+}
+
+export interface HolderEntry {
+  address: string;
+  twitterHandle: string | null;
+  profileImageUrl: string | null;
+  points: HolderPoints;
 }
 
 export interface LeaderboardEntry {
@@ -141,11 +129,12 @@ export abstract class BaseLeaderboard {
    * @param nftHoldings NFT holdings for a holder
    */
   abstract calculatePoints(
-    tokenHoldings: TokenHolder[],
-    nftHoldings: NftHolder[],
+    tokenHoldings: TokenHolding[],
+    nftHoldings: NftHolding[],
     tokens: LeaderboardTokenConfig[],
-    nfts: LeaderboardNftConfig[]
-  ): Promise<number>;
+    nfts: LeaderboardNftConfig[],
+    verbose?: boolean
+  ): Promise<HolderPoints>;
   
   /**
    * Check if a holder meets the minimum balance requirements
@@ -153,23 +142,29 @@ export abstract class BaseLeaderboard {
    * @param nftHoldings NFT holdings for a holder
    */
   abstract checkEligibility(
-    tokenHoldings: TokenHolder[],
-    nftHoldings: NftHolder[],
+    tokenHoldings: TokenHolding[],
+    nftHoldings: NftHolding[],
     tokens: LeaderboardTokenConfig[],
-    nfts: LeaderboardNftConfig[]
+    nfts: LeaderboardNftConfig[],
+    verbose?: boolean
   ): Promise<boolean>;
   
   /**
    * Get the output file name
    */
   abstract getOutputFileName(): string;
-  
+  /**
+   * Calculate dynamic minimum balance
+   * @param tokenSymbol The token symbol
+   * @returns The calculated minimum balance
+   */
+  abstract calculateDynamicMinimumBalance(tokenSymbol?: string): Promise<number>;
   /**
    * Generate a leaderboard from holder points
    * @param holderPoints Holder points
    * @param maxEntries Maximum number of entries to include (0 for all)
    */
-  generateLeaderboard(holderPoints: HolderPoints[], maxEntries: number = 0): Leaderboard {
+  generateLeaderboard(holderPoints: HolderEntry[], maxEntries: number = 0): Leaderboard {
     try {
       // Filter out excluded accounts
       const filteredHolders = holderPoints.filter(holder => {
@@ -181,7 +176,7 @@ export abstract class BaseLeaderboard {
       });
       
       // Sort holders by total points (descending)
-      const sortedHolders = filteredHolders.sort((a, b) => b.totalPoints - a.totalPoints);
+      const sortedHolders = filteredHolders.sort((a, b) => b.points.totalPoints - a.points.totalPoints);
       
       // Generate leaderboard entries with rankings
       // If maxEntries is 0, include all entries
@@ -191,9 +186,9 @@ export abstract class BaseLeaderboard {
         twitterHandle: holder.twitterHandle as string, // We already filtered for non-null handles
         profileImageUrl: holder.profileImageUrl,
         address: holder.address,
-        totalPoints: holder.totalPoints,
-        tokenPoints: holder.tokenPoints,
-        nftPoints: holder.nftPoints
+        totalPoints: holder.points.totalPoints,
+        tokenPoints: holder.points.tokenPoints,
+        nftPoints: holder.points.nftPoints
       }));
       
       // Create the leaderboard

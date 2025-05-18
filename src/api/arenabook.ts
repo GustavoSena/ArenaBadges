@@ -5,7 +5,7 @@ import { sleep } from '../utils/helpers';
 // Constants
 const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
 const STARS_ARENA_API_URL = 'https://api.starsarena.com/user/handle';
-const REQUEST_DELAY_MS = 500; // 500ms delay between requests
+const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
 const MAX_RETRIES = 3;
 
 /**

@@ -11,6 +11,13 @@ export interface TokenHolding extends Holding{
   tokenDecimals: number;
 }
 
+export interface AddressHoldings{
+  address: string;
+  nftHoldings: { [key: string]: NftHolding };
+  tokenHoldings: { [key: string]: TokenHolding };
+  fromMapping: boolean;
+}
+
 // Token holder interfaces
 export interface TokenHolder {
   address: string;

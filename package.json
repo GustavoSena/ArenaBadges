@@ -17,6 +17,7 @@
     "mu:leaderboard": "ts-node src/project.ts leaderboard mu",
     "mu:leaderboard:once": "ts-node src/project.ts leaderboard mu --once",
     "mu:leaderboard:verbose": "ts-node src/project.ts leaderboard mu --verbose",
+    "mu:leaderboard:once:verbose": "ts-node src/project.ts leaderboard mu --once --verbose",
     "boi:badge": "ts-node src/project.ts badge boi",
     "boi:badge:once": "ts-node src/project.ts badge boi --once",
     "boi:badge:verbose": "ts-node src/project.ts badge boi --verbose",
