@@ -1,7 +1,7 @@
 import { runAndSendResults, ErrorType } from '../../src/badges/services/schedulerService';
 import { fetchTokenHolderProfiles } from '../../src/badges/profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../../src/badges/profiles/sendResults';
-import * as helpers from '../../src/utils/helpers';
+import { AppConfig } from '../../src/utils/config';
 
 // Mock the modules
 jest.mock('../../src/badges/profiles/fetchTokenHolderProfiles');
@@ -19,9 +19,44 @@ describe('schedulerService', () => {
   };
   const mockHolderResults = {
     basicHolders: ['user1', 'user2', 'user3'],
-    upgradedHolders: ['user4', 'user5']
+    upgradedHolders: ['user4', 'user5'],
+    basicAddresses: ['0x1', '0x2', '0x3'],
+    upgradedAddresses: ['0x4', '0x5'],
+    nftHolders: [],
+    combinedHolders: []
   };
   const mockProjectName = 'mu';
+  
+  // Create mock AppConfig
+  const mockAppConfig: AppConfig = {
+    projectName: mockProjectName,
+    projectConfig: {
+      scheduler: {
+        badgeIntervalHours: 24,
+        badgeRetryIntervalHours: 2
+      },
+      walletMappingFile: 'wallets.json'
+    },
+    badgeConfig: {
+      name: 'Test Badge',
+      projectName: mockProjectName,
+      badges: {
+        basic: { tokens: [] },
+        upgraded: { tokens: [] }
+      },
+      excludedAccounts: [],
+      permanentAccounts: [],
+      api: {
+        baseUrl: 'https://api.example.com',
+        endpoints: {
+          basic: '/badges/basic',
+          upgraded: '/badges/upgraded'
+        }
+      },
+      excludeBasicForUpgraded: false,
+      sumOfBalances: true
+    }
+  };
   
   // Mock environment variables
   const originalEnv = process.env;
@@ -67,42 +102,54 @@ describe('schedulerService', () => {
   });
 
   test('should run and send results successfully', async () => {
-    // Call the function with the new signature
-    await runAndSendResults(undefined, false, false, mockProjectName);
+    // Call the function with the mock AppConfig and run options
+    await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: false, runOnce: false });
 
     // Verify fetchTokenHolderProfiles was called
     expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
-    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledWith(false);
+    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledWith(mockAppConfig, false);
 
     // Verify sendResults was called with the correct arguments
     expect(mockedSendResults).toHaveBeenCalledTimes(1);
-    expect(mockedSendResults).toHaveBeenCalledWith({
-      basicHolders: mockHolderResults.basicHolders,
-      upgradedHolders: mockHolderResults.upgradedHolders,
-      timestamp: expect.any(String)
-    }, { dryRun: false, projectName: mockProjectName });
-
-    // runAndSendResults doesn't call setInterval, that's done in startScheduler
+    expect(mockedSendResults).toHaveBeenCalledWith(
+      mockAppConfig.badgeConfig,
+      'test-api-key',
+      {
+        basicHolders: mockHolderResults.basicHolders,
+        upgradedHolders: mockHolderResults.upgradedHolders,
+        basicAddresses: mockHolderResults.basicAddresses,
+        upgradedAddresses: mockHolderResults.upgradedAddresses,
+        timestamp: expect.any(String)
+      }, 
+      { dryRun: false, runOnce: false }
+    );
   });
 
   test('should run in dry-run mode successfully', async () => {
     // Call the function with dry-run mode
-    await runAndSendResults(undefined, false, true, mockProjectName);
+    await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: true });
 
     // Verify fetchTokenHolderProfiles was called
     expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
 
     // Verify sendResults was called with dryRun: true
-    expect(mockedSendResults).toHaveBeenCalledWith({
-      basicHolders: mockHolderResults.basicHolders,
-      upgradedHolders: mockHolderResults.upgradedHolders,
-      timestamp: expect.any(String)
-    }, { dryRun: true, projectName: mockProjectName });
+    expect(mockedSendResults).toHaveBeenCalledWith(
+      mockAppConfig.badgeConfig,
+      'test-api-key',
+      {
+        basicHolders: mockHolderResults.basicHolders,
+        upgradedHolders: mockHolderResults.upgradedHolders,
+        basicAddresses: mockHolderResults.basicAddresses,
+        upgradedAddresses: mockHolderResults.upgradedAddresses,
+        timestamp: expect.any(String)
+      }, 
+      { dryRun: true }
+    );
   });
 
   test('should run once when runOnce is true', async () => {
-    // Call the function with verbose: true
-    await runAndSendResults(undefined, true, false, mockProjectName);
+    // Call the function with runOnce: true
+    await runAndSendResults(mockAppConfig, 'test-api-key', { runOnce: true });
 
     // Verify fetchTokenHolderProfiles was called
     expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
@@ -120,7 +167,7 @@ describe('schedulerService', () => {
     mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
     
     // Call the function
-    const result = await runAndSendResults(undefined, false, false, mockProjectName);
+    const result = await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: false });
 
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
@@ -129,6 +176,6 @@ describe('schedulerService', () => {
     expect(mockedSendResults).not.toHaveBeenCalled();
     
     // Verify the error type is returned
-    expect(result).toBe(ErrorType.OTHER);
+    expect(result).toBe(ErrorType.RETRY_FAILURE);
   });
 });

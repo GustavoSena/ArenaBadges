@@ -1,7 +1,6 @@
 {
   "name": "BOI Badge",
-  "description": "Badge configuration for BOI NFT holders",
-  "projectName": "BOI",
+  "projectName": "boi",
   "badges": {
     "basic": {
       "tokens": [
@@ -33,7 +32,8 @@
     "endpoints": {
       "basic": "bois-club",
       "upgraded": "bad-bois"
-    },
-    "excludeBasicForUpgraded": true
-  }
+    }
+  },
+  "excludeBasicForUpgraded": true,
+  "sumOfBalances": false
 }

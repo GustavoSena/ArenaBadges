@@ -1,82 +1,63 @@
 // Send Results Module
-import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 import axios from 'axios';
-import { loadAppConfig } from '../../utils/config';
-
-// Load environment variables
-dotenv.config();
-
-// We'll load the project-specific configuration in the sendResults function
-
-// Parse the BADGE_KEYS environment variable
-let badgeKeys: { [key: string]: string } = {};
-let API_KEY: string | undefined;
-
-try {
-  if (process.env.BADGE_KEYS) {
-    badgeKeys = JSON.parse(process.env.BADGE_KEYS);
-  } else {
-    console.warn('BADGE_KEYS environment variable is not set');
-  }
-} catch (error) {
-  console.error('Error parsing BADGE_KEYS environment variable:', error);
-}
+import { BadgeConfig } from '../../types/badge';
+import { RunOptions } from '../services/schedulerService';
 
 /**
  * Send results to the API endpoints
+ * @param badgeConfig The badge configuration
+ * @param apiKey The API key to use for authentication
  * @param data The data to send
  * @param options Options for sending results
  * @param options.dryRun If true, print JSON to console instead of sending to API
- * @param options.projectName The name of the project to use for API key selection
  * @returns Promise resolving to the API response
  */
-export async function sendResults(data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: { dryRun?: boolean, projectName?: string, exportAddresses?: boolean } = {}): Promise<any> {
+export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     console.log('Sending results to API...');
     
     // Check if project name is provided
-    if (!options.projectName) {
+    if (!badgeConfig.projectName) {
       throw new Error('Project name is required');
     }
     
     // Load project-specific configuration
-    console.log(`Loading configuration for project: ${options.projectName}`);
-    const appConfig = loadAppConfig(options.projectName);
+    console.log(`Loading configuration for project: ${badgeConfig.projectName}`);
     
     // Get API endpoints from config
-    const API_BASE_URL = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
-    const BASIC_ENDPOINT = appConfig.api?.endpoints?.basic || 'mu-tier-1';
-    const UPGRADED_ENDPOINT = appConfig.api?.endpoints?.upgraded || 'mu-tier-2';
+    const API_BASE_URL = badgeConfig.api.baseUrl;
+    const BASIC_ENDPOINT = badgeConfig.api.endpoints.basic;
+    const UPGRADED_ENDPOINT = badgeConfig.api.endpoints.upgraded;
     
     // Check if basic badge holders should be excluded when they also have the upgraded badge
-    const EXCLUDE_BASIC_FOR_UPGRADED = appConfig.api?.excludeBasicForUpgraded === true; // Default to false if not specified
+    const EXCLUDE_BASIC_FOR_UPGRADED = badgeConfig.excludeBasicForUpgraded;
     
-    console.log(`Using API endpoints for project ${options.projectName}:`);
+    console.log(`Using API endpoints for project ${badgeConfig.projectName}:`);
     console.log(`- Base URL: ${API_BASE_URL}`);
     console.log(`- Basic endpoint: ${BASIC_ENDPOINT}`);
     console.log(`- Upgraded endpoint: ${UPGRADED_ENDPOINT}`);
     
-    // Get API key for the project
-    if (badgeKeys[options.projectName.toLowerCase()]) {
-      API_KEY = badgeKeys[options.projectName.toLowerCase()];
-    } else {
-      throw new Error(`No API key found for project: ${options.projectName}`);
-    }
     
-    if (!API_KEY) {
+    if (!apiKey) {
       throw new Error('API_KEY environment variable is not set');
     }
     
     // Prepare basic badge data
     let basicHandles;
     if (EXCLUDE_BASIC_FOR_UPGRADED) {
-      // Exclude basic badge holders who also have the upgraded badge
+      // Get permanent accounts from config
+      const permanentAccounts = badgeConfig.permanentAccounts || [];
+      const permanentAccountsSet = new Set(permanentAccounts.map((handle: string) => handle.toLowerCase()));
+      
+      // Exclude basic badge holders who also have the upgraded badge, but preserve permanent accounts
       const upgradedSet = new Set(data.upgradedHolders);
-      basicHandles = data.basicHolders.filter((handle: string) => !upgradedSet.has(handle));
-      console.log(`Excluding upgraded badge holders from basic list (${basicHandles.length} basic-only handles)`);
+      basicHandles = data.basicHolders.filter((handle: string) => 
+        !upgradedSet.has(handle) || permanentAccountsSet.has(handle.toLowerCase())
+      );
+      console.log(`Excluding upgraded badge holders from basic list (${basicHandles.length} basic-only handles, permanent accounts preserved)`);
     } else {
       // Include all basic badge holders regardless of upgraded status
       basicHandles = [...new Set([...data.basicHolders])];
@@ -94,8 +75,8 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
     };
     
     // Construct endpoints with key as query parameter
-    const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${API_KEY}`;
-    const upgradedEndpoint = `${API_BASE_URL}/${UPGRADED_ENDPOINT}?key=${API_KEY}`;
+    const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${apiKey}`;
+    const upgradedEndpoint = `${API_BASE_URL}/${UPGRADED_ENDPOINT}?key=${apiKey}`;
     
     // Check if this is a dry run
     if (options.dryRun) {
@@ -128,36 +109,36 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
         }
         
         // Save basic badge holder wallet addresses
-        const basicAddressesFile = path.join(outputDir, `${options.projectName}_basic_wallet_addresses_${timestamp}.json`);
+        const basicAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_basic_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(basicAddressesFile, JSON.stringify({
           addresses: data.basicAddresses,
           count: data.basicAddresses.length,
           timestamp: data.timestamp,
           type: 'basic',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${data.basicAddresses.length} basic badge holder wallet addresses to ${basicAddressesFile}`);
         
         // Save upgraded badge holder wallet addresses
-        const upgradedAddressesFile = path.join(outputDir, `${options.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
+        const upgradedAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(upgradedAddressesFile, JSON.stringify({
           addresses: data.upgradedAddresses,
           count: data.upgradedAddresses.length,
           timestamp: data.timestamp,
           type: 'upgraded',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${data.upgradedAddresses.length} upgraded badge holder wallet addresses to ${upgradedAddressesFile}`);
         
         // Save all unique wallet addresses (combined)
         const allAddresses = [...new Set([...data.basicAddresses, ...data.upgradedAddresses])];
-        const allAddressesFile = path.join(outputDir, `${options.projectName}_all_wallet_addresses_${timestamp}.json`);
+        const allAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_all_wallet_addresses_${timestamp}.json`);
         fs.writeFileSync(allAddressesFile, JSON.stringify({
           addresses: allAddresses,
           count: allAddresses.length,
           timestamp: data.timestamp,
           type: 'all',
-          project: options.projectName
+          project: badgeConfig.projectName
         }, null, 2));
         console.log(`Exported ${allAddresses.length} total unique badge holder wallet addresses to ${allAddressesFile}`);
       }
@@ -194,24 +175,5 @@ export async function sendResults(data: { basicHolders: string[], upgradedHolder
   } catch (error: any) {
     console.error('Error sending results:', error.message || String(error));
     throw error;
-  }
-}
-
-// Run a test if this file is executed directly
-if (typeof require !== 'undefined' && require.main === module) {
-  if (API_KEY) {
-    const testData = {
-      basicHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
-      upgradedHolders: ['mucoinofficial', 'ceojonvaughn', 'aunkitanandi'],
-      timestamp: new Date().toISOString()
-    };
-    
-    console.log('Sending test data to API...');
-    sendResults(testData)
-      .then(result => console.log('API response:', result))
-      .catch(error => console.error('Error in test:', error));
-  } else {
-    console.log('This is a module for sending results to an API endpoint.');
-    console.log('Set API_KEY environment variable to run a test.');
   }
 }

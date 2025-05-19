@@ -59,7 +59,9 @@ type SchedulerConfig = {
 // Mock the loadAppConfig function
 jest.mock('../../../src/utils/config', () => {
   return {
-    loadAppConfig: jest.fn()
+    loadAppConfig: jest.fn(),
+    // Add mock implementation for AppConfig
+    AppConfig: jest.fn()
   };
 });
 
@@ -91,19 +93,24 @@ jest.mock('../../../src/badges/profiles/fetchTokenHolderProfiles', () => {
     // Using any type for the parameters to avoid TypeScript errors
     async (...args: any[]) => {
       const holders = args[0];
-      // Create a map of address to Twitter handle
-      const addressToTwitterHandle = new Map<string, any>();
+      // Create a map of address to SocialProfileInfo
+      const addressToSocialInfo = new Map<string, any>();
       
       // For each holder, create a mock Twitter handle based on the address
       if (Array.isArray(holders)) {
         holders.forEach(holder => {
           const address = holder.address.toLowerCase();
           // Create Twitter handles for all test addresses
-          addressToTwitterHandle.set(address, `twitter_${address.substring(0, 6)}`);
+          const twitterHandle = `twitter_${address.substring(0, 6)}`;
+          addressToSocialInfo.set(address, {
+            twitter_handle: twitterHandle,
+            twitter_pfp_url: null,
+            source: 'arena'
+          });
         });
       }
       
-      return addressToTwitterHandle;
+      return addressToSocialInfo;
     }
   );
   
@@ -161,6 +168,53 @@ type MockedModule = {
   fetchNftHoldersFromEthers: jest.Mock<any>;
 };
 
+// Create a helper function to generate a valid AppConfig for tests
+function createMockAppConfig(options: {
+  projectName?: string;
+  excludeBasicForUpgraded?: boolean;
+  permanentAccounts?: string[];
+  basicTokens?: TokenConfig[];
+  upgradedTokens?: TokenConfig[];
+  basicNfts?: NftConfig[];
+  upgradedNfts?: NftConfig[];
+} = {}): AppConfig {
+  return {
+    projectName: options.projectName || 'TestProject',
+    projectConfig: {
+      scheduler: {
+        badgeIntervalHours: 24,
+        badgeRetryIntervalHours: 2
+      },
+      walletMappingFile: 'wallets.json'
+    },
+    badgeConfig: {
+      name: 'Test Badge',
+      projectName: options.projectName || 'TestProject',
+      badges: {
+        basic: {
+          tokens: options.basicTokens || [{ address: '0xTOKEN', symbol: 'TEST', minBalance: 10, decimals: 18 }],
+          nfts: options.basicNfts || []
+        },
+        upgraded: {
+          tokens: options.upgradedTokens || [{ address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }],
+          nfts: options.upgradedNfts || []
+        }
+      },
+      excludedAccounts: [],
+      permanentAccounts: options.permanentAccounts || [],
+      api: {
+        baseUrl: 'http://api.test.com',
+        endpoints: {
+          basic: 'basic-endpoint',
+          upgraded: 'upgraded-endpoint'
+        }
+      },
+      excludeBasicForUpgraded: options.excludeBasicForUpgraded !== undefined ? options.excludeBasicForUpgraded : false,
+      sumOfBalances: true
+    }
+  };
+}
+
 describe('fetchTokenHolderProfiles', () => {
   // Increase the timeout for all tests in this describe block
   jest.setTimeout(30000);
@@ -184,39 +238,15 @@ describe('fetchTokenHolderProfiles', () => {
   
   test('should handle permanent accounts correctly', async () => {
     // Mock the loadAppConfig to return a configuration with permanent accounts
-    mockedLoadAppConfig.mockReturnValue({
-      projectName: 'TestProject',
-      scheduler: {
-        badgeIntervalHours: 6,
-        leaderboardIntervalHours: 3,
-        enableLeaderboard: true,
-        leaderboardTypes: ['standard', 'mu']
-      },
-      excludedAccounts: [],
+    const mockConfig = createMockAppConfig({
       permanentAccounts: ['permanentAccount1', 'permanentAccount2'],
-      badges: {
-        basic: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 100, decimals: 18 }
-          ]
-        },
-        upgraded: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }
-          ]
-        }
-      },
-      api: {
-        baseUrl: 'http://api.test.com',
-        endpoints: {
-          basic: 'basic-endpoint',
-          upgraded: 'upgraded-endpoint'
-        },
-        excludeBasicForUpgraded: true
-      }
-    } as AppConfig);
+      excludeBasicForUpgraded: true,
+      basicTokens: [{ address: '0xTOKEN', symbol: 'TEST', minBalance: 100, decimals: 18 }]
+    });
     
-    const result = await fetchTokenHolderProfiles('test');
+    mockedLoadAppConfig.mockReturnValue(mockConfig);
+    
+    const result = await fetchTokenHolderProfiles(mockConfig, false);
     
     // Check if permanent accounts are added to both lists
     expect(result.basicHolders).toContain('permanentAccount1');
@@ -227,39 +257,14 @@ describe('fetchTokenHolderProfiles', () => {
   
   test('should respect excludeBasicForUpgraded flag when true', async () => {
     // Mock the loadAppConfig to return a configuration with excludeBasicForUpgraded = true
-    mockedLoadAppConfig.mockReturnValue({
-      projectName: 'TestProject',
-      scheduler: {
-        badgeIntervalHours: 6,
-        leaderboardIntervalHours: 3,
-        enableLeaderboard: true,
-        leaderboardTypes: ['standard', 'mu']
-      },
-      excludedAccounts: [],
+    const mockConfig = createMockAppConfig({
       permanentAccounts: ['permanentAccount1'],
-      badges: {
-        basic: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 10, decimals: 18 }
-          ]
-        },
-        upgraded: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }
-          ]
-        }
-      },
-      api: {
-        baseUrl: 'http://api.test.com',
-        endpoints: {
-          basic: 'basic-endpoint',
-          upgraded: 'upgraded-endpoint'
-        },
-        excludeBasicForUpgraded: true
-      }
-    } as AppConfig);
+      excludeBasicForUpgraded: true
+    });
     
-    const result = await fetchTokenHolderProfiles('test');
+    mockedLoadAppConfig.mockReturnValue(mockConfig);
+    
+    const result = await fetchTokenHolderProfiles(mockConfig, false);
     
     // With the current implementation, we're only checking that permanent accounts are preserved
     // and that the exclusion flag is respected
@@ -274,39 +279,14 @@ describe('fetchTokenHolderProfiles', () => {
   
   test('should allow addresses in both lists when excludeBasicForUpgraded is false', async () => {
     // Mock the loadAppConfig to return a configuration with excludeBasicForUpgraded = false
-    mockedLoadAppConfig.mockReturnValue({
-      projectName: 'TestProject',
-      scheduler: {
-        badgeIntervalHours: 6,
-        leaderboardIntervalHours: 3,
-        enableLeaderboard: true,
-        leaderboardTypes: ['standard', 'mu']
-      },
-      excludedAccounts: [],
+    const mockConfig = createMockAppConfig({
       permanentAccounts: ['permanentAccount1'],
-      badges: {
-        basic: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 10, decimals: 18 }
-          ]
-        },
-        upgraded: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }
-          ]
-        }
-      },
-      api: {
-        baseUrl: 'http://api.test.com',
-        endpoints: {
-          basic: 'basic-endpoint',
-          upgraded: 'upgraded-endpoint'
-        },
-        excludeBasicForUpgraded: false
-      }
-    } as AppConfig);
+      excludeBasicForUpgraded: false
+    });
     
-    const result = await fetchTokenHolderProfiles('test');
+    mockedLoadAppConfig.mockReturnValue(mockConfig);
+    
+    const result = await fetchTokenHolderProfiles(mockConfig, false);
     
     // Permanent accounts should be in both lists
     expect(result.basicHolders).toContain('permanentAccount1');
@@ -318,39 +298,22 @@ describe('fetchTokenHolderProfiles', () => {
   
   test('should process both NFT holders and token holders', async () => {
     // Mock the loadAppConfig to return a configuration with both NFTs and tokens
-    mockedLoadAppConfig.mockReturnValue({
-      projectName: 'TestProject',
-      scheduler: {
-        badgeIntervalHours: 6,
-        leaderboardIntervalHours: 3,
-        enableLeaderboard: true,
-        leaderboardTypes: ['standard', 'mu']
-      },
-      excludedAccounts: [],
-      permanentAccounts: [],
-      badges: {
-        basic: {
-          nfts: [
-            { address: '0xNFT', name: 'TEST NFT', minBalance: 1 }
-          ]
-        },
-        upgraded: {
-          tokens: [
-            { address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }
-          ]
-        }
-      },
-      api: {
-        baseUrl: 'http://api.test.com',
-        endpoints: {
-          basic: 'basic-endpoint',
-          upgraded: 'upgraded-endpoint'
-        },
-        excludeBasicForUpgraded: false
-      }
-    } as AppConfig);
+    const mockConfig = createMockAppConfig({
+      basicNfts: [{ address: '0xNFT', name: 'TEST NFT', minBalance: 1 }],
+      upgradedTokens: [{ address: '0xTOKEN', symbol: 'TEST', minBalance: 500, decimals: 18 }],
+      basicTokens: [] // Override default basic tokens to test NFT-only basic tier
+    });
     
-    const result = await fetchTokenHolderProfiles('test');
+    mockedLoadAppConfig.mockReturnValue(mockConfig);
+    
+    // Override the mock implementation for NFT holders to avoid the error
+    const mocked = jest.requireMock('../../../src/badges/profiles/fetchTokenHolderProfiles') as MockedModule;
+    mocked.fetchNftHoldersFromEthers.mockResolvedValueOnce([
+      { address: '0x1111111111111111111111111111111111111111', tokenCount: 3 },
+      { address: '0x2222222222222222222222222222222222222222', tokenCount: 1 }
+    ]);
+    
+    const result = await fetchTokenHolderProfiles(mockConfig, false);
     
     // With the current implementation, we can verify that the result contains arrays
     // and that they're properly initialized
@@ -364,36 +327,21 @@ describe('fetchTokenHolderProfiles', () => {
   
   test('should handle empty data gracefully', async () => {
     // Mock the loadAppConfig to return a minimal configuration
-    mockedLoadAppConfig.mockReturnValue({
-      projectName: 'TestProject',
-      scheduler: {
-        badgeIntervalHours: 6,
-        leaderboardIntervalHours: 3,
-        enableLeaderboard: true,
-        leaderboardTypes: ['standard', 'mu']
-      },
-      excludedAccounts: [],
-      permanentAccounts: [],
-      badges: {
-        basic: {},
-        upgraded: {}
-      },
-      api: {
-        baseUrl: 'http://api.test.com',
-        endpoints: {
-          basic: 'basic-endpoint',
-          upgraded: 'upgraded-endpoint'
-        },
-        excludeBasicForUpgraded: false
-      }
-    } as AppConfig);
+    const mockConfig = createMockAppConfig({
+      basicTokens: [],
+      upgradedTokens: [],
+      basicNfts: [],
+      upgradedNfts: []
+    });
+    
+    mockedLoadAppConfig.mockReturnValue(mockConfig);
     
     // Override the mock implementations for this test to return empty arrays
     const mocked = jest.requireMock('../../../src/badges/profiles/fetchTokenHolderProfiles') as MockedModule;
     mocked.fetchTokenHoldersFromSnowtrace.mockResolvedValueOnce([]);
     mocked.fetchNftHoldersFromEthers.mockResolvedValueOnce([]);
     
-    const result = await fetchTokenHolderProfiles('test');
+    const result = await fetchTokenHolderProfiles(mockConfig, false);
     
     // Both lists should be empty
     expect(result.basicHolders).toEqual([]);

@@ -1,33 +1,9 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { ethers } from 'ethers';
+import { TokenHolder } from '../types/interfaces';
+import { fetchTokenHoldersFromMoralis } from '../api/moralis';
+import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
 
-/**
- * Application configuration interface
- */
-export interface AppConfig {
-  tokens: {
-    symbol: string;
-    address: string;
-    minBalance: number;
-    decimals: number;
-  }[];
-  nfts: {
-    name: string;
-    address: string;
-    minBalance: number;
-  }[];
-  scheduler: {
-    intervalHours: number;
-  };
-  api: {
-    baseUrl: string;
-    endpoints: {
-      nftOnly: string;
-      combined: string;
-    };
-  };
-}
 
 /**
  * Sleep function to introduce delay between API requests
@@ -39,44 +15,13 @@ export const sleep = (ms: number): Promise<void> => new Promise(resolve => setTi
  * Safely handles cases where decimals might be too large for ethers.formatUnits
  * or when decimals is not an integer
  */
-export function formatTokenBalance(balance: string, decimals: number): number {
+export function formatTokenBalance(balance: string, decimals: number = 18): number {
   try {
-    // Ensure decimals is an integer for ethers.js
-    const decimalPlaces = Math.floor(decimals);
-    
-    // Ethers.js has a limit on the number of decimals it can handle
-    // For large decimal values, we'll use a safer approach
-    if (decimalPlaces > 77) {
-      // For very large decimals, manually shift the decimal point
-      const balanceBN = BigInt(balance);
-      const divisor = BigInt(10) ** BigInt(decimalPlaces);
-      
-      // Calculate the integer part
-      const integerPart = balanceBN / divisor;
-      
-      // Calculate the fractional part with precision
-      const fractionalPart = balanceBN % divisor;
-      const fractionalStr = fractionalPart.toString().padStart(decimalPlaces, '0');
-      
-      // Combine integer and fractional parts
-      return Number(`${integerPart}.${fractionalStr}`);
-    } else {
-      // Use ethers.formatUnits for normal cases
-      return parseFloat(ethers.formatUnits(balance, decimalPlaces));
-    }
+    return parseFloat(ethers.formatUnits(balance, decimals));
   } catch (error) {
     console.warn(`Error formatting balance ${balance} with ${decimals} decimals:`, error);
-    // Fallback to a simple division approach
-    return Number(balance) / Math.pow(10, Math.floor(decimals));
+    return +balance / Math.pow(10, decimals);
   }
-}
-
-/**
- * Load configuration from file
- */
-export function loadConfig(): AppConfig {
-  const configPath = path.join(process.cwd(), 'config', 'tokens.json');
-  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as AppConfig;
 }
 
 /**
@@ -93,4 +38,28 @@ export function ensureOutputDirectory(dirPath: string): void {
  */
 export function saveToJsonFile(filePath: string, data: any): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+export async function fetchTokenHolders(
+  tokenAddress: string, 
+  tokenSymbol: string,
+  minBalance: number = 0,
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<TokenHolder[]> {
+  let tokenHolders: TokenHolder[] = [];
+  try{
+    console.log(`Fetching token holders for ${tokenAddress} from Moralis...`);
+    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, tokenDecimals, minBalance, verbose);
+  }catch(error){
+    console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+    try {
+      console.log(`Fetching token holders for ${tokenAddress} from Snowtrace...`);
+      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
+    } catch (error) {
+      console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+      return [];
+    }
+  }
+  return tokenHolders;
 }

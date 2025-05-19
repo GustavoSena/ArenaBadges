@@ -19,27 +19,10 @@ jest.mock('axios');
 jest.mock('fs');
 jest.mock('path');
 
-// Mock the config module before importing sendResults
-jest.mock('../../src/utils/config', () => ({
-  loadAppConfig: jest.fn().mockReturnValue({
-    projectName: 'mu',
-    api: {
-      baseUrl: 'http://test-api.com',
-      endpoints: {
-        basic: 'basic-endpoint',
-        upgraded: 'upgraded-endpoint'
-      },
-      excludeBasicForUpgraded: false
-    },
-    scheduler: { badgeIntervalHours: 6, leaderboardIntervalHours: 3, leaderboardTypes: ['standard', 'mu'] },
-    tokens: [{ address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }],
-    nfts: [{ address: '0x456', name: 'TEST NFT', minBalance: 1 }]
-  })
-}));
-
 // Now import the module under test
 import { sendResults } from '../../src/badges/profiles/sendResults';
-import * as configModule from '../../src/utils/config';
+import { BadgeConfig } from '../../src/types/badge';
+import { RunOptions } from '../../src/badges/services/schedulerService';
 
 // Create proper mock types
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -55,6 +38,8 @@ describe('apiService', () => {
   const mockResults = {
     basicHolders: ['user1', 'user2', 'user3'],
     upgradedHolders: ['user4', 'user5'],
+    basicAddresses: ['0x123', '0x456', '0x789'],
+    upgradedAddresses: ['0xabc', '0xdef'],
     timestamp: new Date().toISOString()
   };
   
@@ -62,16 +47,42 @@ describe('apiService', () => {
   const mockBasicPath = '/mocked/path/to/basic_holders.json';
   const mockUpgradedPath = '/mocked/path/to/upgraded_holders.json';
   
-  // Mock API options
-  const mockOptions = {
-    dryRun: false,
-    projectName: 'mu'
+  // Mock API key
+  const mockApiKey = 'test-api-key';
+  
+  // Mock BadgeConfig
+  const mockBadgeConfig: BadgeConfig = {
+    name: 'Test Project',
+    projectName: 'mu',
+    badges: {
+      basic: {
+        tokens: [
+          { address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }
+        ]
+      },
+      upgraded: {
+        tokens: [
+          { address: '0x456', symbol: 'TEST', decimals: 18, minBalance: 10 }
+        ]
+      }
+    },
+    excludedAccounts: [],
+    permanentAccounts: [],
+    api: {
+      baseUrl: 'http://test-api.com',
+      endpoints: {
+        basic: 'basic-endpoint',
+        upgraded: 'upgraded-endpoint'
+      }
+    },
+    excludeBasicForUpgraded: false,
+    sumOfBalances: true
   };
   
-  // Mock API key
-  const mockBadgeKeys = {
-    mu: 'test-api-key',
-    boi: 'other-test-key'
+  // Mock RunOptions
+  const mockOptions: RunOptions = {
+    dryRun: false,
+    exportAddresses: false
   };
   
   beforeEach(() => {
@@ -122,8 +133,8 @@ describe('apiService', () => {
     // Mock fs.existsSync to return false (no previous files)
     mockedFs.existsSync.mockReturnValue(false);
     
-    // Call the function
-    await sendResults(mockResults, mockOptions);
+    // Call the function with the new signature
+    await sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions);
     
     // Verify axios.post was called twice (once for each tier)
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
@@ -131,7 +142,7 @@ describe('apiService', () => {
     // Verify first call (Basic badge holders)
     const basicCall = mockedAxios.post.mock.calls[0];
     expect(basicCall[0]).toContain('basic-endpoint'); // Updated to match our mock config
-    expect(basicCall[0]).toContain(`key=${mockBadgeKeys.mu}`);
+    expect(basicCall[0]).toContain(`key=${mockApiKey}`);
     expect(basicCall[1]).toHaveProperty('handles', mockResults.basicHolders);
     expect(basicCall[1]).toHaveProperty('timestamp');
     expect(basicCall[2]).toEqual({
@@ -143,7 +154,7 @@ describe('apiService', () => {
     // Verify second call (Upgraded badge holders)
     const upgradedCall = mockedAxios.post.mock.calls[1];
     expect(upgradedCall[0]).toContain('upgraded-endpoint'); // Updated to match our mock config
-    expect(upgradedCall[0]).toContain(`key=${mockBadgeKeys.mu}`);
+    expect(upgradedCall[0]).toContain(`key=${mockApiKey}`);
     expect(upgradedCall[1]).toHaveProperty('handles', mockResults.upgradedHolders);
     expect(upgradedCall[1]).toHaveProperty('timestamp');
     expect(upgradedCall[2]).toEqual({
@@ -155,13 +166,13 @@ describe('apiService', () => {
   
   test('should not send data to API in dry run mode', async () => {
     // Set dryRun option to true
-    const dryRunOptions = {
+    const dryRunOptions: RunOptions = {
       ...mockOptions,
       dryRun: true
     };
     
     // Call the function with dryRun set to true
-    const result = await sendResults(mockResults, dryRunOptions);
+    const result = await sendResults(mockBadgeConfig, mockApiKey, mockResults, dryRunOptions);
     
     // Verify the result contains dry-run status
     expect(result).toEqual({
@@ -174,8 +185,11 @@ describe('apiService', () => {
   });
   
   test('should throw error when project name is not provided', async () => {
+    // Create a bad config without project name
+    const badConfig = { ...mockBadgeConfig, projectName: '' };
+    
     // Call the function without a project name and expect it to throw
-    await expect(sendResults(mockResults, { dryRun: false })).rejects.toThrow('Project name is required');
+    await expect(sendResults(badConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow('Project name is required');
   });
   
   test('should handle API errors gracefully', async () => {
@@ -184,7 +198,7 @@ describe('apiService', () => {
     mockedAxios.post.mockRejectedValue(mockError);
     
     // Call the function and expect it to throw
-    await expect(sendResults(mockResults, mockOptions)).rejects.toThrow();
+    await expect(sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow();
     
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
@@ -200,7 +214,7 @@ describe('apiService', () => {
     const consoleErrorSpy = jest.spyOn(console, 'error');
     
     // Call the function and expect it to throw
-    await expect(sendResults(mockResults, mockOptions)).rejects.toThrow('API request failed');
+    await expect(sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow('API request failed');
     
     // Verify console.error was called
     expect(consoleErrorSpy).toHaveBeenCalled();

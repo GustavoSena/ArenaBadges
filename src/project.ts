@@ -11,7 +11,8 @@ import path from 'path';
 import fs from 'fs';
 import { Command } from 'commander';
 import { startScheduler, runAndSendResults } from './badges/services/schedulerService';
-import { startLeaderboardScheduler, runLeaderboardGeneration, LeaderboardType, getLeaderboardTypeFromString } from './leaderboard/services/leaderboardSchedulerService';
+import { startLeaderboardScheduler, runLeaderboardGeneration, getLeaderboardTypeFromString } from './leaderboard/services/leaderboardSchedulerService';
+import { loadAppConfig } from './utils/config';
 
 // Load environment variables
 dotenv.config();
@@ -92,6 +93,10 @@ async function runProject(
   exportAddresses: boolean = false
 ) {
   try {
+    if (!projectName) {
+      console.error('Error: No project name provided');
+      process.exit(1);
+    }
     console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
     
     // Check if project configurations exist
@@ -103,11 +108,12 @@ async function runProject(
       process.exit(1);
     }
     
-    // Load scheduler configuration
-    const schedulerConfig = loadSchedulerConfig();
-    
+    const appConfig = loadAppConfig(projectName);
+
     // Run badge component if requested and available
     if ((component === 'all' || component === 'badge') && configs.badge) {
+
+
       // Parse the BADGE_KEYS environment variable to get the project-specific API key
       let badgeKeys: { [key: string]: string } = {};
       try {
@@ -126,17 +132,12 @@ async function runProject(
       
       if (runOnce) {
         console.log(`Running badge component once for project ${projectName}`);
-        await runAndSendResults(apiKey, verbose, dryRun, projectName, exportAddresses);
+        await runAndSendResults(appConfig, apiKey, { verbose, dryRun, runOnce, exportAddresses });
       } else {
         console.log(`Starting badge scheduler for project ${projectName}`);
-        startScheduler({
-          projectName: projectName,
-          intervalMs: schedulerConfig.badge * 60 * 60 * 1000,
+        startScheduler(appConfig, {
           apiKey: apiKey,
-          verbose,
-          dryRun,
-          runOnce,
-          exportAddresses,
+          runOptions: { verbose, dryRun, runOnce, exportAddresses },
           onSchedule: (nextRunTime) => {
             console.log(`Next badge refresh scheduled for: ${nextRunTime.toISOString()}`);
           },
@@ -168,14 +169,12 @@ async function runProject(
       } else {
         if (runOnce) {
           console.log(`Running leaderboard generation once for project ${projectName}`);
-          await runLeaderboardGeneration([leaderboardType], verbose);
+          await runLeaderboardGeneration(appConfig,  verbose );
         } else {
           console.log(`Starting leaderboard scheduler for project ${projectName}`);
-          startLeaderboardScheduler({
-            leaderboardTypes: [leaderboardType],
-            intervalMs: schedulerConfig.leaderboard * 60 * 60 * 1000,
+          startLeaderboardScheduler(appConfig, {
             runImmediately: true,
-            verbose,
+             verbose ,
             onSchedule: (nextRunTime) => {
               console.log(`Next leaderboard refresh scheduled for: ${nextRunTime.toISOString()}`);
             },
@@ -196,42 +195,14 @@ async function runProject(
     } else {
       console.log(`Project ${projectName} schedulers started successfully`);
       if ((component === 'all' || component === 'badge') && configs.badge) {
-        console.log(`Badge scheduler will run every ${schedulerConfig.badge} hours`);
+        console.log(`Badge scheduler will run every ${appConfig.projectConfig.scheduler.badgeIntervalHours} hours`);
       }
       if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
-        console.log(`Leaderboard scheduler will run every ${schedulerConfig.leaderboard} hours`);
+        console.log(`Leaderboard scheduler will run every ${appConfig.projectConfig.scheduler.leaderboardIntervalHours} hours`);
       }
     }
   } catch (error) {
     console.error(`Failed to run project ${projectName}:`, error);
     process.exit(1);
   }
-}
-
-/**
- * Load scheduler configuration
- * @returns Object with scheduler intervals in hours
- */
-function loadSchedulerConfig(): { badge: number, leaderboard: number } {
-  const configPath = path.join(process.cwd(), 'config', 'scheduler.json');
-  const defaultConfig = {
-    badge: 3,
-    leaderboard: 3
-  };
-  
-  try {
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(configData);
-      
-      return {
-        badge: config.intervals?.badge || defaultConfig.badge,
-        leaderboard: config.intervals?.leaderboard || defaultConfig.leaderboard
-      };
-    }
-  } catch (error) {
-    console.warn('Could not load scheduler.json, using default interval values');
-  }
-  
-  return defaultConfig;
 }

@@ -1,51 +1,47 @@
 import axios from 'axios';
-import { ArenabookUserResponse } from '../types/interfaces';
+import { ArenabookUserResponse, StarsArenaUserResponse } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 
 // Constants
 const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
-const REQUEST_DELAY_MS = 500; // 500ms delay between requests
+const STARS_ARENA_API_URL = 'https://api.starsarena.com/user/handle';
+const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
+const MAX_RETRIES = 3;
 
 /**
- * Fetch Arenabook social profile for a given address
+ * Generic function to make API requests with retry logic
  */
-export async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
-  const MAX_RETRIES = 3;
+async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Promise<T | null> {
   let retryCount = 0;
   
   while (retryCount <= MAX_RETRIES) {
     try {
-      const response = await axios.get<ArenabookUserResponse[]>(`${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`);
-
-      // The API returns an array, but we expect only one result for a specific address
-      if (response.data && response.data.length > 0) {
-        return response.data[0];
-      }
-      return null; // No profile found, but this is not an error
+      const response = await axios.get<T>(url);
+      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 404) {
-          console.log(`No social profile found for ${address}`);
+          console.log(`No data found at ${url}`);
           // No need to retry for 404 errors
           return null;
         } else if (error.response.status === 429) {
           // Rate limit error - always propagate these
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
-            console.log(`Rate limit error fetching Arenabook profile for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            console.log(`Rate limit error fetching from ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleep(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
           } else {
-            const errorMsg = `Arena API rate limit exceeded after ${MAX_RETRIES} retries for ${address}`;
+            const errorMsg = `${errorPrefix} rate limit exceeded after ${MAX_RETRIES} retries`;
             console.error(errorMsg);
             throw new Error(errorMsg);
           }
         } else {
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
-            console.log(`Error fetching Arenabook profile for ${address} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            console.log(`Error fetching from ${url} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleep(REQUEST_DELAY_MS);
           } else {
-            const errorMsg = `Arena API error (${error.response.status}) after ${MAX_RETRIES} retries for ${address}`;
+            const errorMsg = `${errorPrefix} error (${error.response.status}) after ${MAX_RETRIES} retries`;
             console.error(errorMsg, error.response.statusText);
             throw new Error(errorMsg);
           }
@@ -53,10 +49,10 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
       } else {
         retryCount++;
         if (retryCount <= MAX_RETRIES) {
-          console.log(`Unexpected error for ${address}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+          console.log(`Unexpected error for ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
           await sleep(REQUEST_DELAY_MS);
         } else {
-          const errorMsg = `Arena API unexpected error after ${MAX_RETRIES} retries for ${address}`;
+          const errorMsg = `${errorPrefix} unexpected error after ${MAX_RETRIES} retries`;
           console.error(errorMsg, error);
           throw new Error(errorMsg);
         }
@@ -65,5 +61,53 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
   }
   
   // This should never be reached, but just in case
-  throw new Error(`Arena API max retries exceeded for ${address}`);
+  throw new Error(`${errorPrefix} max retries exceeded`);
+}
+
+/**
+ * Fetch Twitter profile picture from Stars Arena API
+ */
+export async function fetchTwitterProfilePicture(twitterHandle: string): Promise<string | null> {
+  if (!twitterHandle) return null;
+  
+  try {
+    const data = await makeApiRequestWithRetry<StarsArenaUserResponse>(
+      `${STARS_ARENA_API_URL}/?handle=${twitterHandle.toLowerCase()}`,
+      'Stars Arena API'
+    );
+    
+    if (data?.user?.twitterPicture) {
+      return data.user.twitterPicture;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching Twitter profile picture for ${twitterHandle}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Fetch Arenabook social profile for a given address
+ */
+export async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
+  if (!address) return null;
+  try {
+    const data = await makeApiRequestWithRetry<ArenabookUserResponse[]>(
+      `${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`,
+      'Arena API'
+    );
+    
+    // The API returns an array, but we expect only one result for a specific address
+    if (data && data.length > 0) {
+      return data[0];
+    }
+    
+    return null;
+  } catch (error) {
+    // Rethrow the error with address information
+    if (error instanceof Error) {
+      throw new Error(`${error.message} for address ${address}`);
+    }
+    throw error;
+  }
 }

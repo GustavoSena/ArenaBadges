@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
-import { NftHolder } from '../types/interfaces';
+import { NftHolder, TokenHolder } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 
 // Load environment variables
@@ -24,6 +24,16 @@ const ERC721_ABI = [
   "function ownerOf(uint256 tokenId) view returns (address)"
 ];
 
+// ERC-20 ABI (minimal for balanceOf function)
+const ERC20_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)"
+];
+
+const RETRY_DELAY = 500 ;
+
+
 /**
  * Fetch NFT holders using sequential token ID scanning with robust error handling and retries
  * @param contractAddress The NFT contract address
@@ -32,11 +42,12 @@ const ERC721_ABI = [
  * @param verbose Whether to show verbose logs
  * @returns Array of NFT holders
  */
-export async function fetchNftHolders(
+export async function fetchNftHoldersFromEthers(
   contractAddress: string,
   tokenName: string,
   minBalance: number = 1,
-  verbose: boolean = false
+  verbose: boolean = false,
+  nftSupply?: number 
 ): Promise<NftHolder[]> {
   try {
     if (verbose) {
@@ -51,17 +62,16 @@ export async function fetchNftHolders(
     // Map to store holder addresses and token counts
     const holderMap = new Map<string, number>();
     
-    // Start checking token IDs from 0
-    let tokenId = 0;
-    let consecutiveFailures = 0;
-    const MAX_CONSECUTIVE_FAILURES = 100; // Stop after this many consecutive failures
-    const MAX_TOKEN_ID = 20000; // Safety limit
-    const MAX_RETRIES = 5;
-    
     // Process in batches to avoid rate limiting
     const batchSize = 25;
     
-    while (tokenId < MAX_TOKEN_ID && consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
+    // Start checking token IDs from 0
+    let tokenId = 0;
+    let consecutiveFailures = 0;
+    const MAX_TOKEN_ID = nftSupply ? nftSupply : 20000; // Safety limit
+    const MAX_RETRIES = 5;
+    
+    while (tokenId <= MAX_TOKEN_ID && consecutiveFailures < batchSize) {
       if (verbose) console.log(`Processing tokens ${tokenId} to ${tokenId + batchSize - 1}...`);
       
       const batchPromises = [];
@@ -83,7 +93,7 @@ export async function fetchNftHolders(
                 // Update holder map
                 holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
                 
-                if (verbose) console.log(`Token ${currentTokenId}: Owner ${shortenAddress(ownerLower)}`);
+                if (verbose) console.log(`Token ${currentTokenId}: Owner ${ownerLower}`);
                 
                 batchSuccesses++;
                 return true; // Success
@@ -105,45 +115,27 @@ export async function fetchNftHolders(
                   errorMessage.includes("ERC721: invalid token ID") ||
                   errorMessage.includes("ERC721: owner query for nonexistent token");
                 
-                // Check for revert errors that might be invalid tokens or other issues
-                const isRevertError = 
-                  errorMessage.includes("missing revert data") ||
-                  (errorMessage.includes("CALL_EXCEPTION") && errorMessage.includes("revert=null"));
-                
-                if (isRateLimited) {
-                  // Always retry rate limiting with a longer backoff
-                  retryCount++;
+                if (isInvalidTokenId) {
+                  // These are definitely invalid tokens, no need to retry
+                  if (verbose) console.log(`Token ${currentTokenId}: Invalid token ID`);
+                  return false;
+                }
+                else if (isRateLimited) {
+                // Always retry rate limiting with a longer backoff
+                retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    // Use a longer backoff for rate limiting (2-10 seconds)
-                    const backoffTime = 2000 * Math.pow(2, retryCount - 1);
-                    if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${backoffTime}ms...`);
-                    await sleep(backoffTime);
+                    if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+                    await sleep(RETRY_DELAY * retryCount);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`;
                     console.error(errorMsg);
                     throw new Error(errorMsg);
                   }
-                } else if (isInvalidTokenId) {
-                  // These are definitely invalid tokens, no need to retry
-                  if (verbose) console.log(`Token ${currentTokenId}: Invalid token ID`);
-                  return false;
-                } else if (isRevertError) {
-                  // Revert errors could be invalid tokens or temporary issues, retry a few times
-                  retryCount++;
-                  if (retryCount <= MAX_RETRIES) {
-                    if (verbose) console.log(`Revert error for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
-                    await sleep(1000 * Math.pow(1.5, retryCount - 1));
-                  } else {
-                    if (verbose) console.log(`Token ${currentTokenId}: Considered invalid after ${MAX_RETRIES} revert errors`);
-                    return false;
-                  }
                 } else {
-                  // For other errors, retry with exponential backoff
                   retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES}...`);
-                    // Exponential backoff
-                    await sleep(500 * Math.pow(2, retryCount - 1));
+                    if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+                    await sleep(RETRY_DELAY);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries: ${error instanceof Error ? error.message : String(error)}`;
                     console.error(errorMsg);
@@ -167,7 +159,7 @@ export async function fetchNftHolders(
       // Update consecutive failures counter
       if (successCount === 0) {
         consecutiveFailures += batchSize;
-        if (verbose) console.log(`No valid tokens found in batch. Consecutive failures: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`);
+        if (verbose) console.log(`No valid tokens found in batch. Consecutive failures: ${consecutiveFailures}/${batchSize}`);
       } else {
         if (verbose) console.log(`Found ${successCount} valid tokens in batch.`);
         consecutiveFailures = 0; // Reset counter if we found any valid tokens
@@ -210,12 +202,146 @@ export async function fetchNftHolders(
 }
 
 /**
- * Shorten an address for display in logs
+ * Fetch token balance for a specific address using ethers.js
+ * @param tokenAddress The token contract address
+ * @param holderAddress The address to check balance for
+ * @param tokenDecimals The number of decimals for the token
+ * @param verbose Whether to show verbose logs
+ * @returns Formatted token balance as a number
  */
-function shortenAddress(address: string): string {
-  return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+export async function fetchTokenBalanceWithEthers(
+  tokenAddress: string,
+  holderAddress: string,
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<number> {
+  const MAX_RETRIES = 5;
+  let retryCount = 0;
+
+  while (retryCount <= MAX_RETRIES) {
+    try {
+      // Create contract instance
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      
+      // Get balance
+      const balance = await tokenContract.balanceOf(holderAddress);
+      
+      // Convert to formatted balance
+      const formattedBalance = parseFloat(ethers.formatUnits(balance, tokenDecimals));
+      return formattedBalance;
+    } catch (error) {
+      retryCount++;
+      
+      if (retryCount <= MAX_RETRIES) {
+        
+        if (verbose) {
+          console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+        }
+        
+        await sleep(RETRY_DELAY);
+      } else {
+        console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
+      }
+    }
+  }
+  
+  // If all retries failed, return 0
+  return 0;
 }
 
-// For backward compatibility
-export const fetchNftHoldersFromEthers = fetchNftHolders;
-export const fetchNftHoldersWithoutTotalSupply = fetchNftHolders;
+/**
+ * Fetch token balances for multiple addresses using ethers.js
+ * @param tokenAddress The token contract address
+ * @param tokenSymbol The token symbol
+ * @param holderAddresses Array of addresses to check balances for
+ * @param tokenDecimals The number of decimals for the token
+ * @param verbose Whether to show verbose logs
+ * @returns Array of token holders with their balances
+ */
+export async function fetchTokenBalancesWithEthers(
+  tokenAddress: string,
+  tokenSymbol: string,
+  holderAddresses: string[],
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<TokenHolder[]> {
+  const holders: TokenHolder[] = [];
+  let processedCount = 0;
+  
+  if (verbose) console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
+  
+  // Process in batches to avoid rate limiting
+  const batchSize = 10;
+  const MAX_BATCH_RETRIES = 2; // Max retries for entire batch failures
+  
+  for (let i = 0; i < holderAddresses.length; i += batchSize) {
+    const batch = holderAddresses.slice(i, i + batchSize);
+    let batchRetries = 0;
+    let batchSuccess = false;
+    
+    while (!batchSuccess && batchRetries <= MAX_BATCH_RETRIES) {
+      try {
+        const batchPromises = batch.map(async (address) => {
+          // Individual address balance fetching with retries is handled in fetchTokenBalanceWithEthers
+          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals, verbose);
+          
+          return {
+            address,
+            holding: {
+              tokenAddress: tokenAddress,
+              tokenSymbol: tokenSymbol,
+              tokenBalance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
+              tokenDecimals: tokenDecimals,
+              balanceFormatted: balance
+            }
+          };
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        holders.push(...batchResults);
+        batchSuccess = true;
+      } catch (error) {
+        batchRetries++;
+        if (batchRetries <= MAX_BATCH_RETRIES) {
+          console.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
+          // Exponential backoff for batch retries
+          const batchBackoffTime = 1000 * Math.pow(2, batchRetries - 1);
+          if (verbose) console.log(`Retrying batch after ${batchBackoffTime}ms...`);
+          await sleep(batchBackoffTime);
+        } else {
+          console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
+          // Add empty results for this batch to maintain address count
+          const emptyResults = batch.map(address => ({
+            address,
+            holding: {
+              tokenAddress: tokenAddress,
+              tokenSymbol: tokenSymbol,
+              tokenBalance: "0",
+              tokenDecimals: tokenDecimals,
+              balanceFormatted: 0
+            }
+          }));
+          holders.push(...emptyResults);
+        }
+      }
+    }
+    
+    processedCount += batch.length;
+    if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
+      if (verbose) console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
+    }
+    
+    // Add delay between batches to avoid rate limiting
+    if (i + batchSize < holderAddresses.length) {
+      const batchDelayTime = 500; // Base delay between batches
+      if (verbose) console.log(`Waiting ${batchDelayTime}ms before next batch...`);
+      await sleep(batchDelayTime);
+    }
+  }
+  
+  // Count non-zero balances for logging
+  const nonZeroBalances = holders.filter(h => h.holding.balanceFormatted > 0).length;
+  if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
+  
+  return holders;
+}

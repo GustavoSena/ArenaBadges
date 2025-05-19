@@ -1,9 +1,28 @@
+export interface Holding{
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenBalance: string;
+}
+
+export interface NftHolding extends Holding{
+}
+
+export interface TokenHolding extends Holding{
+  tokenDecimals: number;
+  balanceFormatted: number;
+}
+
+export interface AddressHoldings{
+  address: string;
+  nftHoldings: { [key: string]: NftHolding };
+  tokenHoldings: { [key: string]: TokenHolding };
+  fromMapping: boolean;
+}
+
 // Token holder interfaces
 export interface TokenHolder {
   address: string;
-  balance: string;
-  balanceFormatted: number;
-  tokenSymbol: string;
+  holding: TokenHolding;
 }
 
 export interface NftHolder {
@@ -14,19 +33,17 @@ export interface NftHolder {
 
 // Social profile interfaces
 export interface ArenabookUserResponse {
-  twitter_username: string | null;
-  twitter_handle: string | null;
+  twitter_handle: string | null;  
   twitter_pfp_url: string | null;
 }
 
-export interface HolderWithSocial extends TokenHolder {
-  twitter_handle: string | null;
-  twitter_pfp_url?: string | null;
-}
-
-export interface NftHolderWithSocial extends NftHolder {
-  twitter_handle: string | null;
-  twitter_pfp_url?: string | null;
+// Stars Arena API response interface
+export interface StarsArenaUserResponse {
+  user: {
+    id: string;
+    twitterHandle: string;
+    twitterPicture: string;
+  };
 }
 
 // Config interfaces
@@ -41,14 +58,11 @@ export interface NftConfig {
   address: string;
   name: string;
   minBalance: number;
+  /** Size of the NFT collection (maximum token ID) */
+  collectionSize?: number;
 }
 
-export interface AppConfig {
-  tokens: TokenConfig[];
-  nfts: NftConfig[];
-}
-
-// Output interfaces
-export interface TwitterHandlesOutput {
-  handles: string[];
+export interface ArenaWalletResponse {
+  address: string;
+  picture_url: string;
 }

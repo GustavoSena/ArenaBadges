@@ -1,7 +1,6 @@
 {
   "name": "Mu Pups Badge",
-  "description": "Badge configuration for Mu Pups NFT holders",
-  "projectName": "MU",
+  "projectName": "mu",
   "badges": {
     "basic": {
       "nfts": [
@@ -35,7 +34,8 @@
     "endpoints": {
       "basic": "mu-tier-1",
       "upgraded": "mu-tier-2"
-    },
-    "excludeBasicForUpgraded": false
-  }
+    }
+  },
+  "excludeBasicForUpgraded": false,
+  "sumOfBalances": true
 }

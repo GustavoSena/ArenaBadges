@@ -1,4 +1,3 @@
-import Moralis from 'moralis';
 import * as dotenv from 'dotenv';
 import { TokenHolder } from '../types/interfaces';
 import { formatTokenBalance, sleep } from '../utils/helpers';
@@ -43,9 +42,6 @@ const AVALANCHE_CHAIN_ID = '0xa86a';
 let currentKeyIndex = 0;
 let hasRotatedThroughAllKeys = false;
 
-// Initialize Moralis with the first key
-let isMoralisInitialized = false;
-
 /**
  * Get the current Moralis API key
  */
@@ -77,25 +73,6 @@ function rotateToNextMoralisApiKey(): boolean {
   
   console.log(`Rotating to Moralis API key #${currentKeyIndex + 1}`);
   return true;
-}
-
-/**
- * Initialize Moralis with the current API key
- * This should only be called once
- */
-async function initializeMoralis(): Promise<void> {
-  if (!isMoralisInitialized) {
-    try {
-      await Moralis.start({
-        apiKey: getCurrentMoralisApiKey()
-      });
-      isMoralisInitialized = true;
-      console.log(`Moralis initialized with API key #${currentKeyIndex + 1}`);
-    } catch (error) {
-      console.error('Error initializing Moralis:', error);
-      throw error;
-    }
-  }
 }
 
 /**
@@ -159,7 +136,7 @@ export async function fetchTokenHoldersFromMoralis(
 ): Promise<TokenHolder[]> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token holder fetch.');
-    return [];
+    throw new Error('No Moralis API keys available');
   }
   
   try {
@@ -214,12 +191,16 @@ export async function fetchTokenHoldersFromMoralis(
               // Check if this holder meets the minimum balance requirement
               if (balanceFormatted >= minBalance) {
                 foundQualifyingHolder = true;
-                
+                if (verbose) console.log(`Holder ${holder.owner_address} has the balance ${balanceFormatted} which is above the minimum balance of ${minBalance} ${tokenSymbol}`);
                 holders.push({
                   address: holder.owner_address.toLowerCase(),
-                  balance: holder.balance,
-                  balanceFormatted,
-                  tokenSymbol: tokenSymbol
+                  holding: {
+                    tokenAddress: tokenAddress,
+                    tokenSymbol: tokenSymbol,
+                    tokenBalance: holder.balance,
+                    tokenDecimals: tokenDecimals,
+                    balanceFormatted: balanceFormatted
+                  }
                 });
               }
             }
@@ -361,9 +342,13 @@ export async function fetchTokenBalancesWithMoralis(
           
           return {
             address,
-            balance: (balanceFormatted * Math.pow(10, tokenDecimals)).toString(),
-            balanceFormatted,
-            tokenSymbol
+            holding: {
+              tokenAddress: tokenAddress,
+              tokenSymbol: tokenSymbol,
+              tokenBalance: (balanceFormatted * Math.pow(10, tokenDecimals)).toString(),
+              tokenDecimals: tokenDecimals,
+              balanceFormatted: balanceFormatted
+            }
           };
         } catch (error) {
           // Check if this is a quota exceeded error that we've already tried to handle
@@ -380,9 +365,13 @@ export async function fetchTokenBalancesWithMoralis(
             console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
             return {
               address,
-              balance: "0",
-              balanceFormatted: 0,
-              tokenSymbol
+              holding: {
+                tokenAddress: tokenAddress,
+                tokenSymbol: tokenSymbol,
+                tokenBalance: "0",
+                tokenDecimals: tokenDecimals,
+                balanceFormatted: 0
+              }
             };
           }
         }
@@ -391,9 +380,13 @@ export async function fetchTokenBalancesWithMoralis(
       // This should never be reached but TypeScript needs it
       return {
         address,
-        balance: "0",
-        balanceFormatted: 0,
-        tokenSymbol
+        holding: {
+          tokenAddress: tokenAddress,
+          tokenSymbol: tokenSymbol,
+          tokenBalance: "0",
+          tokenDecimals: tokenDecimals,
+          balanceFormatted: 0
+        }
       };
     });
     
@@ -422,7 +415,7 @@ export async function fetchTokenBalancesWithMoralis(
   }
   
   // Count non-zero balances for logging
-  const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
+  const nonZeroBalances = holders.filter(h => h.holding.balanceFormatted! > 0).length;
   console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
   
   return holders;

@@ -1,6 +1,5 @@
 {
   "title": "MU Leaderboard",
-  "description": "Leaderboard for MU token holders and Mu Pups NFT owners",
   "weights": {
     "tokens": [
       {
@@ -40,7 +39,10 @@
       {
         "name": "Mu Pups",
         "weight": 20,
-        "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0"
+        "pointsPerToken": 20,
+        "minBalance": 1,
+        "address": "0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0",
+        "collectionSize": 350
       }
     ]
   },
@@ -85,5 +87,6 @@
       }
     ]
   },
-  "excludedAccounts": ["mucoinofficial"]
+  "excludedAccounts": ["mucoinofficial"],
+  "sumOfBalances": true
 }
