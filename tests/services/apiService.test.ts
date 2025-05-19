@@ -9,8 +9,7 @@ const originalEnv = process.env;
 process.env = {
   ...originalEnv,
   BADGE_KEYS: JSON.stringify({
-    mu: 'test-api-key',
-    boi: 'other-test-key'
+    boi: 'test-api-key'
   })
 };
 
@@ -53,7 +52,7 @@ describe('apiService', () => {
   // Mock BadgeConfig
   const mockBadgeConfig: BadgeConfig = {
     name: 'Test Project',
-    projectName: 'mu',
+    projectName: 'boi',
     badges: {
       basic: {
         tokens: [

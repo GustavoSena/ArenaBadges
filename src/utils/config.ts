@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { LeaderboardConfig } from '../types/leaderboard';
 import { BadgeConfig } from '../types/badge';
 
 // Cache for configurations to avoid multiple disk reads
@@ -18,18 +17,12 @@ export interface ProjectSchedulerConfig {
   badgeIntervalHours: number;
   /** Hours to wait before retry after failure */
   badgeRetryIntervalHours?: number;
-  /** Hours between leaderboard update runs */
-  leaderboardIntervalHours?: number;
-  /** Hours to wait before retry after leaderboard failure */
-  leaderboardRetryIntervalHours?: number;
 }
 
 /**
  * Configuration for a single project
  */
 export interface ProjectConfig {
-  /** Whether leaderboard generation is enabled for this project */
-  enableLeaderboard?: boolean;
   /** Scheduler configuration */
   scheduler: ProjectSchedulerConfig;
   /** Path to the wallet mapping file for this project */
@@ -41,8 +34,6 @@ export interface AppConfig {
   projectName: string;
   projectConfig: ProjectConfig;
   badgeConfig: BadgeConfig;
-  // Leaderboard specific configuration
-  leaderboardConfig?: LeaderboardConfig;
 }
 
 export interface MainConfig {
@@ -76,9 +67,6 @@ export function loadAppConfig(projectName: string): AppConfig {
       projectConfig,
       badgeConfig
     };
-    if(projectConfig.enableLeaderboard){
-      appConfig.leaderboardConfig = loadLeaderboardConfig(targetProject);
-    }
   
     configCache.appConfig[projectName] = appConfig;
     return appConfig;
@@ -90,26 +78,7 @@ export function loadAppConfig(projectName: string): AppConfig {
   }
 }
 
-/**
- * Load a specific leaderboard config
- * @param type The type of leaderboard
- * @returns The leaderboard configuration
- */
-export function loadLeaderboardConfig(type: string): LeaderboardConfig {
 
-  try {
-      // Try to load from the leaderboards directory first (for backward compatibility)
-      const configPath = path.join(process.cwd(), 'config', 'leaderboards', `${type}.json`);
-      console.log(`Loading ${type} leaderboard config from ${configPath}`);
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LeaderboardConfig;
-      
-      return config;
-
-  } catch (error) {
-    console.error(`Error loading ${type} leaderboard config:`, error);
-    throw new Error(`Failed to load ${type} leaderboard configuration`);
-  }
-}
 
 /**
  * Load a specific badge config

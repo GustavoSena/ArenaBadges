@@ -1,17 +1,15 @@
 /**
- * Project-specific runner for MuBadges
+ * Project-specific runner for ArenaBadges
  * 
  * This file provides a focused way to run project-specific components:
- * 1. Run both badge and leaderboard schedulers for a specific project
- * 2. Run a single scheduler (badge or leaderboard) for a specific project
- * 3. Run a single component once for a specific project
+ * 1. Run badge scheduler for a specific project
+ * 2. Run badge scheduler once for a specific project
  */
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { Command } from 'commander';
 import { startScheduler, runAndSendResults } from './badges/services/schedulerService';
-import { startLeaderboardScheduler, runLeaderboardGeneration, getLeaderboardTypeFromString } from './leaderboard/services/leaderboardSchedulerService';
 import { loadAppConfig } from './utils/config';
 
 // Load environment variables
@@ -24,14 +22,14 @@ program
   .description('Run project-specific components for MuBadges')
   .version('1.0.0');
 
-// Command to run both schedulers
+// Command to run badge scheduler
 program
   .command('run <projectName>')
-  .description('Run both badge and leaderboard schedulers for a specific project')
+  .description('Run badge scheduler for a specific project')
   .option('-v, --verbose', 'Enable verbose logging')
   .option('--dry-run', 'Run without sending data to API')
   .action(async (projectName, options) => {
-    await runProject(projectName, 'all', false, options.verbose, options.dryRun);
+    await runProject(projectName, 'badge', false, options.verbose, options.dryRun);
   });
 
 // Command to run badge scheduler only
@@ -46,47 +44,29 @@ program
     await runProject(projectName, 'badge', options.once, options.verbose, options.dryRun, options.exportAddresses);
   });
 
-// Command to run leaderboard scheduler only
-program
-  .command('leaderboard <projectName>')
-  .description('Run leaderboard scheduler for a specific project')
-  .option('-v, --verbose', 'Enable verbose logging')
-  .option('--once', 'Run once and exit')
-  .action(async (projectName, options) => {
-    await runProject(projectName, 'leaderboard', options.once, options.verbose, options.dryRun);
-  });
-
 program.parse(process.argv);
 
 /**
- * Check if project configurations exist
+ * Check if project configuration exists
  * @param projectName The name of the project to check
- * @returns An object with flags indicating which configurations exist
+ * @returns Boolean indicating if badge configuration exists
  */
-function checkProjectConfigs(projectName: string): { badge: boolean, leaderboard: boolean } {
+function checkProjectConfig(projectName: string): boolean {
   const badgeConfigPath = path.join(process.cwd(), 'config', 'badges', `${projectName}.json`);
-  const leaderboardConfigPath = path.join(process.cwd(), 'config', 'leaderboards', `${projectName}.json`);
-  
-  const badgeExists = fs.existsSync(badgeConfigPath);
-  const leaderboardExists = fs.existsSync(leaderboardConfigPath);
-  
-  return {
-    badge: badgeExists,
-    leaderboard: leaderboardExists
-  };
+  return fs.existsSync(badgeConfigPath);
 }
 
 /**
- * Main function to run project components
+ * Main function to run project badge component
  * @param projectName Name of the project
- * @param component Component to run ('all', 'badge', or 'leaderboard')
+ * @param component Component to run ('badge')
  * @param runOnce Whether to run once and exit
  * @param verbose Whether to enable verbose logging
  * @param dryRun Whether to run without sending data to API
  */
 async function runProject(
   projectName: string, 
-  component: 'all' | 'badge' | 'leaderboard', 
+  component: 'badge', 
   runOnce: boolean = false,
   verbose: boolean = false,
   dryRun: boolean = false,
@@ -99,20 +79,18 @@ async function runProject(
     }
     console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
     
-    // Check if project configurations exist
-    const configs = checkProjectConfigs(projectName);
+    // Check if project configuration exists
+    const badgeConfigExists = checkProjectConfig(projectName);
     
-    if (!configs.badge && !configs.leaderboard) {
-      console.error(`Error: No configurations found for project '${projectName}'`);
-      console.error(`Please ensure either config/badges/${projectName}.json or config/leaderboards/${projectName}.json exists`);
+    if (!badgeConfigExists) {
+      console.error(`Error: No badge configuration found for project '${projectName}'`);
       process.exit(1);
     }
     
+    // Load the app config for this project
     const appConfig = loadAppConfig(projectName);
-
-    // Run badge component if requested and available
-    if ((component === 'all' || component === 'badge') && configs.badge) {
-
+    
+    // Run badge component
 
       // Parse the BADGE_KEYS environment variable to get the project-specific API key
       let badgeKeys: { [key: string]: string } = {};
@@ -146,60 +124,13 @@ async function runProject(
           }
         });
       }
-    } else if (component === 'badge' && !configs.badge) {
-      console.error(`Error: Badge configuration not found for project '${projectName}'`);
-      process.exit(1);
-    }
-    
-    // Run leaderboard component if requested and available
-    if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
-      // Add a delay before starting the leaderboard scheduler to prevent simultaneous API requests
-      if (component === 'all' && configs.badge && !runOnce) {
-        console.log('Waiting 30 seconds before starting leaderboard scheduler to prevent API rate limiting...');
-        await new Promise(resolve => setTimeout(resolve, 30000));
-      }
-      
-      const leaderboardType = getLeaderboardTypeFromString(projectName);
-      
-      if (!leaderboardType) {
-        console.error(`Error: Could not find a matching LeaderboardType for '${projectName}'`);
-        if (component === 'leaderboard') {
-          process.exit(1);
-        }
-      } else {
-        if (runOnce) {
-          console.log(`Running leaderboard generation once for project ${projectName}`);
-          await runLeaderboardGeneration(appConfig,  verbose );
-        } else {
-          console.log(`Starting leaderboard scheduler for project ${projectName}`);
-          startLeaderboardScheduler(appConfig, {
-            runImmediately: true,
-             verbose ,
-            onSchedule: (nextRunTime) => {
-              console.log(`Next leaderboard refresh scheduled for: ${nextRunTime.toISOString()}`);
-            },
-            onRun: () => {
-              console.log(`Leaderboard refresh started at: ${new Date().toISOString()}`);
-            }
-          });
-        }
-      }
-    } else if (component === 'leaderboard' && !configs.leaderboard) {
-      console.error(`Error: Leaderboard configuration not found for project '${projectName}'`);
-      process.exit(1);
-    }
     
     if (runOnce) {
-      console.log(`Completed one-time run for project ${projectName}, component: ${component}`);
+      console.log(`Completed one-time run for project ${projectName}`);
       process.exit(0);
     } else {
-      console.log(`Project ${projectName} schedulers started successfully`);
-      if ((component === 'all' || component === 'badge') && configs.badge) {
-        console.log(`Badge scheduler will run every ${appConfig.projectConfig.scheduler.badgeIntervalHours} hours`);
-      }
-      if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
-        console.log(`Leaderboard scheduler will run every ${appConfig.projectConfig.scheduler.leaderboardIntervalHours} hours`);
-      }
+      console.log(`Project ${projectName} badge scheduler started successfully`);
+      console.log(`Badge scheduler will run every ${appConfig.projectConfig.scheduler.badgeIntervalHours} hours`);
     }
   } catch (error) {
     console.error(`Failed to run project ${projectName}:`, error);

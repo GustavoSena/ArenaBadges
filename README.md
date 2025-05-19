@@ -1,11 +1,10 @@
 # ArenaBadges
 
-A badge and leaderboard automation system for Arena community tokens and NFTs. This system automatically tracks token holders and NFT owners, assigns badges based on configurable criteria, and generates dynamic leaderboards.
+A badge automation system for Arena community tokens and NFTs. This system automatically tracks token holders and NFT owners and assigns badges based on configurable criteria.
 
 ## Features
 
 - **Badge Scheduler**: Automatically collects NFT and token holder data and sends to Arena API endpoints
-- **Leaderboard Scheduler**: Generates HTML leaderboards for token holders
 - **Multiple Project Support**: Configure and run multiple projects with different tokens and NFTs
 - **API Key Rotation**: Supports multiple Moralis API keys with automatic rotation when rate limits are reached
 - **Error Handling**: Dynamic rescheduling based on error types for resilient operation
@@ -34,18 +33,13 @@ Project-specific configurations are stored in the `config/projects/` directory. 
 {
   "scheduler": {
     "badgeIntervalHours": 6,
-    "badgeRetryIntervalHours": 2,
-    "leaderboardIntervalHours": 3,
-    "leaderboardRetryIntervalHours": 2
+    "badgeRetryIntervalHours": 2
   },
-  "walletMappingFile": "wallets.json",
-  "enableLeaderboard": true
+  "walletMappingFile": "wallets.json"
 }
 ```
 
 Badge configurations are stored in `config/badges/` directory, with files named after the project (e.g., `boi.json`).
-
-Leaderboard configurations are stored in `config/leaderboards/` directory.
 
 ## Running
 
@@ -63,23 +57,9 @@ For verbose logging:
 npm run *projectname*:badges:verbose
 ```
 
-### Leaderboard Scheduler
 
-Run the leaderboard scheduler to automatically generate HTML leaderboards for token holders:
 
-```bash
-npm run *projectname*:leaderboard
-```
-
-For verbose logging:
-
-```bash
-npm run *projectname*:leaderboard:verbose
-```
-
-### Running Both Schedulers
-
-To run both the badge and leaderboard schedulers simultaneously:
+### Running the Badge Scheduler
 
 ```bash
 npm run *projectname*:run
@@ -93,7 +73,7 @@ npm run *projectname*:run:verbose
 
 ## Output
 
-All generated files are saved to the `output/` directory. Logs are stored in the `logs/` directory.
+All badge data is saved to the `output/badges/` directory. Logs are stored in the `logs/` directory.
 
 ## Advanced Features
 
@@ -103,7 +83,7 @@ The system supports mapping multiple wallets to a single user via Twitter handle
 
 ### Excluded Accounts
 
-Specific Twitter handles can be excluded from leaderboards by adding them to the `excludedAccounts` array in the badge configuration.
+Specific Twitter handles can be excluded from badge assignments by adding them to the `excludedAccounts` array in the badge configuration.
 
 ### Permanent Badge Accounts
 
@@ -123,11 +103,10 @@ npm test
 
 ### One-time Execution Scripts
 
-For running badge or leaderboard generation once without scheduling:
+For running badge generation once without scheduling:
 
 ```bash
 npm run *projectname*:badge:once
-npm run *projectname*:leaderboard:once
 ```
 
 ### Dry Run

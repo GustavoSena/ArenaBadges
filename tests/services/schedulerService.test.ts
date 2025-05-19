@@ -25,7 +25,7 @@ describe('schedulerService', () => {
     nftHolders: [],
     combinedHolders: []
   };
-  const mockProjectName = 'mu';
+  const mockProjectName = 'boi';
   
   // Create mock AppConfig
   const mockAppConfig: AppConfig = {
@@ -66,8 +66,7 @@ describe('schedulerService', () => {
     process.env = {
       ...originalEnv,
       BADGE_KEYS: JSON.stringify({
-        mu: 'test-api-key',
-        boi: 'other-test-key'
+        boi: 'test-api-key'
       })
     };
   });

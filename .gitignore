@@ -8,9 +8,6 @@ node_modules/
 files/*.json
 output/*
 !output/.gitkeep
-!output/leaderboards/
-output/leaderboards/*
-!output/leaderboards/.gitkeep
 
 # Logs
 logs

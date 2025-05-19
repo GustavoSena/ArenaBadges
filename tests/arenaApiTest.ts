@@ -11,8 +11,8 @@ const ARENA_API_URL = 'https://api.arena.trade/user_info';
 // Test addresses - known to have Twitter handles
 const TEST_ADDRESSES = [
   '0xeaef03364970a3cfd79a5a6ec75028d1fc2dea70', // Example from your request
-  '0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0', // Mu Pups contract address
-  '0xdba664085ae73cf4e4eb57954bdc88be297b1f09'  // MUV token address
+  '0x34a0a23aa79cdee7014e4c9afaf20bcce22749c0', // NFT contract address
+  '0xdba664085ae73cf4e4eb57954bdc88be297b1f09'  // Token contract address
 ];
 
 async function testArenaApi() {

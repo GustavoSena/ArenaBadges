@@ -10,9 +10,9 @@ dotenv.config();
  */
 async function testSnowtraceSorting() {
   try {
-    // MU token address
-    const tokenAddress = '0xD036414fa2BCBb802691491E323BFf1348C5F4Ba';
-    const tokenSymbol = 'MU';
+    // BOI token address
+    const tokenAddress = '0xACC95Afa65768aa74044E6f6e267AD6417CD3e55';
+    const tokenSymbol = 'BOI';
     const tokenDecimals = 18;
     
     console.log('Testing if Snowtrace API returns holders sorted by balance...');

@@ -1,24 +1,9 @@
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // Import the module under test - we need to do this before mocking
 import { fetchTokenHolderProfiles } from '../../../src/badges/profiles/fetchTokenHolderProfiles';
 import { loadAppConfig } from '../../../src/utils/config';
 import type { AppConfig } from '../../../src/utils/config';
-
-// Define types for our mocks
-type TokenHolder = {
-  address: string;
-  balance: string;
-  balanceFormatted: number;
-  tokenSymbol: string;
-};
-
-type NftHolder = {
-  address: string;
-  tokenCount: number;
-};
 
 // Define types for configuration objects to match what the function expects
 type TokenConfig = {
@@ -32,28 +17,6 @@ type NftConfig = {
   name: string;
   address: string;
   minBalance: number;
-};
-
-type BadgeConfig = {
-  tokens?: TokenConfig[];
-  nfts?: NftConfig[];
-};
-
-type ApiConfig = {
-  baseUrl: string;
-  endpoints: {
-    basic: string;
-    upgraded: string;
-  };
-  excludeBasicForUpgraded?: boolean;
-};
-
-// Define the expected structure of the config based on the actual implementation
-type SchedulerConfig = {
-  badgeIntervalHours: number;
-  leaderboardIntervalHours: number;
-  enableLeaderboard: boolean;
-  leaderboardTypes: string[];
 };
 
 // Mock the loadAppConfig function
