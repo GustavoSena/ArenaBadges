@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { ethers } from 'ethers';
-import { NftHolder, TokenHolder } from '../types/interfaces';
+import { TokenHolder } from '../types/interfaces';
 import { fetchTokenHoldersFromMoralis } from '../api/moralis';
 import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
 
@@ -20,7 +20,7 @@ export function formatTokenBalance(balance: string, decimals: number = 18): numb
     return parseFloat(ethers.formatUnits(balance, decimals));
   } catch (error) {
     console.warn(`Error formatting balance ${balance} with ${decimals} decimals:`, error);
-    return Number(balance) / Math.pow(10, decimals);
+    return +balance / Math.pow(10, decimals);
   }
 }
 
@@ -50,7 +50,7 @@ export async function fetchTokenHolders(
   let tokenHolders: TokenHolder[] = [];
   try{
     console.log(`Fetching token holders for ${tokenAddress} from Moralis...`);
-    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
+    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, tokenDecimals, minBalance, verbose);
   }catch(error){
     console.error(`Error fetching token holders for ${tokenAddress}:`, error);
     try {

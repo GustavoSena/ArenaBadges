@@ -38,7 +38,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     for (const holding of nftHoldings) {
       const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenSymbol);
       if (nft) {
-        holderPoints.nftPoints[holding.tokenSymbol] = Number(holding.tokenBalance) * nft.weight;
+        holderPoints.nftPoints[holding.tokenSymbol] = +holding.tokenBalance * nft.weight;
         holderPoints.totalPoints += holderPoints.nftPoints[holding.tokenSymbol];
       }
     }
@@ -65,7 +65,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     // Check NFT eligibility
     for (const holding of nftHoldings) {
       const nft = nfts.find((n: LeaderboardNftConfig) => n.name === holding.tokenSymbol);
-      if (nft && Number(holding.tokenBalance) >= nft.minBalance) {
+      if (nft && +holding.tokenBalance >= nft.minBalance) {
         return true;
       }
     }
@@ -73,7 +73,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     return false;
   }
     /**
-   * Calculate dynamic minimum balance for a token based on MUG/MU price
+   * Calculate dynamic minimum balance for a token based 
    * @param tokenSymbol The token symbol
    * @returns The calculated minimum balance
    */

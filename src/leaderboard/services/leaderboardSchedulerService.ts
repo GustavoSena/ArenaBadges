@@ -1,17 +1,14 @@
 import * as dotenv from 'dotenv';
-import { generateAndSaveMuLeaderboard, generateAndSaveStandardLeaderboard } from './leaderboardClassService';
-import { AppConfig, loadAppConfig } from '../../utils/config';
+import { generateAndSaveLeaderboard } from './leaderboardClassService';
+import { AppConfig } from '../../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { LeaderboardType } from './leaderboardFactory';
 
 // Load environment variables
 dotenv.config();
 
-// Define leaderboard types
-export enum LeaderboardType {
-  STANDARD = 'standard',
-  MU = 'mu'
-}
+
 
 /**
  * Get a LeaderboardType from a string
@@ -68,17 +65,7 @@ async function generateLeaderboard(appConfig: AppConfig, verbose: boolean = fals
       console.log(`Starting ${appConfig.projectName} leaderboard generation process...`);
     }
     
-    switch (appConfig.projectName) {
-      case LeaderboardType.STANDARD:
-        await generateAndSaveStandardLeaderboard(appConfig, verbose);
-        break;
-      case LeaderboardType.MU:
-        await generateAndSaveMuLeaderboard(appConfig, verbose);
-        break;
-      default:
-        console.warn(`Unknown leaderboard type: ${appConfig.projectName}`);
-        return;
-    }
+    await generateAndSaveLeaderboard(appConfig, verbose);
     
     console.log(`Successfully generated ${appConfig.projectName} leaderboard at ${new Date().toISOString()}`);
   } catch (error) {

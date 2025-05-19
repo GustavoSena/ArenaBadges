@@ -13,7 +13,6 @@ import { Command } from 'commander';
 import { startScheduler, runAndSendResults } from './badges/services/schedulerService';
 import { startLeaderboardScheduler, runLeaderboardGeneration, getLeaderboardTypeFromString } from './leaderboard/services/leaderboardSchedulerService';
 import { loadAppConfig } from './utils/config';
-import { RunOptions } from './badges/services/schedulerService';
 
 // Load environment variables
 dotenv.config();

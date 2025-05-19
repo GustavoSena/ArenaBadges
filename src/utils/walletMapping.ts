@@ -1,12 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
+import { ArenaWalletResponse } from '../types/interfaces';
 
-// Cache for wallet mappings to avoid multiple disk reads
-const walletMappingCache: { [key: string]: Record<string, string> } = {};
-
-// Cache for Arena API responses to avoid multiple API calls
-const arenaApiCache: { [handle: string]: string | null } = {};
 
 /**
  * Load wallet-to-twitter mapping from a JSON file
@@ -21,14 +17,7 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
     return {};
   }
   
-  // Create a cache key that includes the project ID if provided
-  const cacheKey = projectId ? `${projectId}:${filename}` : filename;
-  
-  // Check if we have this mapping in cache
-  if (walletMappingCache[cacheKey]) {
-    return walletMappingCache[cacheKey];
-  }
-  
+
   try {
     // Check for project-specific mapping first
     let filePath: string;
@@ -40,7 +29,7 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
       console.log(`Loading wallet mapping from path: ${filePath}`);
     } else if (projectId) {
       // Try project-specific mapping first
-      filePath = path.join(process.cwd(), 'config', 'projects', projectId, filename);
+      filePath = path.join(process.cwd(), 'config', 'mappings', filename);
       
       // If project-specific mapping doesn't exist, fall back to global mapping
       if (!fs.existsSync(filePath)) {
@@ -54,7 +43,6 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
     
     if (!fs.existsSync(filePath)) {
       console.warn(`Wallet mapping file not found: ${filePath}`);
-      walletMappingCache[cacheKey] = {};
       return {};
     }
     
@@ -68,12 +56,9 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
       normalizedMapping[address.toLowerCase()] = handle as string;
     }
     
-    // Cache the result
-    walletMappingCache[cacheKey] = normalizedMapping;
     return normalizedMapping;
   } catch (error) {
     console.error(`Error loading wallet mapping from ${filename}:`, error);
-    walletMappingCache[cacheKey] = {};
     return {};
   }
 }
@@ -83,11 +68,12 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
  * @param walletMapping The wallet-to-twitter mapping
  * @returns A record mapping Twitter handles to wallet addresses
  */
-export function getHandleToWalletMapping(walletMapping: Record<string, string>): Record<string, string> {
-  const handleToWallet: Record<string, string> = {};
+export function getHandleToWalletMapping(walletMapping: Record<string, string>, verbose: boolean = false): Map<string,Record<string, string>> {
+  const handleToWallet: Map<string,Record<string, string>> = new Map<string,Record<string, string>>();
   
   for (const [address, handle] of Object.entries(walletMapping)) {
-    handleToWallet[handle.toLowerCase()] = address;
+    if (verbose) console.log(`Mapping ${address} to ${handle}`);
+    handleToWallet.set(handle.toLowerCase(), { [address.toLowerCase()]: 'mapping'});
   }
   
   return handleToWallet;
@@ -98,11 +84,8 @@ export function getHandleToWalletMapping(walletMapping: Record<string, string>):
  * @param handle Twitter handle to lookup
  * @returns The wallet address or null if not found
  */
-export async function getArenaAddressForHandle(handle: string): Promise<string | null> {
-  // Check if we have this handle in cache
-  if (arenaApiCache[handle.toLowerCase()] !== undefined) {
-    return arenaApiCache[handle.toLowerCase()];
-  }
+export async function getArenaAddressForHandle(handle: string): Promise<ArenaWalletResponse> {
+
   
   try {
     const apiUrl = `https://api.starsarena.com/user/handle?handle=${handle}`;
@@ -112,18 +95,16 @@ export async function getArenaAddressForHandle(handle: string): Promise<string |
     
     if (response.data && response.data.user && response.data.user.dynamicAddress) {
       const address = response.data.user.dynamicAddress;
+      const picture_url = response.data.user.twitter_pfp_url;
       // Cache the result
-      arenaApiCache[handle.toLowerCase()] = address;
-      return address;
+      return { address, picture_url};
     }
     
-    // Cache null result
-    arenaApiCache[handle.toLowerCase()] = null;
-    return null;
+
+    return { address: "", picture_url: ""};
   } catch (error) {
     console.error(`Error fetching Arena address for handle ${handle}:`, error);
     // Cache null result
-    arenaApiCache[handle.toLowerCase()] = null;
-    return null;
+    return { address: "", picture_url: ""};
   }
 }

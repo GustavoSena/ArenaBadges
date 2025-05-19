@@ -18,7 +18,7 @@ export async function fetchTokenHoldersFromSnowtrace(
   tokenAddress: string, 
   tokenSymbol?: string,
   minBalance: number = 0,
-  tokenDecimals?: number,
+  tokenDecimals: number = 18,
   verbose: boolean = false
 ): Promise<TokenHolder[]> {
   try {
@@ -74,9 +74,13 @@ export async function fetchTokenHoldersFromSnowtrace(
               
               holders.push({
                 address,
-                tokenSymbol: symbol,
-                balance: balance,
-                balanceFormatted: balanceFormatted
+                holding: {
+                  tokenAddress: tokenAddress,
+                  tokenSymbol: symbol,
+                  tokenBalance: balance,
+                  tokenDecimals: tokenDecimals,
+                  balanceFormatted: balanceFormatted
+                }
               });
             } else {
               // Increment consecutive low balance counter
@@ -116,7 +120,7 @@ export async function fetchTokenHoldersFromSnowtrace(
     }
     
     // Sort holders by balance (descending)
-    holders.sort((a, b) => b.balanceFormatted - a.balanceFormatted);
+    holders.sort((a, b) => b.holding.balanceFormatted - a.holding.balanceFormatted);
     
     console.log(`Found ${holders.length} holders with balance >= ${minBalance} ${tokenSymbol}`);
     return holders;

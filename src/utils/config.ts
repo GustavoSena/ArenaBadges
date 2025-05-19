@@ -92,7 +92,7 @@ export function loadAppConfig(projectName: string): AppConfig {
 
 /**
  * Load a specific leaderboard config
- * @param type The type of leaderboard (e.g., 'standard', 'mu')
+ * @param type The type of leaderboard
  * @returns The leaderboard configuration
  */
 export function loadLeaderboardConfig(type: string): LeaderboardConfig {
@@ -113,7 +113,7 @@ export function loadLeaderboardConfig(type: string): LeaderboardConfig {
 
 /**
  * Load a specific badge config
- * @param type The type of badge (e.g., 'mu')
+ * @param type The type of badge
  * @returns The badge configuration or null if not found
  */
 export function loadBadgeConfig(type: string): any | null {

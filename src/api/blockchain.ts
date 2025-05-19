@@ -238,7 +238,6 @@ export async function fetchTokenBalanceWithEthers(
           console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
         }
         
-        // Wait before retrying with exponential backoff
         await sleep(RETRY_DELAY);
       } else {
         console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
@@ -288,9 +287,13 @@ export async function fetchTokenBalancesWithEthers(
           
           return {
             address,
-            balance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
-            balanceFormatted: balance,
-            tokenSymbol
+            holding: {
+              tokenAddress: tokenAddress,
+              tokenSymbol: tokenSymbol,
+              tokenBalance: ethers.parseUnits(balance.toString(), tokenDecimals).toString(),
+              tokenDecimals: tokenDecimals,
+              balanceFormatted: balance
+            }
           };
         });
         
@@ -310,9 +313,13 @@ export async function fetchTokenBalancesWithEthers(
           // Add empty results for this batch to maintain address count
           const emptyResults = batch.map(address => ({
             address,
-            balance: "0",
-            balanceFormatted: 0,
-            tokenSymbol
+            holding: {
+              tokenAddress: tokenAddress,
+              tokenSymbol: tokenSymbol,
+              tokenBalance: "0",
+              tokenDecimals: tokenDecimals,
+              balanceFormatted: 0
+            }
           }));
           holders.push(...emptyResults);
         }
@@ -333,7 +340,7 @@ export async function fetchTokenBalancesWithEthers(
   }
   
   // Count non-zero balances for logging
-  const nonZeroBalances = holders.filter(h => h.balanceFormatted > 0).length;
+  const nonZeroBalances = holders.filter(h => h.holding.balanceFormatted > 0).length;
   if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
   
   return holders;

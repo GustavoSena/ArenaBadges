@@ -9,6 +9,7 @@ export interface NftHolding extends Holding{
 
 export interface TokenHolding extends Holding{
   tokenDecimals: number;
+  balanceFormatted: number;
 }
 
 export interface AddressHoldings{
@@ -21,9 +22,7 @@ export interface AddressHoldings{
 // Token holder interfaces
 export interface TokenHolder {
   address: string;
-  balance: string;
-  balanceFormatted: number;
-  tokenSymbol: string;
+  holding: TokenHolding;
 }
 
 export interface NftHolder {
@@ -47,16 +46,6 @@ export interface StarsArenaUserResponse {
   };
 }
 
-export interface HolderWithSocial extends TokenHolder {
-  twitter_handle: string | null;
-  twitter_pfp_url?: string | null;
-}
-
-export interface NftHolderWithSocial extends NftHolder {
-  twitter_handle: string | null;
-  twitter_pfp_url?: string | null;
-}
-
 // Config interfaces
 export interface TokenConfig {
   address: string;
@@ -71,4 +60,9 @@ export interface NftConfig {
   minBalance: number;
   /** Size of the NFT collection (maximum token ID) */
   collectionSize?: number;
+}
+
+export interface ArenaWalletResponse {
+  address: string;
+  picture_url: string;
 }

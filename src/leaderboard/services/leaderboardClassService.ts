@@ -24,8 +24,9 @@ import { fetchTokenHolders } from '../../utils/helpers';
 import { fetchTwitterProfilePicture } from '../../api/arenabook';
 import { sleep } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
-import { loadWalletMapping } from '../../utils/walletMapping';
+import { getArenaAddressForHandle, loadWalletMapping } from '../../utils/walletMapping';
 import { fetchArenabookSocial } from '../../api/arenabook';
+import { createLeaderboard } from './leaderboardFactory';
 
 // Load environment variables
 dotenv.config();
@@ -71,7 +72,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     
     // Step 2: Fetch NFT holders
     if (verbose) console.log('\nFetching NFT holders...');
-    
+    const qualifyedNftHolders = new Set<string>();
     for (const nftConfig of leaderboardNfts) {
       let minNftBalance = await leaderboard.calculateDynamicMinimumBalance(nftConfig.name);
       if (sumOfBalances) {
@@ -82,7 +83,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
       const nftHolders = await fetchNftHoldersFromEthers(
         nftConfig.address,
         nftConfig.name,
-        minNftBalance,
+        1,
         verbose,
         nftConfig.collectionSize
       );
@@ -91,6 +92,9 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
       // Add NFT holdings to the mapping
       for (const holder of nftHolders) {
         const address = holder.address.toLowerCase();
+        if (holder.tokenCount >= minNftBalance) {
+          qualifyedNftHolders.add(address);
+        }
         
         // Initialize NFT holdings map for this wallet if it doesn't exist
         if (!walletToNftHoldings.has(address)) {
@@ -123,8 +127,8 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
       const tokenHolders = await fetchTokenHolders(
         tokenConfig.address,
         tokenConfig.symbol,
-        tokenConfig.decimals,
         minTokenBalance,
+        tokenConfig.decimals,
         verbose
       );
       
@@ -143,20 +147,27 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
         const tokenHolding: TokenHolding = {
           tokenAddress: tokenConfig.address,
           tokenSymbol: tokenConfig.symbol,
-          tokenBalance: holder.balance,
-          tokenDecimals: tokenConfig.decimals
+          tokenBalance: holder.holding.tokenBalance,
+          tokenDecimals: tokenConfig.decimals,
+          balanceFormatted: holder.holding.balanceFormatted
         };
-        
+        if (verbose) console.log(`Adding token holding for ${tokenConfig.symbol} for wallet ${address}: ${holder.holding.tokenBalance}`);
         // Add to wallet's token holdings
         walletToTokenHoldings.get(address)!.set(tokenConfig.symbol, tokenHolding);
+        
       }
     }
     
-    // Step 4: Create a map of twitter_handle -> AddressHoldings[]
-    const userHoldings = new Map<string, AddressHoldings[]>();
+    // Step 4: Create a map of twitter_handle to wallet and origin
+    const userWallets = new Map<string, Record<string, string>>();
     
     // Step 5: Check which wallets are in the wallet mapping file
     if (verbose) console.log('\nProcessing wallet mappings...');
+
+    // Get all addresses from token and NFT holdings
+    const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ...qualifyedNftHolders]);
+
+    if (verbose) console.log(`Found ${allAddresses.size} unique addresses`);
     
     // Load wallet mapping if available
     const walletMappingFile = appConfig.projectConfig.walletMappingFile;
@@ -173,36 +184,12 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
         const lowerHandle = handle.toLowerCase();
         
         // Initialize user holdings array if it doesn't exist
-        if (!userHoldings.has(lowerHandle)) {
-          userHoldings.set(lowerHandle, []);
-        }
-        
-        // Create address holdings object
-        const addressHoldings: AddressHoldings = {
-          address: lowerAddress,
-          nftHoldings: {},
-          tokenHoldings: {},
-          fromMapping: true
-        };
-        
-        // Add NFT holdings if available
-        if (walletToNftHoldings.has(lowerAddress)) {
-          const nftHoldings = walletToNftHoldings.get(lowerAddress)!;
-          for (const [name, holding] of nftHoldings.entries()) {
-            addressHoldings.nftHoldings[name] = holding;
-          }
-        }
-        
-        // Add token holdings if available
-        if (walletToTokenHoldings.has(lowerAddress)) {
-          const tokenHoldings = walletToTokenHoldings.get(lowerAddress)!;
-          for (const [symbol, holding] of tokenHoldings.entries()) {
-            addressHoldings.tokenHoldings[symbol] = holding;
-          }
+        if (!userWallets.has(lowerHandle)) {
+          userWallets.set(lowerHandle, {});
         }
         
         // Add to user holdings
-        userHoldings.get(lowerHandle)!.push(addressHoldings);
+        userWallets.get(lowerHandle)![lowerAddress] = "mapping";
       }
     } else {
       if (verbose) console.log('No wallet mapping file specified');
@@ -211,31 +198,36 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     // Step 6: For remaining wallets, fetch Arena profiles
     if (verbose) console.log('\nFetching Arena profiles for remaining wallets...');
     
-    // Create a set of addresses that have been processed
-    const processedAddresses = new Set<string>();
-    
-    // Mark addresses from wallet mapping as processed
-    if (walletMappingFile) {
-      const walletMapping = await loadWalletMapping(walletMappingFile);
-      for (const address of Object.keys(walletMapping)) {
-        processedAddresses.add(address.toLowerCase());
+    const arenaPictureMapping = new Map<string, string>();
+    if(sumOfBalances){
+      for (const handle of userWallets.keys()){
+        if (verbose) console.log(`Fetching Arena profile for handle ${handle}...`);
+        await sleep(500);
+        const social = await getArenaAddressForHandle(handle);
+        
+        if (!social) {
+          console.log(`No Arena address found for handle ${handle}`);
+        }
+        else {
+          arenaPictureMapping.set(social.address.toLowerCase(), social.picture_url);
+          if (!(userWallets.get(handle)![social.address.toLowerCase()])){
+            if(verbose) console.log(`Adding Arena address for handle ${handle}: ${social.address}`);
+            userWallets.get(handle)![social.address.toLowerCase()] = "arena";
+          }
+        }
       }
     }
-    
-    // Get all addresses from token and NFT holdings
-    const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ...walletToNftHoldings.keys()]);
-    
+
+
     // Process addresses that haven't been processed yet
-    const addressesToProcess = Array.from(allAddresses)
-      .filter(address => !processedAddresses.has(address));
-    
+    const addressesToProcess = Array.from(allAddresses);
     if (verbose) console.log(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
     
     // Process addresses in batches to improve performance and avoid rate limiting
     const BATCH_SIZE = 5;
     const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
     
-    const arenaPictureMapping = new Map<string, string>();
+
     for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
       const batch = addressesToProcess.slice(i, i + BATCH_SIZE);
       
@@ -248,7 +240,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
         try {
           // Fetch Arena profile for this wallet
           const social = await fetchArenabookSocial(address);
-          
+
           // Skip wallets without a Twitter handle
           if (!social || !social.twitter_handle) {
             if (verbose) {
@@ -262,54 +254,28 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
             arenaPictureMapping.set(lowerHandle, social.twitter_pfp_url);
 
           // Initialize user holdings array if it doesn't exist
-          if (!userHoldings.has(lowerHandle)) {
-            userHoldings.set(lowerHandle, []);
-          }
-          
-          // If sumOfBalances is false and we already have this Twitter handle, skip
-          if (!sumOfBalances && userHoldings.has(lowerHandle) && userHoldings.get(lowerHandle)!.length > 0) {
-            if (verbose) {
-              console.log(`Twitter handle ${lowerHandle} already exists and sumOfBalances is disabled, skipping wallet ${address}...`);
-            }
+
+          if (!userWallets.has(lowerHandle) ) {
+            userWallets.set(lowerHandle, {});
+          } else if (!sumOfBalances && userWallets.get(lowerHandle)!){
+            if (verbose) console.log(`sumOfBalances is disabled and we already have this Twitter handle ${lowerHandle}, skipping...`);
             return;
-          }
-          
-          // Create address holdings object
-          const addressHoldings: AddressHoldings = {
-            address,
-            nftHoldings: {},
-            tokenHoldings: {},
-            fromMapping: false
-          };
-          
-          // Add NFT holdings if available
-          if (walletToNftHoldings.has(address)) {
-            const nftHoldings = walletToNftHoldings.get(address)!;
-            for (const [name, holding] of nftHoldings.entries()) {
-              addressHoldings.nftHoldings[name] = holding;
-            }
-          }
-          
-          // Add token holdings if available
-          if (walletToTokenHoldings.has(address)) {
-            const tokenHoldings = walletToTokenHoldings.get(address)!;
-            for (const [symbol, holding] of tokenHoldings.entries()) {
-              addressHoldings.tokenHoldings[symbol] = holding;
-            }
-          }
-          
+          } 
+
           // Add to user holdings
-          userHoldings.get(lowerHandle)!.push(addressHoldings);
+          userWallets.get(lowerHandle)![address] = "arena";
         } catch (error) {
-          console.error(`Error processing wallet ${address}:`, error);
+          if (error instanceof Error) console.error(`Error processing wallet ${address}:`, error.message);
+          else if(verbose) console.error(`Error processing wallet ${address}:`, error);
+          else console.error(`Error processing wallet ${address}`);
         }
-        
-        // Add delay between requests to avoid rate limiting
-        await sleep(REQUEST_DELAY_MS);
+
       });
       
       // Wait for all promises in this batch to complete before moving to the next batch
       await Promise.all(promises);
+      // Add delay between requests to avoid rate limiting
+      await sleep(REQUEST_DELAY_MS);
     }
     
     // Step 7: Check eligibility and calculate points
@@ -317,31 +283,31 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     
     const holderPointsArray: HolderEntry[] = [];
     
-    for (const [handle, addressHoldingsArray] of userHoldings.entries()) {
+    for (const [handle, addressRecord] of userWallets.entries()) {
+      const addresses = Object.keys(addressRecord);
       // Skip if no address holdings
-      if (addressHoldingsArray.length === 0) continue;
+      if (addresses.length === 0) continue;
       
       // If sumOfBalances is false, use only the first address
-      const addressesToUse = sumOfBalances ? addressHoldingsArray : [addressHoldingsArray[0]];
+      const addressesToUse = sumOfBalances ? addresses : [addresses[0]];
       
       const tokenHoldingsMap: {[key:string]:TokenHolding} = {};
       const nftHoldingsMap: {[key:string]:NftHolding} = {};
   
       // Process each address
-      for (const addressHoldings of addressesToUse) {
-        const address = addressHoldings.address;
+      for (const address of addressesToUse) {
+        if (verbose) console.log(`Processing address ${address} for Twitter handle ${handle}`);
         
         // Process token holdings
         for (const tokenConfig of leaderboardTokens) {
           const symbol = tokenConfig.symbol;
           
-          // If this token is already in the address holdings, use it
-          if (symbol in addressHoldings.tokenHoldings) {
+          if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(symbol)) {
             if(tokenHoldingsMap[symbol]){
-              tokenHoldingsMap[symbol].tokenBalance += addressHoldings.tokenHoldings[symbol].tokenBalance;
-            }
-            else tokenHoldingsMap[symbol] = addressHoldings.tokenHoldings[symbol];
+              tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + walletToTokenHoldings.get(address)!.get(symbol)!.balanceFormatted!;
+            }else tokenHoldingsMap[symbol] = walletToTokenHoldings.get(address)!.get(symbol)!;
           }else{
+            if (verbose) console.log(`Fetching token balance for ${symbol} for address ${address}...`);
             const balance = await fetchTokenBalanceWithEthers(
               tokenConfig.address,
               address,
@@ -351,29 +317,20 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
             
             // Only add if balance is greater than 0
             if (balance > 0) {
+              if (verbose) console.log(`Adding token holding for ${symbol} for wallet ${address}: ${balance}`);
               if(tokenHoldingsMap[symbol]){
-                tokenHoldingsMap[symbol].tokenBalance += balance.toString();
-              }
-              else 
-                tokenHoldingsMap[symbol] = {
-                  tokenBalance: balance.toString(),
-                  tokenSymbol: symbol,
-                  tokenDecimals: tokenConfig.decimals,
-                  tokenAddress: tokenConfig.address
-                };
+                tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + balance;
+              }else tokenHoldingsMap[symbol] = {tokenAddress: tokenConfig.address, tokenSymbol: tokenConfig.symbol, tokenBalance: balance.toString(), tokenDecimals: tokenConfig.decimals, balanceFormatted: balance};
             }
           }
         }
         
-        // Process NFT holdings
-        for (const nftConfig of leaderboardNfts) {
-          const name = nftConfig.name;
-          
-          // If this NFT is already in the address holdings, use it
-          if (name in addressHoldings.nftHoldings) {
+        if(walletToNftHoldings.has(address)){
+          const nftHoldings = walletToNftHoldings.get(address)!;
+          for (const [name, holding] of nftHoldings.entries()) {
             if(nftHoldingsMap[name]){
-                nftHoldingsMap[name].tokenBalance += addressHoldings.nftHoldings[name].tokenBalance;
-            }else nftHoldingsMap[name] = addressHoldings.nftHoldings[name];
+              nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
+            }else nftHoldingsMap[name] = holding;
           }
         }
         
@@ -403,7 +360,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
       
       // Create holder points object
       const holderEntry: HolderEntry = {
-        address: addressesToUse[0].address, // Use the first address as the primary
+        address: addressesToUse[0], // Use the first address as the primary
         twitterHandle: handle,
         profileImageUrl: arenaPictureMapping.get(handle) || null, // Will be fetched later
         points: holderPoints,
@@ -486,113 +443,10 @@ async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard, verb
 }
 
 /**
- * Generate and save MU leaderboard
- * @param verbose Whether to log verbose output
- */
-export async function generateAndSaveMuLeaderboard(appConfig: AppConfig, verbose: boolean = false): Promise<Leaderboard> {
-  try {
-    if (verbose) {
-      console.log('Starting MU leaderboard generation...');
-    }
-    
-    const leaderboardConfig = appConfig.leaderboardConfig;
-    if (!leaderboardConfig) {
-      throw new Error('Leaderboard configuration not found');
-    }
-    
-    // Create MuLeaderboard instance
-    const muLeaderboard = new MuLeaderboard(provider, leaderboardConfig.excludedAccounts);
-    
-    // Calculate holder points
-    if (verbose) {
-      console.log('Calculating holder points using MuLeaderboard implementation...');
-    } else {
-      console.log('Calculating holder points...');
-    }
-    
-    const holderPoints = await calculateHolderPoints(appConfig, muLeaderboard, verbose);
-    
-    if (verbose) {
-      console.log('Loaded MU leaderboard configuration');
-    }
-    
-    // Generate leaderboard - include all entries (pass 0 for maxEntries)
-    if (verbose) {
-      console.log('Generating MU leaderboard...');
-    } else {
-      console.log('Generating leaderboard...');
-    }
-    
-    const leaderboard = muLeaderboard.generateLeaderboard(holderPoints, 0);
-    
-    if (verbose) {
-      console.log(`Generated MU leaderboard with ${leaderboard.entries.length} entries`);
-    }
-    
-    // Fetch Twitter profile pictures for entries that don't have one
-    await fetchProfilePicturesForLeaderboard(leaderboard, verbose);
-    
-    // Create output directory if it doesn't exist
-    const outputDir = path.join(process.cwd(), 'output', 'leaderboards');
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-      if (verbose) {
-        console.log(`Created output directory: ${outputDir}`);
-      }
-    }
-    
-    // Save leaderboard to JSON file
-    const jsonOutputPath = path.join(outputDir, muLeaderboard.getOutputFileName());
-    saveLeaderboard(leaderboard, jsonOutputPath);
-    
-    if (verbose) {
-      console.log(`Saved MU leaderboard JSON to ${jsonOutputPath}`);
-    }
-    
-    // Save leaderboard to HTML file
-    const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
-    saveLeaderboardHtml(leaderboard, htmlOutputPath, leaderboardConfig.output);
-    
-    if (verbose) {
-      console.log(`Saved MU leaderboard HTML to ${htmlOutputPath}`);
-    }
-    
-    // Copy logo file to assets directory if specified in config
-    if (leaderboardConfig.output && leaderboardConfig.output.logoPath) {
-      const assetsDir = path.join(outputDir, 'assets');
-      if (!fs.existsSync(assetsDir)) {
-        fs.mkdirSync(assetsDir, { recursive: true });
-        if (verbose) {
-          console.log(`Created assets directory: ${assetsDir}`);
-        }
-      }
-      
-      // Copy logo file
-      const logoSource = path.join(process.cwd(), 'assets', leaderboardConfig.output.logoPath);
-      const logoTarget = path.join(assetsDir, leaderboardConfig.output.logoPath);
-      fs.copyFileSync(logoSource, logoTarget);
-      
-      if (verbose) {
-        console.log(`Copied logo from ${logoSource} to ${logoTarget}`);
-      }
-    }
-    
-    // Print total number of entries
-    console.log(`MU leaderboard generated and saved to ${outputDir}`);
-    console.log(`Total entries: ${leaderboard.entries.length}`);
-    
-    return leaderboard;
-  } catch (error) {
-    console.error('Error generating MU leaderboard:', error);
-    throw error;
-  }
-}
-
-/**
  * Generate and save standard leaderboard
  * @param verbose Whether to log verbose output
  */
-export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, verbose: boolean = false): Promise<Leaderboard> {
+export async function generateAndSaveLeaderboard(appConfig: AppConfig, verbose: boolean = false): Promise<Leaderboard> {
   try {
     if (verbose) {
       console.log('Starting standard leaderboard generation...');
@@ -604,7 +458,7 @@ export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, v
     }
     
     // Create StandardLeaderboard instance
-    const standardLeaderboard = new StandardLeaderboard(provider, leaderboardConfig.excludedAccounts);
+    const leaderboardType = createLeaderboard(provider, leaderboardConfig.excludedAccounts, appConfig.projectName);
     
     // Calculate holder points
     if (verbose) {
@@ -613,7 +467,7 @@ export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, v
       console.log('Calculating holder points...');
     }
     
-    const holderPoints = await calculateHolderPoints(appConfig, standardLeaderboard, verbose);
+    const holderPoints = await calculateHolderPoints(appConfig, leaderboardType, verbose);
     
     if (verbose) {
       console.log('Loaded standard leaderboard configuration');
@@ -626,7 +480,7 @@ export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, v
       console.log('Generating leaderboard...');
     }
     
-    const leaderboard = standardLeaderboard.generateLeaderboard(holderPoints, 0);
+    const leaderboard = leaderboardType.generateLeaderboard(holderPoints, 0);
     
     if (verbose) {
       console.log(`Generated standard leaderboard with ${leaderboard.entries.length} entries`);
@@ -645,7 +499,7 @@ export async function generateAndSaveStandardLeaderboard(appConfig: AppConfig, v
     }
     
     // Save leaderboard to JSON file
-    const jsonOutputPath = path.join(outputDir, standardLeaderboard.getOutputFileName());
+    const jsonOutputPath = path.join(outputDir, leaderboardType.getOutputFileName());
     saveLeaderboard(leaderboard, jsonOutputPath);
     
     if (verbose) {

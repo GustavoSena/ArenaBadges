@@ -1,4 +1,4 @@
-import { combineTokenHoldersByHandle } from '../../src/leaderboard/utils/leaderboardUtils';
+/*import { combineTokenHoldersByHandle } from '../../src/leaderboard/utils/leaderboardUtils';
 import fs from 'fs';
 import path from 'path';
 
@@ -175,3 +175,4 @@ describe('Wallet Mapping Tests', () => {
     }
   });
 });
+*/

@@ -45,15 +45,15 @@ export class MuLeaderboard extends BaseLeaderboard {
     // Calculate points for tokens
     for (const holding of tokenHoldings) {
 
-      holderPoints.tokenPoints[holding.tokenSymbol] = 2 * parseFloat(holding.tokenBalance) * await this.getTokenMultiplier(holding.tokenSymbol);
-      if(verbose) console.log(`Token points for ${holding.tokenSymbol}: ${holderPoints.tokenPoints[holding.tokenSymbol]}`);
+      holderPoints.tokenPoints[holding.tokenSymbol] = 2 * holding.balanceFormatted! * await this.getTokenMultiplier(holding.tokenSymbol);
+      if(verbose) console.log(`Token points for ${holding.tokenSymbol} for balance ${holding.balanceFormatted}: ${holderPoints.tokenPoints[holding.tokenSymbol]}`);
       holderPoints.totalPoints += holderPoints.tokenPoints[holding.tokenSymbol];
     }
     
     // Calculate points for NFTs
     for (const holding of nftHoldings) {
-        holderPoints.nftPoints[holding.tokenSymbol] = 2 * Number(holding.tokenBalance) * await this.getTokenMultiplier(holding.tokenSymbol);
-        if(verbose) console.log(`NFT points for ${holding.tokenSymbol}: ${holderPoints.nftPoints[holding.tokenSymbol]}`);
+        holderPoints.nftPoints[holding.tokenSymbol] = 2 * +holding.tokenBalance * await this.getTokenMultiplier(holding.tokenSymbol);
+        if(verbose) console.log(`NFT points for ${holding.tokenSymbol} for balance ${holding.tokenBalance}: ${holderPoints.nftPoints[holding.tokenSymbol]}`);
         holderPoints.totalPoints += holderPoints.nftPoints[holding.tokenSymbol];
     }
     
@@ -82,7 +82,7 @@ export class MuLeaderboard extends BaseLeaderboard {
       }
       
       // Check if the holder meets the minimum balance
-      if (parseFloat(holding.tokenBalance) >= minBalance) {
+      if (holding.balanceFormatted! >= minBalance) {
         meetsTokenMinimum = true;
         break;
       }
@@ -92,7 +92,7 @@ export class MuLeaderboard extends BaseLeaderboard {
       // Dynamic minimum balances based on MUG/MU price
 
       let minBalance = Math.ceil(100 / await this.getTokenMultiplier(holding.tokenSymbol));
-      const formattedBalance = Number(holding.tokenBalance);
+      const formattedBalance = +holding.tokenBalance;
       if (formattedBalance === 0) {
         continue; // Skip tokens with zero balance
       }
@@ -117,7 +117,7 @@ export class MuLeaderboard extends BaseLeaderboard {
       if (this.mugMuPrice === 0) {
         const price = await this.priceProviderContract.getMugMuPrice();
         // Remove 18 decimal places as specified
-        this.mugMuPrice = Number(ethers.formatUnits(price, 18));
+        this.mugMuPrice = +ethers.formatUnits(price, 18);
         console.log(`Retrieved MUG/MU price from contract: ${this.mugMuPrice}`);
       }
       return this.mugMuPrice;
@@ -134,7 +134,8 @@ export class MuLeaderboard extends BaseLeaderboard {
    * @returns The calculated minimum balance
    */
   public async calculateDynamicMinimumBalance(tokenSymbol: string): Promise<number> {
-    return 100000/ await this.getTokenMultiplier(tokenSymbol);
+    if(tokenSymbol.toLowerCase() === 'mu pups') return 1;
+    return 100/ await this.getTokenMultiplier(tokenSymbol);
   }
   /**
    * Calculate dynamic minimum balance for a token based on MUG/MU price
