@@ -43,7 +43,6 @@ export async function runAndSendResults(appConfig: AppConfig, apiKey: string, ru
     let results;
     try {
       // Pass the project name to fetchTokenHolderProfiles
-      console.log(`Fetching token holder profiles for project: ${appConfig.projectName}`);
       results = await fetchTokenHolderProfiles(appConfig, runOptions.verbose || false);
     } catch (fetchError) {
       // Check if this is a retry failure

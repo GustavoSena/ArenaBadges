@@ -96,7 +96,7 @@ export async function getArenaAddressForHandle(handle: string): Promise<ArenaWal
     if (response.data && response.data.user && response.data.user.dynamicAddress) {
       const address = response.data.user.dynamicAddress;
       const picture_url = response.data.user.twitter_pfp_url;
-      // Cache the result
+
       return { address, picture_url};
     }
     
@@ -104,7 +104,7 @@ export async function getArenaAddressForHandle(handle: string): Promise<ArenaWal
     return { address: "", picture_url: ""};
   } catch (error) {
     console.error(`Error fetching Arena address for handle ${handle}:`, error);
-    // Cache null result
+
     return { address: "", picture_url: ""};
   }
 }
