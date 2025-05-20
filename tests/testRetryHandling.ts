@@ -5,7 +5,7 @@
  * by attempting to fetch NFT holders with an invalid contract address.
  */
 import * as dotenv from 'dotenv';
-import { fetchNftHolders } from '../src/api/blockchain';
+import { fetchNftHoldersFromEthers } from '../src/api/blockchain';
 
 // Load environment variables
 dotenv.config();
@@ -19,7 +19,7 @@ async function runTest() {
     const invalidContractAddress = '0x0000000000000000000000000000000000000000';
     
     console.log('Testing fetchNftHolders with invalid contract address...');
-    await fetchNftHolders(invalidContractAddress, 'Test NFT', 1, true);
+    await fetchNftHoldersFromEthers(invalidContractAddress, 'Test NFT', 1, true);
     
     // If we get here, the function didn't throw an error as expected
     console.log('❌ FAIL: fetchNftHolders did not throw an error for invalid contract');

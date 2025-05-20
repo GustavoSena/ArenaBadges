@@ -1,7 +1,7 @@
 /**
  * Simple test script to verify error propagation in the blockchain module
  */
-import { fetchNftHolders } from '../src/api/blockchain';
+import { fetchNftHoldersFromEthers } from '../src/api/blockchain';
 
 async function testErrorPropagation() {
   console.log('Testing error propagation in blockchain module...');
@@ -11,7 +11,7 @@ async function testErrorPropagation() {
     const invalidAddress = '0x1234567890123456789012345678901234567890';
     console.log(`Attempting to fetch NFT holders from invalid contract: ${invalidAddress}`);
     
-    const holders = await fetchNftHolders(invalidAddress, 'Test NFT', 1, true);
+    const holders = await fetchNftHoldersFromEthers(invalidAddress, 'Test NFT', 1, true);
     
     console.log('Result:', holders);
     console.log('Test failed: Expected an error to be thrown');

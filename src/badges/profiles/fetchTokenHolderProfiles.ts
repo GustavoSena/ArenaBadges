@@ -63,11 +63,6 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
         const lowerAddress = token.address.toLowerCase();
         let minBalance = token.minBalance;
         
-        // If sumOfBalances is enabled, we can use half the minimum balance when fetching
-        if (sumOfBalances) {
-          minBalance = minBalance / 2;
-        }
-        
         tokenMinBalances.set(lowerAddress, { minBalance, token });
       }
     }
@@ -79,11 +74,6 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
         }
         const lowerAddress = nft.address.toLowerCase();
         let minBalance = nft.minBalance;
-        
-        // If sumOfBalances is enabled, we can use half the minimum balance when fetching
-        if (sumOfBalances) {
-          minBalance = minBalance / 2;
-        }
         
         nftMinBalances.set(lowerAddress, { minBalance, nft });
       }
@@ -370,7 +360,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
           const nftHoldings = walletToNftHoldings.get(address)!;
           for (const [nftAddress, holding] of nftHoldings.entries()) {
             if(nftHoldingsMap[nftAddress]){
-              nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance! + +holding.tokenBalance!).toString();
+              nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
             }else nftHoldingsMap[nftAddress] = holding;
           }
         }

@@ -32,6 +32,8 @@ export interface LeaderboardOutput {
   title: string;
   /** Path to the logo image */
   logoPath: string;
+  /** File name for the leaderboard HTML */
+  fileName?: string;
   /** Maximum number of entries to display */
   maxEntries: number;
   /** Text describing the refresh schedule */

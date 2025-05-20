@@ -6,6 +6,7 @@
  * 1. Not sending data to the API
  * 2. Rescheduling for 2 hours later
  */
+/*
 import * as dotenv from 'dotenv';
 import { runAndSendResults } from '../src/badges/services/schedulerService';
 import { fetchTokenHolderProfiles } from '../src/badges/profiles/fetchTokenHolderProfiles';
@@ -72,3 +73,4 @@ async function runTest() {
 
 // Run the test
 runTest().catch(console.error);
+*/

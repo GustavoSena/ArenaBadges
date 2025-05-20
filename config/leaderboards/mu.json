@@ -48,6 +48,7 @@
   },
   "output": {
     "title": "MU Leaderboard",
+    "fileName": "index.html",
     "logoPath": "mu_logo.png",
     "maxEntries": 100,
     "refreshTimeLabel": "Updated every 3 hours",

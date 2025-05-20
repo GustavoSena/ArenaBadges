@@ -6,8 +6,11 @@
   "scripts": {
     "build": "tsc",
     "mu:run": "ts-node src/project.ts run mu",
+    "mu:run:once": "ts-node src/project.ts run mu --once",
     "mu:run:verbose": "ts-node src/project.ts run mu --verbose",
     "mu:run:dry-run": "ts-node src/project.ts run mu --dry-run",
+    "mu:run:dry-run:once": "ts-node src/project.ts run mu --dry-run --once",
+    "mu:run:dry-run:once:verbose": "ts-node src/project.ts run mu --dry-run --once --verbose",
     "mu:badge": "ts-node src/project.ts badge mu",
     "mu:badge:once": "ts-node src/project.ts badge mu --once",
     "mu:badge:verbose": "ts-node src/project.ts badge mu --verbose",

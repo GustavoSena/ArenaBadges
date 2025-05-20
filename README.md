@@ -20,7 +20,7 @@ A badge and leaderboard automation system for Arena community tokens and NFTs. T
 ```
 MORALIS_API_KEYS=["your-moralis-api-key", "your-backup-moralis-api-key"]
 ALCHEMY_API_KEY=your-alchemy-api-key
-ARENA_API_KEY=your-arena-api-key
+BADGE_KEYS={"projectName":"your-api-key"}
 ```
 
 ## Configuration
@@ -34,12 +34,12 @@ Project-specific configurations are stored in the `config/projects/` directory. 
 {
   "scheduler": {
     "badgeIntervalHours": 6,
-    "badgeRetryIntervalHours": 2,
-    "leaderboardIntervalHours": 3,
-    "leaderboardRetryIntervalHours": 2
+    "badgeRetryIntervalHours": 2, //optional
+    "leaderboardIntervalHours": 3, //optional
+    "leaderboardRetryIntervalHours": 2 //optional
   },
-  "walletMappingFile": "wallets.json",
-  "enableLeaderboard": true
+  "walletMappingFile": "wallets.json", //optional
+  "enableLeaderboard": true //optional
 }
 ```
 

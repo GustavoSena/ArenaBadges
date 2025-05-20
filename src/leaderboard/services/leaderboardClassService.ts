@@ -496,7 +496,7 @@ export async function generateAndSaveLeaderboard(appConfig: AppConfig, verbose: 
       if (verbose) {
         console.log(`Created output directory: ${outputDir}`);
       }
-    }
+    }    
     
     // Save leaderboard to JSON file
     const jsonOutputPath = path.join(outputDir, leaderboardType.getOutputFileName());
@@ -507,7 +507,10 @@ export async function generateAndSaveLeaderboard(appConfig: AppConfig, verbose: 
     }
     
     // Save leaderboard to HTML file
-    const htmlOutputPath = jsonOutputPath.replace('.json', '.html');
+    let htmlOutputPath = jsonOutputPath.replace('.json', '.html');
+    if (leaderboardConfig.output && leaderboardConfig.output.fileName) {
+      htmlOutputPath = path.join(outputDir, leaderboardConfig.output.fileName);
+    }
     saveLeaderboardHtml(leaderboard, htmlOutputPath, leaderboardConfig.output);
     
     if (verbose) {

@@ -30,8 +30,9 @@ program
   .description('Run both badge and leaderboard schedulers for a specific project')
   .option('-v, --verbose', 'Enable verbose logging')
   .option('--dry-run', 'Run without sending data to API')
+  .option('--once', 'Run once and exit')
   .action(async (projectName, options) => {
-    await runProject(projectName, 'all', false, options.verbose, options.dryRun);
+    await runProject(projectName, 'all', options.once, options.verbose, options.dryRun);
   });
 
 // Command to run badge scheduler only
