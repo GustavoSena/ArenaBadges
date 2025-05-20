@@ -1,13 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ethers } from 'ethers';
-import * as dotenv from 'dotenv';
 
-import { TokenHolding, NftHolding, AddressHoldings } from '../../types/interfaces';
+import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { HolderEntry, Leaderboard } from '../../types/leaderboard';
 import { BaseLeaderboard } from '../../types/leaderboard';
-import { MuLeaderboard } from '../implementations/muLeaderboard';
-import { StandardLeaderboard } from '../implementations/standardLeaderboard';
 import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
 
 // Import from API modules
@@ -20,7 +17,7 @@ import {
 import {
   saveLeaderboard  
 } from '../utils/leaderboardUtils';
-import { fetchTokenHolders } from '../../utils/helpers';
+import { fetchTokenBalance, fetchTokenHolders } from '../../utils/helpers';
 import { fetchTwitterProfilePicture } from '../../api/arenabook';
 import { sleep } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
@@ -28,22 +25,20 @@ import { getArenaAddressForHandle, loadWalletMapping } from '../../utils/walletM
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { createLeaderboard } from './leaderboardFactory';
 
-// Load environment variables
-dotenv.config();
-
-// Get API key from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching token balances.');
-}
-
-// Avalanche RPC URL using Alchemy API key
-const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-
 // Setup ethers provider for Avalanche
-const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+let provider: ethers.JsonRpcProvider;
+export function setupLeaderboardProvider(apiKey: string) {
 
+  if (!apiKey) {
+    console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
+    return;
+  }
+
+  // Avalanche RPC URL using Alchemy API key
+  const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${apiKey}`;
+
+  provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+}
 /**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
@@ -210,6 +205,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
         }
         else {
           arenaPictureMapping.set(social.address.toLowerCase(), social.picture_url);
+          allAddresses.delete(social.address.toLowerCase());
           if (!(userWallets.get(handle)![social.address.toLowerCase()])){
             if(verbose) console.log(`Adding Arena address for handle ${handle}: ${social.address}`);
             userWallets.get(handle)![social.address.toLowerCase()] = "arena";
@@ -224,8 +220,8 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     if (verbose) console.log(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
     
     // Process addresses in batches to improve performance and avoid rate limiting
-    const BATCH_SIZE = 5;
-    const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
+    const BATCH_SIZE = 10;
+    const REQUEST_DELAY_MS = 500; // 500ms delay between requests
     
 
     for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
@@ -279,7 +275,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     }
     
     // Step 7: Check eligibility and calculate points
-    if (verbose) console.log('\nChecking eligibility and calculating points...');
+    console.log('\nChecking eligibility and calculating points...');
     
     const holderPointsArray: HolderEntry[] = [];
     
@@ -308,7 +304,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
             }else tokenHoldingsMap[symbol] = walletToTokenHoldings.get(address)!.get(symbol)!;
           }else{
             if (verbose) console.log(`Fetching token balance for ${symbol} for address ${address}...`);
-            const balance = await fetchTokenBalanceWithEthers(
+            const balance = await fetchTokenBalance(
               tokenConfig.address,
               address,
               tokenConfig.decimals,

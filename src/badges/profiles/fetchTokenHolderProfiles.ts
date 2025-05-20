@@ -3,7 +3,7 @@ import { TokenConfig, NftConfig, TokenHolding, NftHolding, AddressHoldings } fro
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
-import { formatTokenBalance, sleep, fetchTokenHolders } from '../../utils/helpers';
+import { formatTokenBalance, sleep, fetchTokenHolders, fetchTokenBalance } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
 import { fetchTokenBalanceWithEthers } from '../../api/blockchain';
 
@@ -205,13 +205,11 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
     let userWallets = new Map<string, Record<string, string>>();
     // Get wallet mapping file path from config (if it exists)
     const walletMappingFile = appConfig.projectConfig.walletMappingFile;
-    
-    // Initialize wallet mapping variables
-    let walletMapping: Record<string, string> = {};
-    const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ... nftValidAddresses]);
 
     if (walletMappingFile) {
       console.log(`Loading wallet mapping from ${walletMappingFile}...`);
+      // Initialize wallet mapping variables
+      let walletMapping: Record<string, string> = {};
       walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
       userWallets = getHandleToWalletMapping(walletMapping);
       console.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
@@ -245,6 +243,10 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
     // Collect all wallet addresses that have token or NFT holdings
     
     // Filter out wallets that are already in the mapping
+    const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ... nftValidAddresses]);
+    userWallets.forEach((value, key) => {
+      allAddresses.delete(key);
+    });
     const addressessToProcess = Array.from(allAddresses);
     
     console.log(`Found ${addressessToProcess.length} unmapped wallets with token or NFT holdings`);
@@ -338,7 +340,7 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
             }else tokenHoldingsMap[tokenAddress] = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
           }else{
             if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${address}...`);
-            const balance = await fetchTokenBalanceWithEthers(
+            const balance = await fetchTokenBalance(
               tokenConfig.address,
               address,
               tokenConfig.decimals,

@@ -13,6 +13,10 @@ import { Command } from 'commander';
 import { startScheduler, runAndSendResults } from './badges/services/schedulerService';
 import { startLeaderboardScheduler, runLeaderboardGeneration, getLeaderboardTypeFromString } from './leaderboard/services/leaderboardSchedulerService';
 import { loadAppConfig } from './utils/config';
+import { setupProvider } from './api/blockchain';
+import { setupMoralisProvider } from './api/moralis';
+import { setupSnowtraceProvider } from './api/snowtrace';
+import { setupLeaderboardProvider } from './leaderboard/services/leaderboardClassService';
 
 // Load environment variables
 dotenv.config();
@@ -77,6 +81,17 @@ function checkProjectConfigs(projectName: string): { badge: boolean, leaderboard
   };
 }
 
+function setupEnvVariables(): boolean {
+  const MORALIS_API_KEYS =process.env.MORALIS_API_KEYS || ''; 
+  const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY || '';
+  const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || '';
+  setupMoralisProvider(MORALIS_API_KEYS);
+  setupSnowtraceProvider(SNOWTRACE_API_KEY);
+  setupProvider(ALCHEMY_API_KEY);
+  setupLeaderboardProvider(ALCHEMY_API_KEY);
+  return (MORALIS_API_KEYS || SNOWTRACE_API_KEY || ALCHEMY_API_KEY)  ? true : false;
+} 
+
 /**
  * Main function to run project components
  * @param projectName Name of the project
@@ -108,7 +123,10 @@ async function runProject(
       console.error(`Please ensure either config/badges/${projectName}.json or config/leaderboards/${projectName}.json exists`);
       process.exit(1);
     }
-    
+
+    if(!setupEnvVariables())
+      throw new Error('No environment variables found');
+
     const appConfig = loadAppConfig(projectName);
 
     // Run badge component if requested and available

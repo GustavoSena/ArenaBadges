@@ -1,23 +1,8 @@
-import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
 import { NftHolder, TokenHolder } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 
-// Load environment variables
-dotenv.config();
-
-// Get API key from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
-}
-
-// Avalanche RPC URL using Alchemy API key
-const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-
-// Setup ethers provider for Avalanche
-const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+let provider: ethers.Provider;
 
 // ERC-721 ABI (minimal for ownerOf function only)
 const ERC721_ABI = [
@@ -33,7 +18,18 @@ const ERC20_ABI = [
 
 const RETRY_DELAY = 500 ;
 
+export function setupProvider(apiKey: string) {
 
+  if (!apiKey) {
+    console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
+    return;
+  }
+
+  // Avalanche RPC URL using Alchemy API key
+  const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${apiKey}`;
+
+  provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+}
 /**
  * Fetch NFT holders using sequential token ID scanning with robust error handling and retries
  * @param contractAddress The NFT contract address
@@ -49,6 +45,11 @@ export async function fetchNftHoldersFromEthers(
   verbose: boolean = false,
   nftSupply?: number 
 ): Promise<NftHolder[]> {
+  if (!provider) {
+    console.error('Provider not initialized. Please call setupProvider first.');
+    throw new Error('Provider not initialized');
+  }
+  
   try {
     if (verbose) {
       console.log(`Fetching NFT holders for ${tokenName} (${contractAddress}) using sequential token ID scanning...`);
@@ -214,7 +215,11 @@ export async function fetchTokenBalanceWithEthers(
   holderAddress: string,
   tokenDecimals: number,
   verbose: boolean = false
-): Promise<number> {
+): Promise<number> {  
+  if (!provider) {
+    console.error('Provider not initialized. Please call setupProvider first.');
+    throw new Error('Provider not initialized');
+  }
   const MAX_RETRIES = 5;
   let retryCount = 0;
 
@@ -234,9 +239,7 @@ export async function fetchTokenBalanceWithEthers(
       
       if (retryCount <= MAX_RETRIES) {
         
-        if (verbose) {
-          console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
-        }
+        console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
         
         await sleep(RETRY_DELAY);
       } else {
@@ -265,6 +268,10 @@ export async function fetchTokenBalancesWithEthers(
   tokenDecimals: number,
   verbose: boolean = false
 ): Promise<TokenHolder[]> {
+  if (!provider) {
+    console.error('Provider not initialized. Please call setupProvider first.');
+    throw new Error('Provider not initialized');
+  }
   const holders: TokenHolder[] = [];
   let processedCount = 0;
   

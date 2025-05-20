@@ -1,10 +1,18 @@
 import axios from 'axios';
-import * as dotenv from 'dotenv';
 import { TokenHolder } from '../types/interfaces';
 import { sleep, formatTokenBalance } from '../utils/helpers';
 
-// Load environment variables
-dotenv.config();
+let snowtraceApiKey: string = '';
+
+export function setupSnowtraceProvider(apiKey: string) {
+
+  if (!apiKey) {
+    console.warn('SNOWTRACE_API_KEY not found in .env file. Required for fetching NFT holders.');
+    return;
+  }
+
+  snowtraceApiKey = apiKey;
+}
 
 /**
  * Fetch token holders using Snowtrace API
@@ -27,8 +35,7 @@ export async function fetchTokenHoldersFromSnowtrace(
     console.log(`Fetching holders for ${symbol} (${tokenAddress}) from Snowtrace...`);
     
     // Check if we have an API key for Snowtrace
-    const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY || '';
-    if (!SNOWTRACE_API_KEY) {
+    if (!snowtraceApiKey) {
       console.warn('No SNOWTRACE_API_KEY found in .env file. API rate limits may be lower.');
     }
     
@@ -42,7 +49,7 @@ export async function fetchTokenHoldersFromSnowtrace(
       console.log(`Fetching page ${page} of token holders...`);
       
       // Construct the Snowtrace API URL with API key if available
-      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${SNOWTRACE_API_KEY ? `&apikey=${SNOWTRACE_API_KEY}` : ''}`;
+      const apiUrl = `https://api.snowtrace.io/api?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&page=${page}&offset=${pageSize}${snowtraceApiKey ? `&apikey=${snowtraceApiKey}` : ''}`;
       
       if (verbose) console.log(`Making request to: ${apiUrl.replace(/apikey=([^&]*)/, 'apikey=***')}`);
 

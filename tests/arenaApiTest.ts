@@ -1,9 +1,5 @@
 // Test script for Arena API
 import axios from 'axios';
-import * as dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
 
 // Constants
 const ARENA_API_URL = 'https://api.arena.trade/user_info';
