@@ -59,7 +59,7 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
     return normalizedMapping;
   } catch (error) {
     console.error(`Error loading wallet mapping from ${filename}:`, error);
-    return {};
+    throw error;
   }
 }
 
@@ -104,7 +104,6 @@ export async function getArenaAddressForHandle(handle: string): Promise<ArenaWal
     return { address: "", picture_url: ""};
   } catch (error) {
     console.error(`Error fetching Arena address for handle ${handle}:`, error);
-
-    return { address: "", picture_url: ""};
+    throw error;
   }
 }

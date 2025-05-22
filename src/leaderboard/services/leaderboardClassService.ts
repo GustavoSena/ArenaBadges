@@ -267,10 +267,10 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
 
       });
       
-      // Wait for all promises in this batch to complete before moving to the next batch
-      await Promise.all(promises);
       // Add delay between requests to avoid rate limiting
       await sleep(REQUEST_DELAY_MS);
+      // Wait for all promises in this batch to complete before moving to the next batch
+      await Promise.all(promises);
     }
     
     // Step 7: Check eligibility and calculate points
@@ -294,7 +294,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
       if (verbose) console.log(`Processing batch ${batchIndex + 1}/${totalBatches} with ${currentBatch.length} users`);
       
       // Process each user in the batch in parallel
-      const batchResults = await Promise.all(currentBatch.map(async ([handle, addressRecord]) => {
+      const batchPromises = currentBatch.map(async ([handle, addressRecord]) => {
         const addresses = Object.keys(addressRecord);
         // Skip if no address holdings
         if (addresses.length === 0) return null;
@@ -401,17 +401,20 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
           profileImageUrl: arenaPictureMapping.get(handle) || null,
           points: holderPoints,
         };
-      }));
+      });
+
+      await sleep(REQUEST_DELAY_MS);
       
+      const batchResults = await Promise.all(batchPromises);
       // Add valid results to the holder points array
       for (const result of batchResults) {
         if (result) {
           holderPointsArray.push(result);
         }
       }
-      await sleep(REQUEST_DELAY_MS);
 
-      if (verbose) console.log(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${batchResults.filter(r => r !== null).length} eligible users`);
+
+      if (verbose) console.log(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${batchPromises.filter(r => r !== null).length} eligible users`);
     }
     
     // Step 8: Filter out excluded accounts

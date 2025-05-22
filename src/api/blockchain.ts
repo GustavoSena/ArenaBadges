@@ -170,7 +170,7 @@ export async function fetchNftHoldersFromEthers(
       tokenId += batchSize;
       
       // Add delay between batches to avoid rate limiting
-      await sleep(1000);
+      await sleep(500);
     }
     
     // Convert holder map to array
@@ -198,7 +198,7 @@ export async function fetchNftHoldersFromEthers(
     }
     
     // For other errors, return empty array
-    return [];
+    throw error;
   }
 }
 
@@ -244,6 +244,7 @@ export async function fetchTokenBalanceWithEthers(
         await sleep(RETRY_DELAY);
       } else {
         console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
+        throw error;
       }
     }
   }
@@ -317,18 +318,7 @@ export async function fetchTokenBalancesWithEthers(
           await sleep(batchBackoffTime);
         } else {
           console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
-          // Add empty results for this batch to maintain address count
-          const emptyResults = batch.map(address => ({
-            address,
-            holding: {
-              tokenAddress: tokenAddress,
-              tokenSymbol: tokenSymbol,
-              tokenBalance: "0",
-              tokenDecimals: tokenDecimals,
-              balanceFormatted: 0
-            }
-          }));
-          holders.push(...emptyResults);
+          throw error;
         }
       }
     }

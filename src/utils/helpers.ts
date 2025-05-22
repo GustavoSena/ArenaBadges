@@ -59,7 +59,7 @@ export async function fetchTokenHolders(
       tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
     } catch (error) {
       console.error(`Error fetching token holders for ${tokenAddress}:`, error);
-      return [];
+      throw error;
     }
   }
   return tokenHolders;
@@ -92,7 +92,7 @@ export async function fetchTokenBalance(
       return balance;
     } catch (error) {
       console.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress}:`, error);
-      return 0;
+      throw error;
     }
   }
 }

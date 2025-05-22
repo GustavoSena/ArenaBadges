@@ -2,6 +2,7 @@ import { BaseLeaderboard } from '../../types/leaderboard';
 import { LeaderboardTokenConfig, LeaderboardNftConfig, HolderPoints } from '../../types/leaderboard';
 import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { ethers } from 'ethers';
+import { formatTokenBalance } from '../../utils/helpers';
 
 /**
  * Standard leaderboard implementation
@@ -29,7 +30,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     for (const holding of tokenHoldings) {
       const token = tokens.find((t: LeaderboardTokenConfig) => t.symbol === holding.tokenSymbol);
       if (token) {
-        holderPoints.tokenPoints[holding.tokenSymbol] = parseFloat(holding.tokenBalance)/Math.pow(10, holding.tokenDecimals) * token.weight;
+        holderPoints.tokenPoints[holding.tokenSymbol] = formatTokenBalance(holding.tokenBalance, holding.tokenDecimals) * token.weight;
         holderPoints.totalPoints += holderPoints.tokenPoints[holding.tokenSymbol];
       }
     }
@@ -57,7 +58,7 @@ export class StandardLeaderboard extends BaseLeaderboard {
     // Check token eligibility
     for (const holding of tokenHoldings) {
       const token = tokens.find((t: LeaderboardTokenConfig) => t.symbol === holding.tokenSymbol);
-      if (token && parseFloat(holding.tokenBalance)/Math.pow(10, holding.tokenDecimals) >= token.minBalance) {
+      if (token && formatTokenBalance(holding.tokenBalance, holding.tokenDecimals) >= token.minBalance) {
         return true;
       }
     }

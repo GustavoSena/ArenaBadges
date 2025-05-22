@@ -256,7 +256,7 @@ export async function fetchTokenHoldersFromMoralis(
     return holders;
   } catch (error) {
     console.error(`Error fetching ${tokenSymbol} holders:`, error);
-    return [];
+    throw error;
   }
 }
 
@@ -358,16 +358,7 @@ export async function fetchTokenBalancesWithMoralis(
             await sleep(1000);
           } else {
             console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
-            return {
-              address,
-              holding: {
-                tokenAddress: tokenAddress,
-                tokenSymbol: tokenSymbol,
-                tokenBalance: "0",
-                tokenDecimals: tokenDecimals,
-                balanceFormatted: 0
-              }
-            };
+            throw error;
           }
         }
       }
@@ -389,13 +380,9 @@ export async function fetchTokenBalancesWithMoralis(
       const batchResults = await Promise.all(batchPromises);
       holders.push(...batchResults);
     } catch (error) {
-      // If we get the "All Moralis API keys exceeded" error, propagate it up
-      if (error instanceof Error && error.message.includes('All Moralis API keys have exceeded their quota')) {
-        throw error;
-      }
       
       console.error(`Error processing batch:`, error);
-      // Continue with the next batch
+      throw error;
     }
     
     processedCount += batch.length;

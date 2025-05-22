@@ -1,11 +1,10 @@
 // Token Holder Profiles Fetcher
-import { TokenConfig, NftConfig, TokenHolding, NftHolding, AddressHoldings } from '../../types/interfaces';
+import { TokenConfig, NftConfig, TokenHolding, NftHolding } from '../../types/interfaces';
 import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
-import { formatTokenBalance, sleep, fetchTokenHolders, fetchTokenBalance } from '../../utils/helpers';
+import { sleep, fetchTokenHolders, fetchTokenBalance } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
-import { fetchTokenBalanceWithEthers } from '../../api/blockchain';
 
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
@@ -378,7 +377,6 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
             const tokenAddress = tokenConfig.address.toLowerCase();
             const requiredBalance = tokenConfig.minBalance;
             
-
             // Check if total balance meets requirement
             if (!tokenHoldingsMap[tokenAddress] || tokenHoldingsMap[tokenAddress].balanceFormatted < requiredBalance) {
               isBasicEligible = false;

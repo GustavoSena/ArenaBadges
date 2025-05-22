@@ -82,7 +82,7 @@ export async function fetchTwitterProfilePicture(twitterHandle: string): Promise
     return null;
   } catch (error) {
     console.error(`Error fetching Twitter profile picture for ${twitterHandle}:`, error);
-    return null;
+    throw error;
   }
 }
 
