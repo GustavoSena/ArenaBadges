@@ -66,3 +66,19 @@ export interface ArenaWalletResponse {
   address: string;
   picture_url: string;
 }
+
+export interface Database {
+  public: {
+    Tables: {
+      users: {
+        Row: {               // the data expected from .select()
+          id: number
+          twitter_handle: string
+          twitter_image_url: string
+          wallet: string
+          updated_at: string
+        }
+      }
+    }
+  }
+}

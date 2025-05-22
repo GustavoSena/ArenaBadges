@@ -37,6 +37,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ankr.com/ankr.js": "^0.6.0",
+    "@supabase/supabase-js": "^2.49.6",
     "@types/express": "^5.0.1",
     "alchemy-sdk": "^3.5.8",
     "axios": "^1.6.2",
