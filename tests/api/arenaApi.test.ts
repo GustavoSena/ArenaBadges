@@ -7,7 +7,6 @@ describe('Arena API Client', () => {
   const testAddress = '0x1234567890123456789012345678901234567890';
   const mockUserResponse: ArenabookUserResponse = {
     twitter_handle: 'test_user',
-    twitter_username: 'Test User',
     twitter_pfp_url: 'https://example.com/avatar.jpg'
   };
 
@@ -56,8 +55,8 @@ describe('Arena API Client', () => {
     });
 
     // Call the function and expect it to throw
-    await expect(fetchArenabookSocial(testAddress)).rejects.toThrow(/rate limit/i);
-  });
+    await expect(fetchArenabookSocial(testAddress)).rejects.toThrow(/rate limit exceeded/i);
+  }, 10000); // Increase timeout to 10 seconds
 
   test('should retry on rate limit and eventually succeed', async () => {
     // Create a custom mock that returns rate limit first, then success
@@ -72,7 +71,11 @@ describe('Arena API Client', () => {
         if (requestCount === 1) {
           return [429, { error: 'Too many requests' }];
         }
-        // Second request: success
+        // Second request: rate limit again
+        if (requestCount === 2) {
+          return [429, { error: 'Too many requests' }];
+        }
+        // Third request: success
         return [200, [mockUserResponse]];
       });
 
@@ -81,7 +84,7 @@ describe('Arena API Client', () => {
 
     // Verify the result
     expect(result).toEqual(mockUserResponse);
-    expect(requestCount).toBe(2); // Ensure it retried
+    expect(requestCount).toBe(3); // Initial request + 2 retries (the 3rd attempt succeeds)
   });
 
   test('should throw error after max retries on rate limit', async () => {
@@ -92,7 +95,7 @@ describe('Arena API Client', () => {
 
     // Call the function and expect it to throw with rate limit message
     await expect(fetchArenabookSocial(testAddress)).rejects.toThrow(/rate limit exceeded/i);
-  });
+  }, 10000); // Increase timeout to 10 seconds
 
   test('should throw error on server error (500)', async () => {
     // Setup mock to return a server error

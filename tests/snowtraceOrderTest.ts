@@ -1,9 +1,5 @@
 import axios from 'axios';
-import * as dotenv from 'dotenv';
 import { formatTokenBalance } from '../src/utils/helpers';
-
-// Load environment variables
-dotenv.config();
 
 /**
  * Test to verify if Snowtrace API returns holders sorted by balance

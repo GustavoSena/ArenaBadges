@@ -1,28 +1,76 @@
-import { startScheduler } from '../../src/services/schedulerService';
-import { fetchTokenHolderProfiles, HolderResults } from '../../src/services/holderService';
-import { sendResultsToApi } from '../../src/services/apiService';
-import * as helpers from '../../src/utils/helpers';
+import { runAndSendResults, ErrorType } from '../../src/badges/services/schedulerService';
+import { fetchTokenHolderProfiles } from '../../src/badges/profiles/fetchTokenHolderProfiles';
+import { sendResults } from '../../src/badges/profiles/sendResults';
+import { AppConfig } from '../../src/utils/config';
 
 // Mock the modules
-jest.mock('../../src/services/holderService');
-jest.mock('../../src/services/apiService');
+jest.mock('../../src/badges/profiles/fetchTokenHolderProfiles');
+jest.mock('../../src/badges/profiles/sendResults');
 
 // Create proper mock types
 const mockedFetchTokenHolderProfiles = fetchTokenHolderProfiles as jest.MockedFunction<typeof fetchTokenHolderProfiles>;
-const mockedSendResultsToApi = sendResultsToApi as jest.MockedFunction<typeof sendResultsToApi>;
+const mockedSendResults = sendResults as jest.MockedFunction<typeof sendResults>;
 
 describe('schedulerService', () => {
   // Setup test data
-  const mockApiKey = 'test-api-key';
   const mockIntervalMs = 1000; // 1 second for testing
   const mockApiResponse = {
-    tier1Response: { success: true },
-    tier2Response: { success: true }
+    success: true
   };
-  const mockHolderResults: HolderResults = {
-    nftHolders: ['user1', 'user2', 'user3'],
-    combinedHolders: ['user4', 'user5']
+  const mockHolderResults = {
+    basicHolders: ['user1', 'user2', 'user3'],
+    upgradedHolders: ['user4', 'user5'],
+    basicAddresses: ['0x1', '0x2', '0x3'],
+    upgradedAddresses: ['0x4', '0x5'],
+    nftHolders: [],
+    combinedHolders: []
   };
+  const mockProjectName = 'mu';
+  
+  // Create mock AppConfig
+  const mockAppConfig: AppConfig = {
+    projectName: mockProjectName,
+    projectConfig: {
+      scheduler: {
+        badgeIntervalHours: 24,
+        badgeRetryIntervalHours: 2
+      },
+      walletMappingFile: 'wallets.json'
+    },
+    badgeConfig: {
+      name: 'Test Badge',
+      projectName: mockProjectName,
+      badges: {
+        basic: { tokens: [] },
+        upgraded: { tokens: [] }
+      },
+      excludedAccounts: [],
+      permanentAccounts: [],
+      api: {
+        baseUrl: 'https://api.example.com',
+        endpoints: {
+          basic: '/badges/basic',
+          upgraded: '/badges/upgraded'
+        }
+      },
+      excludeBasicForUpgraded: false,
+      sumOfBalances: true
+    }
+  };
+  
+  // Mock environment variables
+  const originalEnv = process.env;
+  
+  beforeAll(() => {
+    // Setup mock environment variables
+    process.env = {
+      ...originalEnv,
+      BADGE_KEYS: JSON.stringify({
+        mu: 'test-api-key',
+        boi: 'other-test-key'
+      })
+    };
+  });
   
   beforeEach(() => {
     // Reset all mocks
@@ -30,7 +78,7 @@ describe('schedulerService', () => {
     
     // Mock the functions
     mockedFetchTokenHolderProfiles.mockResolvedValue(mockHolderResults);
-    mockedSendResultsToApi.mockResolvedValue(mockApiResponse);
+    mockedSendResults.mockResolvedValue(mockApiResponse);
     
     // Mock setInterval to not actually call the callback to avoid duplicate calls
     jest.spyOn(global, 'setInterval').mockImplementation((callback: Function) => {
@@ -42,99 +90,92 @@ describe('schedulerService', () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
-  
+
   afterEach(() => {
     // Restore mocks
     jest.restoreAllMocks();
   });
   
-  test('should start the scheduler and run immediately', async () => {
-    // Call the function
-    startScheduler({
-      intervalMs: mockIntervalMs,
-      apiKey: mockApiKey
-    });
-    
-    // Wait for promises to resolve
-    await new Promise(process.nextTick);
-    
+  afterAll(() => {
+    // Restore original environment variables
+    process.env = originalEnv;
+  });
+
+  test('should run and send results successfully', async () => {
+    // Call the function with the mock AppConfig and run options
+    await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: false, runOnce: false });
+
     // Verify fetchTokenHolderProfiles was called
     expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
-    
-    // Verify sendResultsToApi was called with the correct arguments
-    expect(mockedSendResultsToApi).toHaveBeenCalledTimes(1);
-    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey, mockHolderResults);
-    
-    // Verify setInterval was called with the correct interval
-    expect(global.setInterval).toHaveBeenCalledWith(expect.any(Function), mockIntervalMs);
+    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledWith(mockAppConfig, false);
+
+    // Verify sendResults was called with the correct arguments
+    expect(mockedSendResults).toHaveBeenCalledTimes(1);
+    expect(mockedSendResults).toHaveBeenCalledWith(
+      mockAppConfig.badgeConfig,
+      'test-api-key',
+      {
+        basicHolders: mockHolderResults.basicHolders,
+        upgradedHolders: mockHolderResults.upgradedHolders,
+        basicAddresses: mockHolderResults.basicAddresses,
+        upgradedAddresses: mockHolderResults.upgradedAddresses,
+        timestamp: expect.any(String)
+      }, 
+      { dryRun: false, runOnce: false }
+    );
   });
-  
-  test('should throw error when API key is not provided', () => {
-    // Mock loadConfig to return a valid config to avoid other errors
-    jest.spyOn(helpers, 'loadConfig')
-      .mockReturnValue({
-        scheduler: { intervalHours: 6 },
-        api: { baseUrl: 'http://test.com', endpoints: { nftOnly: 'test', combined: 'test' } },
-        tokens: [{ address: '0x123', symbol: 'TEST', decimals: 18, minBalance: 1 }],
-        nfts: [{ address: '0x456', name: 'TEST NFT', minBalance: 1 }]
-      });
-    
-    // Save original environment and clear API_KEY
-    const originalEnv = process.env;
-    process.env = { ...originalEnv };
-    delete process.env.API_KEY;
-      
-    // Call the function without API key and expect it to throw
-    expect(() => {
-      startScheduler({
-        intervalMs: mockIntervalMs,
-        apiKey: undefined
-      });
-    }).toThrow('API key is required');
-    
-    // Restore environment
-    process.env = originalEnv;
+
+  test('should run in dry-run mode successfully', async () => {
+    // Call the function with dry-run mode
+    await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: true });
+
+    // Verify fetchTokenHolderProfiles was called
+    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
+
+    // Verify sendResults was called with dryRun: true
+    expect(mockedSendResults).toHaveBeenCalledWith(
+      mockAppConfig.badgeConfig,
+      'test-api-key',
+      {
+        basicHolders: mockHolderResults.basicHolders,
+        upgradedHolders: mockHolderResults.upgradedHolders,
+        basicAddresses: mockHolderResults.basicAddresses,
+        upgradedAddresses: mockHolderResults.upgradedAddresses,
+        timestamp: expect.any(String)
+      }, 
+      { dryRun: true }
+    );
   });
-  
-  test('should use environment variables when config is not provided', async () => {
-    // Mock process.env
-    const originalEnv = process.env;
-    process.env = {
-      ...originalEnv,
-      API_KEY: mockApiKey
-    };
-    
-    // Call the function without config
-    startScheduler();
-    
-    // Wait for promises to resolve
-    await new Promise(process.nextTick);
-    
-    // Verify sendResultsToApi was called with the correct arguments from env
-    expect(mockedSendResultsToApi).toHaveBeenCalledWith(mockApiKey, mockHolderResults);
-    
-    // Restore process.env
-    process.env = originalEnv;
+
+  test('should run once when runOnce is true', async () => {
+    // Call the function with runOnce: true
+    await runAndSendResults(mockAppConfig, 'test-api-key', { runOnce: true });
+
+    // Verify fetchTokenHolderProfiles was called
+    expect(mockedFetchTokenHolderProfiles).toHaveBeenCalledTimes(1);
+
+    // Verify sendResults was called
+    expect(mockedSendResults).toHaveBeenCalledTimes(1);
+
+    // Verify setInterval was NOT called
+    expect(global.setInterval).not.toHaveBeenCalled();
   });
-  
+
   test('should handle errors in fetchTokenHolderProfiles', async () => {
     // Mock fetchTokenHolderProfiles to throw an error
     const mockError = new Error('Failed to fetch profiles');
     mockedFetchTokenHolderProfiles.mockRejectedValue(mockError);
     
     // Call the function
-    startScheduler({
-      intervalMs: mockIntervalMs,
-      apiKey: mockApiKey
-    });
-    
-    // Wait for promises to resolve
-    await new Promise(process.nextTick);
-    
+    const result = await runAndSendResults(mockAppConfig, 'test-api-key', { dryRun: false });
+
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
+
+    // Verify sendResults was not called
+    expect(mockedSendResults).not.toHaveBeenCalled();
     
-    // Verify sendResultsToApi was not called
-    expect(mockedSendResultsToApi).not.toHaveBeenCalled();
+    // Verify the error type is returned
+    expect(result).toBe(ErrorType.RETRY_FAILURE);
   });
 });

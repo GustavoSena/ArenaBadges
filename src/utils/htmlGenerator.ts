@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Leaderboard, LeaderboardEntry } from '../types/leaderboard';
+import { Leaderboard } from '../types/leaderboard';
 
 /**
  * Generate HTML for the leaderboard with pagination
@@ -16,10 +16,6 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
     Object.keys(entry.tokenPoints).forEach(token => tokenTypes.add(token));
     Object.keys(entry.nftPoints).forEach(nft => nftTypes.add(nft));
   });
-  
-  // Convert sets to arrays
-  const tokenColumns = Array.from(tokenTypes);
-  const nftColumns = Array.from(nftTypes);
   
   // Calculate pagination info
   const entriesPerPage = 100;
@@ -607,13 +603,6 @@ export function saveLeaderboardHtml(leaderboard: Leaderboard, outputPath: string
     console.error('Error saving leaderboard HTML:', error);
     throw error;
   }
-}
-
-/**
- * Format a number with commas and no decimal places
- */
-function formatNumber(num: number): string {
-  return Math.floor(num).toLocaleString();
 }
 
 /**

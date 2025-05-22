@@ -1,0 +1,21 @@
+{
+  "projects": {
+    "mu": {
+      "enableLeaderboard": true,
+      "scheduler": {
+        "badgeIntervalHours": 6,
+        "badgeRetryIntervalHours": 2,
+        "leaderboardIntervalHours": 3,
+        "leaderboardRetryIntervalHours": 2
+      },
+      "walletMappingFile": "mappings/mu_wallet_mapping.json"
+    },
+    "boi": {
+      "scheduler": {
+        "badgeIntervalHours": 3,
+        "badgeRetryIntervalHours": 1
+      },
+      "walletMappingFile": "mappings/boi_wallet_mapping.json"
+    }
+  }
+}

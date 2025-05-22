@@ -1,33 +1,49 @@
 import { fetchTokenHolderProfiles } from '../profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../profiles/sendResults';
-import { loadTokensConfig } from '../utils/helpers';
+import { AppConfig } from '../../utils/config';
+
+
+export interface RunOptions {
+  verbose?: boolean;
+  dryRun?: boolean;
+  runOnce?: boolean;
+  exportAddresses?: boolean;
+}
 
 interface SchedulerConfig {
-  intervalMs?: number;
   apiKey?: string;
   onSchedule?: (nextRunTime: Date) => void;
   onRun?: () => void;
-  verbose?: boolean;
+  runOptions: RunOptions;
 }
 
 // Define error types
-enum ErrorType {
+export enum ErrorType {
   RETRY_FAILURE = 'RETRY_FAILURE',
   OTHER = 'OTHER'
 }
 
 /**
  * Runs the data collection and sends results to the API
+ * @param apiKey API key for authentication
+ * @param verbose Whether to show verbose logging
+ * @param dryRun If true, print JSON to console instead of sending to API
+ * @param exportAddresses If true, export addresses to a CSV file
  * @returns ErrorType if there was an error, undefined if successful
  */
-async function runAndSendResults(apiKey: string | undefined, verbose: boolean = false): Promise<ErrorType | undefined> {
+export async function runAndSendResults(appConfig: AppConfig, apiKey: string, runOptions: RunOptions): Promise<ErrorType | undefined> {
+
+  
+  // Get customizable retry interval from config (default to 2 hours if not specified)
+  const retryIntervalHours = appConfig.projectConfig.scheduler.badgeRetryIntervalHours || 2;
   try {
     console.log(`Starting scheduled data collection at ${new Date().toISOString()}`);
     
     // Run the main process to fetch token holder profiles
     let results;
     try {
-      results = await fetchTokenHolderProfiles(verbose);
+      // Pass the project name to fetchTokenHolderProfiles
+      results = await fetchTokenHolderProfiles(appConfig, runOptions.verbose || false);
     } catch (fetchError) {
       // Check if this is a retry failure
       const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -43,22 +59,27 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
     }
     
     // Validate results to ensure we have enough data before sending to API
-    if (!results.nftHolders || results.nftHolders.length === 0) {
-      console.error('No NFT holders found. Will not send empty data to API.');
-      throw new Error('No NFT holders found');
+    if (!results.basicHolders || results.basicHolders.length === 0) {
+      console.error('No basic badge holders found. Will not send empty data to API.');
+      throw new Error('No basic badge holders found');
     }
     
-    if (verbose) {
-      console.log(`Fetched ${results.nftHolders.length} NFT holders and ${results.combinedHolders.length} combined holders`);
+    if (runOptions.verbose) {
+      console.log(`Fetched ${results.basicHolders.length} basic badge holders and ${results.upgradedHolders.length} upgraded badge holders`);
     }
     
     // Send the results to the API
     try {
-      await sendResults({
-        nftHolders: results.nftHolders,
-        combinedHolders: results.combinedHolders,
+      if (runOptions.dryRun) {
+        console.log('Running in dry run mode - will print JSON instead of sending to API');
+      }
+      await sendResults(appConfig.badgeConfig, apiKey, {
+        basicHolders: results.basicHolders,
+        upgradedHolders: results.upgradedHolders,
+        basicAddresses: results.basicAddresses,
+        upgradedAddresses: results.upgradedAddresses,
         timestamp: new Date().toISOString()
-      });
+      }, runOptions);
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -76,54 +97,49 @@ async function runAndSendResults(apiKey: string | undefined, verbose: boolean = 
   } catch (error) {
     console.error('Error in scheduled run:', error);
     
-    // Check if this is a retry failure or Arena API error
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('max retries exceeded') || 
-        errorMessage.includes('All retries failed') || 
-        errorMessage.includes('retry limit exceeded') ||
-        errorMessage.includes('Failed to get owner') ||
-        errorMessage.includes('after 5 retries') ||
-        errorMessage.includes('Retry failure') ||
-        errorMessage.includes('API rate limit') ||
-        errorMessage.includes('No NFT holders found') ||
-        errorMessage.includes('Arena API') ||
-        errorMessage.includes('rate limit')) {
-      console.error('Retry failure, Arena API error, or data validation error detected. Will reschedule for 2 hours later WITHOUT sending data to API.');
-      return ErrorType.RETRY_FAILURE;
-    }
+    // For any error, prevent sending data and reschedule
+    console.error(`Error detected in badge processing: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Will reschedule for ${retryIntervalHours} hours later WITHOUT sending data to API.`);
     
-    return ErrorType.OTHER;
+    // Always return RETRY_FAILURE for any error to prevent sending incorrect data
+    return ErrorType.RETRY_FAILURE;
   }
 }
 
 /**
  * Starts the scheduler to run at specified intervals
  */
-export function startScheduler(config: SchedulerConfig = {}): void {
+export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): void {
   // Load configuration
-  const appConfig = loadTokensConfig();
+  const projectName = appConfig.projectName;
+  console.log(`Starting badge scheduler for project ${projectName}`);
   
   // Get configuration
-  const intervalHours = appConfig.scheduler.intervalHours;
-  const intervalMs = config.intervalMs || (intervalHours * 60 * 60 * 1000);
-  const apiKey = config.apiKey || process.env.API_KEY;
-  const verbose = config.verbose || false;
+  const intervalHours = appConfig.projectConfig.scheduler.badgeIntervalHours;
+  const intervalMs = intervalHours * 60 * 60 * 1000;
+  const apiKey = config.apiKey;
+  const verbose = config.runOptions?.verbose || false;
+  const runOnce = config.runOptions?.runOnce || false;
   
-  // Define retry interval (2 hours)
-  const retryIntervalMs = 2 * 60 * 60 * 1000;
+  // Get customizable retry interval from config (default to 2 hours if not specified)
+  const retryIntervalHours = appConfig.projectConfig.scheduler.badgeRetryIntervalHours || 2;
+  const retryIntervalMs = retryIntervalHours * 60 * 60 * 1000;
+  
+  console.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
   
   if (!apiKey) {
     throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
   }
   
-  console.log(`Starting scheduler to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
+  console.log(`Starting scheduler for project '${projectName}' to run every ${intervalHours} hours${verbose ? ' with verbose logging' : ''}`);
   
   // Get API endpoint from config
-  const apiBaseUrl = appConfig.api?.baseUrl || 'http://api.arena.social/badges';
+  const apiBaseUrl = appConfig.badgeConfig.api.baseUrl;
   console.log(`Using API base URL: ${apiBaseUrl}`);
-  console.log(`NFT-only endpoint: ${appConfig.api?.endpoints?.nftOnly || 'mu-tier-1'}`);
-  console.log(`Combined endpoint: ${appConfig.api?.endpoints?.combined || 'mu-tier-2'}`);
-  console.log(`Include combined in NFT-only: ${appConfig.api?.includeCombinedInNft !== false ? 'Yes' : 'No'}`);
+  console.log(`Basic endpoint: ${appConfig.badgeConfig.api.endpoints.basic}`);
+  console.log(`Upgraded endpoint: ${appConfig.badgeConfig.api.endpoints.upgraded}`);
+  console.log(`Include combined in NFT-only: ${appConfig.badgeConfig.excludeBasicForUpgraded ? 'No' : 'Yes'}`);
+  console.log(`Project name: ${projectName}`);
   
   // Variable to store the next scheduled timeout
   let nextScheduledTimeout: NodeJS.Timeout | null = null;
@@ -151,8 +167,9 @@ export function startScheduler(config: SchedulerConfig = {}): void {
         config.onRun();
       }
       
-      // Run the scheduled task
-      const errorType = await runAndSendResults(apiKey, verbose);
+      // Run the scheduled task with project name
+      console.log(`Running scheduled task for project: ${projectName}`);
+      const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;
@@ -164,8 +181,12 @@ export function startScheduler(config: SchedulerConfig = {}): void {
         console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
       }
       
-      // Schedule the next run
-      scheduleNextRun(nextIntervalMs);
+      // Schedule the next run if not in runOnce mode
+      if (runOnce) {
+        console.log('Run once mode enabled - not scheduling next run');
+      } else {
+        scheduleNextRun(nextIntervalMs);
+      }
     }, delayMs);
   };
   
@@ -176,8 +197,9 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       config.onRun();
     }
     
-    // Run the scheduled task
-    const errorType = await runAndSendResults(apiKey, verbose);
+    // Run the scheduled task with project name
+    console.log(`Running scheduled task for project: ${projectName}`);
+    const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
     
     // Determine the next interval based on the result
     let nextIntervalMs = intervalMs;
@@ -189,9 +211,11 @@ export function startScheduler(config: SchedulerConfig = {}): void {
       console.log(`Scheduling next run in ${intervalHours} hours (normal interval)`);
     }
     
-    // Schedule the next run
-    scheduleNextRun(nextIntervalMs);
+    // Schedule the next run if not in runOnce mode
+    if (runOnce) {
+      console.log('Run once mode enabled - not scheduling next run');
+    } else {
+      scheduleNextRun(nextIntervalMs);
+    }
   })();
 }
-
-export { runAndSendResults };
