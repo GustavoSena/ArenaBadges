@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import axios from 'axios';
 import { BadgeConfig } from '../../types/badge';
 import { RunOptions } from '../services/schedulerService';
+import { ensureOutputDirectory } from '../../utils/helpers';
 
 /**
  * Send results to the API endpoints
@@ -94,10 +95,7 @@ export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data
         
         // Create output directory if it doesn't exist
         const outputDir = path.join(process.cwd(), 'output', 'addresses');
-        if (!fs.existsSync(outputDir)) {
-          fs.mkdirSync(outputDir, { recursive: true });
-          console.log(`Created output directory: ${outputDir}`);
-        }
+        ensureOutputDirectory(outputDir);
         
         // Generate timestamp for filenames
         const timestamp = new Date().toISOString().replace(/:/g, '-');

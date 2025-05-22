@@ -1,14 +1,8 @@
-import * as dotenv from 'dotenv';
 import { generateAndSaveLeaderboard } from './leaderboardClassService';
 import { AppConfig } from '../../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { LeaderboardType } from './leaderboardFactory';
-
-// Load environment variables
-dotenv.config();
-
-
 
 /**
  * Get a LeaderboardType from a string

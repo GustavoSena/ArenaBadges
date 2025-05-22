@@ -34,8 +34,6 @@ export interface BadgeConfig {
   sumOfBalances: boolean;
 }
 
-
-
 export interface BadgeApiConfig {
   baseUrl: string;
   endpoints: {

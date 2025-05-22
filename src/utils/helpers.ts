@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import { ethers } from 'ethers';
 import { TokenHolder } from '../types/interfaces';
-import { fetchTokenHoldersFromMoralis } from '../api/moralis';
+import { fetchTokenBalanceWithMoralis, fetchTokenHoldersFromMoralis } from '../api/moralis';
 import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
+import { fetchTokenBalanceWithEthers } from '../api/blockchain';
 
 
 /**
@@ -58,8 +59,40 @@ export async function fetchTokenHolders(
       tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
     } catch (error) {
       console.error(`Error fetching token holders for ${tokenAddress}:`, error);
-      return [];
+      throw error;
     }
   }
   return tokenHolders;
+}
+
+/**
+ * Fetch token balance for a specific address using Moralis API with key rotation
+ * Using direct API calls instead of the SDK
+ * @param tokenAddress The token contract address
+ * @param holderAddress The holder address
+ * @param tokenDecimals The token decimals
+ * @param verbose Whether to show verbose logging
+ * @returns The token balance
+ */
+export async function fetchTokenBalance(
+  tokenAddress: string,
+  holderAddress: string,
+  tokenDecimals: number,
+  verbose: boolean = false
+): Promise<number> {
+  try {
+    if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
+    const balance = await fetchTokenBalanceWithEthers(tokenAddress, holderAddress, tokenDecimals, verbose);
+    return balance;
+  } catch (error) {
+    console.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress} with ethers, try with Moralis`);
+    try {
+      if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
+      const balance = await fetchTokenBalanceWithMoralis(tokenAddress, holderAddress, tokenDecimals, verbose);
+      return balance;
+    } catch (error) {
+      console.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress}:`, error);
+      throw error;
+    }
+  }
 }

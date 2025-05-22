@@ -7,13 +7,9 @@
  * 2. Rescheduling for 2 hours later
  */
 /*
-import * as dotenv from 'dotenv';
 import { runAndSendResults } from '../src/badges/services/schedulerService';
 import { fetchTokenHolderProfiles } from '../src/badges/profiles/fetchTokenHolderProfiles';
 import { sendResults } from '../src/badges/profiles/sendResults';
-
-// Load environment variables
-dotenv.config();
 
 // Original functions to restore after test
 const originalFetchTokenHolderProfiles = fetchTokenHolderProfiles;

@@ -23,6 +23,7 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
     console.log(`Leaderboard saved to ${outputPath}`);
   } catch (error) {
     console.error('Error saving leaderboard:', error);
+    throw error;
   }
 }
 

@@ -12,13 +12,6 @@ export interface TokenHolding extends Holding{
   balanceFormatted: number;
 }
 
-export interface AddressHoldings{
-  address: string;
-  nftHoldings: { [key: string]: NftHolding };
-  tokenHoldings: { [key: string]: TokenHolding };
-  fromMapping: boolean;
-}
-
 // Token holder interfaces
 export interface TokenHolder {
   address: string;
@@ -65,4 +58,20 @@ export interface NftConfig {
 export interface ArenaWalletResponse {
   address: string;
   picture_url: string;
+}
+
+export interface Database {
+  public: {
+    Tables: {
+      users: {
+        Row: {               // the data expected from .select()
+          id: number
+          twitter_handle: string
+          twitter_image_url: string
+          wallet: string
+          updated_at: string
+        }
+      }
+    }
+  }
 }

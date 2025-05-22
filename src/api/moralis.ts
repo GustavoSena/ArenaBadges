@@ -1,38 +1,36 @@
-import * as dotenv from 'dotenv';
 import { TokenHolder } from '../types/interfaces';
 import { formatTokenBalance, sleep } from '../utils/helpers';
 import axios from 'axios';
 
-// Load environment variables
-dotenv.config();
-
-// Get Moralis API keys from .env
-// Format in .env should be: MORALIS_API_KEYS=["key1", "key2", "key3"]
-const MORALIS_API_KEYS_STRING = process.env.MORALIS_API_KEYS || '';
 let MORALIS_API_KEYS: string[] = [];
 
-try {
-  // Try to parse as JSON array
-  if (MORALIS_API_KEYS_STRING.trim().startsWith('[')) {
-    MORALIS_API_KEYS = JSON.parse(MORALIS_API_KEYS_STRING);
-  } else if (process.env.MORALIS_API_KEY) {
-    // Fallback to single key for backward compatibility
-    MORALIS_API_KEYS = [process.env.MORALIS_API_KEY];
-  }
-} catch (error) {
-  console.error('Error parsing MORALIS_API_KEYS:', error);
-  // Fallback to treating as a single key
-  if (MORALIS_API_KEYS_STRING.trim() !== '') {
-    MORALIS_API_KEYS = [MORALIS_API_KEYS_STRING];
-  } else if (process.env.MORALIS_API_KEY) {
-    MORALIS_API_KEYS = [process.env.MORALIS_API_KEY];
-  }
-}
 
-if (MORALIS_API_KEYS.length === 0) {
-  console.warn('No MORALIS_API_KEYS found in .env file. Required for fetching token holders.');
-} else {
-  console.log(`Loaded ${MORALIS_API_KEYS.length} Moralis API keys.`);
+export function setupMoralisProvider(apiKey: string) {
+
+  if (!apiKey) {
+    console.warn('MORALIS_API_KEYS not found in .env file. Required for fetching NFT holders.');
+    return;
+  }
+
+  try {
+    // Try to parse as JSON array
+    if (apiKey.trim().startsWith('[')) {
+      MORALIS_API_KEYS = JSON.parse(apiKey);
+    }
+  } catch (error) {
+    console.error('Error parsing MORALIS_API_KEYS:', error);
+    // Fallback to treating as a single key
+    if (apiKey.trim() !== '') {
+      MORALIS_API_KEYS = [apiKey];
+    }
+  }
+  
+  if (MORALIS_API_KEYS.length === 0) {
+    console.warn('No MORALIS_API_KEYS found in .env file. Required for fetching token holders.');
+  } else {
+    console.log(`Loaded ${MORALIS_API_KEYS.length} Moralis API keys.`);
+  }
+
 }
 
 // Avalanche chain ID for Moralis API
@@ -258,7 +256,7 @@ export async function fetchTokenHoldersFromMoralis(
     return holders;
   } catch (error) {
     console.error(`Error fetching ${tokenSymbol} holders:`, error);
-    return [];
+    throw error;
   }
 }
 
@@ -274,7 +272,7 @@ export async function fetchTokenBalanceWithMoralis(
 ): Promise<number> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token balance fetch.');
-    return 0;
+    throw new Error('No Moralis API keys available');
   }
   
   try {
@@ -293,12 +291,9 @@ export async function fetchTokenBalanceWithMoralis(
     
     return 0;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('All Moralis API keys have exceeded their quota')) {
-      throw error;
-    }
     
     console.error(`Error fetching token balance for address ${holderAddress}:`, error);
-    return 0;
+    throw error;
   }
 }
 
@@ -315,7 +310,7 @@ export async function fetchTokenBalancesWithMoralis(
 ): Promise<TokenHolder[]> {
   if (MORALIS_API_KEYS.length === 0) {
     console.warn('No Moralis API keys available. Skipping Moralis token balances fetch.');
-    return [];
+    throw new Error('No Moralis API keys available');
   }
   
   const holders: TokenHolder[] = [];
@@ -363,16 +358,7 @@ export async function fetchTokenBalancesWithMoralis(
             await sleep(1000);
           } else {
             console.error(`Failed after ${MAX_RETRIES} retries for address ${address}`);
-            return {
-              address,
-              holding: {
-                tokenAddress: tokenAddress,
-                tokenSymbol: tokenSymbol,
-                tokenBalance: "0",
-                tokenDecimals: tokenDecimals,
-                balanceFormatted: 0
-              }
-            };
+            throw error;
           }
         }
       }
@@ -394,13 +380,9 @@ export async function fetchTokenBalancesWithMoralis(
       const batchResults = await Promise.all(batchPromises);
       holders.push(...batchResults);
     } catch (error) {
-      // If we get the "All Moralis API keys exceeded" error, propagate it up
-      if (error instanceof Error && error.message.includes('All Moralis API keys have exceeded their quota')) {
-        throw error;
-      }
       
       console.error(`Error processing batch:`, error);
-      // Continue with the next batch
+      throw error;
     }
     
     processedCount += batch.length;

@@ -1,26 +1,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ethers } from 'ethers';
-import * as dotenv from 'dotenv';
 
-import { TokenHolding, NftHolding, AddressHoldings } from '../../types/interfaces';
+import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { HolderEntry, Leaderboard } from '../../types/leaderboard';
 import { BaseLeaderboard } from '../../types/leaderboard';
-import { MuLeaderboard } from '../implementations/muLeaderboard';
-import { StandardLeaderboard } from '../implementations/standardLeaderboard';
 import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
 
 // Import from API modules
 import {
-  fetchNftHoldersFromEthers,
-  fetchTokenBalanceWithEthers
+  fetchNftHoldersFromEthers
 } from '../../api/blockchain';
 
 // Import shared utility functions
 import {
   saveLeaderboard  
 } from '../utils/leaderboardUtils';
-import { fetchTokenHolders } from '../../utils/helpers';
+import { fetchTokenBalance, fetchTokenHolders } from '../../utils/helpers';
 import { fetchTwitterProfilePicture } from '../../api/arenabook';
 import { sleep } from '../../utils/helpers';
 import { AppConfig } from '../../utils/config';
@@ -28,22 +24,20 @@ import { getArenaAddressForHandle, loadWalletMapping } from '../../utils/walletM
 import { fetchArenabookSocial } from '../../api/arenabook';
 import { createLeaderboard } from './leaderboardFactory';
 
-// Load environment variables
-dotenv.config();
-
-// Get API key from .env
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-
-if (!ALCHEMY_API_KEY) {
-  console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching token balances.');
-}
-
-// Avalanche RPC URL using Alchemy API key
-const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
-
 // Setup ethers provider for Avalanche
-const provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+let provider: ethers.JsonRpcProvider;
+export function setupLeaderboardProvider(apiKey: string) {
 
+  if (!apiKey) {
+    console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
+    return;
+  }
+
+  // Avalanche RPC URL using Alchemy API key
+  const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${apiKey}`;
+
+  provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+}
 /**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
@@ -210,6 +204,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
         }
         else {
           arenaPictureMapping.set(social.address.toLowerCase(), social.picture_url);
+          allAddresses.delete(social.address.toLowerCase());
           if (!(userWallets.get(handle)![social.address.toLowerCase()])){
             if(verbose) console.log(`Adding Arena address for handle ${handle}: ${social.address}`);
             userWallets.get(handle)![social.address.toLowerCase()] = "arena";
@@ -224,8 +219,8 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
     if (verbose) console.log(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
     
     // Process addresses in batches to improve performance and avoid rate limiting
-    const BATCH_SIZE = 5;
-    const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
+    const BATCH_SIZE = 10;
+    const REQUEST_DELAY_MS = 500; // 500ms delay between requests
     
 
     for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
@@ -272,102 +267,154 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
 
       });
       
-      // Wait for all promises in this batch to complete before moving to the next batch
-      await Promise.all(promises);
       // Add delay between requests to avoid rate limiting
       await sleep(REQUEST_DELAY_MS);
+      // Wait for all promises in this batch to complete before moving to the next batch
+      await Promise.all(promises);
     }
     
     // Step 7: Check eligibility and calculate points
-    if (verbose) console.log('\nChecking eligibility and calculating points...');
+    console.log('\nChecking eligibility and calculating points...');
     
     const holderPointsArray: HolderEntry[] = [];
     
-    for (const [handle, addressRecord] of userWallets.entries()) {
-      const addresses = Object.keys(addressRecord);
-      // Skip if no address holdings
-      if (addresses.length === 0) continue;
+    // Convert Map entries to array for batching
+    const userWalletsArray = Array.from(userWallets.entries());
+    
+    // Process in batches of 10 users at a time
+    const totalBatches = Math.ceil(userWalletsArray.length / BATCH_SIZE);
+    
+    if (verbose) console.log(`Processing ${userWalletsArray.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
+    
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const startIdx = batchIndex * BATCH_SIZE;
+      const endIdx = Math.min(startIdx + BATCH_SIZE, userWalletsArray.length);
+      const currentBatch = userWalletsArray.slice(startIdx, endIdx);
       
-      // If sumOfBalances is false, use only the first address
-      const addressesToUse = sumOfBalances ? addresses : [addresses[0]];
+      if (verbose) console.log(`Processing batch ${batchIndex + 1}/${totalBatches} with ${currentBatch.length} users`);
       
-      const tokenHoldingsMap: {[key:string]:TokenHolding} = {};
-      const nftHoldingsMap: {[key:string]:NftHolding} = {};
-  
-      // Process each address
-      for (const address of addressesToUse) {
-        if (verbose) console.log(`Processing address ${address} for Twitter handle ${handle}`);
+      // Process each user in the batch in parallel
+      const batchPromises = currentBatch.map(async ([handle, addressRecord]) => {
+        const addresses = Object.keys(addressRecord);
+        // Skip if no address holdings
+        if (addresses.length === 0) return null;
         
-        // Process token holdings
-        for (const tokenConfig of leaderboardTokens) {
-          const symbol = tokenConfig.symbol;
+        // If sumOfBalances is false, use only the first address
+        const addressesToUse = sumOfBalances ? addresses : [addresses[0]];
+        
+        const tokenHoldingsMap: {[key:string]:TokenHolding} = {};
+        const nftHoldingsMap: {[key:string]:NftHolding} = {};
+    
+        // Process each address
+        for (const address of addressesToUse) {
+          if (verbose) console.log(`Processing address ${address} for Twitter handle ${handle}`);
           
-          if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(symbol)) {
-            if(tokenHoldingsMap[symbol]){
-              tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + walletToTokenHoldings.get(address)!.get(symbol)!.balanceFormatted!;
-            }else tokenHoldingsMap[symbol] = walletToTokenHoldings.get(address)!.get(symbol)!;
-          }else{
-            if (verbose) console.log(`Fetching token balance for ${symbol} for address ${address}...`);
-            const balance = await fetchTokenBalanceWithEthers(
-              tokenConfig.address,
-              address,
-              tokenConfig.decimals,
-              verbose
-            );
+          // Process token holdings in parallel for each address
+          const tokenPromises = leaderboardTokens.map(async (tokenConfig) => {
+            const symbol = tokenConfig.symbol;
             
-            // Only add if balance is greater than 0
-            if (balance > 0) {
-              if (verbose) console.log(`Adding token holding for ${symbol} for wallet ${address}: ${balance}`);
-              if(tokenHoldingsMap[symbol]){
-                tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + balance;
-              }else tokenHoldingsMap[symbol] = {tokenAddress: tokenConfig.address, tokenSymbol: tokenConfig.symbol, tokenBalance: balance.toString(), tokenDecimals: tokenConfig.decimals, balanceFormatted: balance};
+            if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(symbol)) {
+              return { symbol, holding: walletToTokenHoldings.get(address)!.get(symbol)! };
+            } else {
+              if (verbose) console.log(`Fetching token balance for ${symbol} for address ${address}...`);
+              const balance = await fetchTokenBalance(
+                tokenConfig.address,
+                address,
+                tokenConfig.decimals,
+                verbose
+              );
+              
+              // Only return if balance is greater than 0
+              if (balance > 0) {
+                if (verbose) console.log(`Adding token holding for ${symbol} for wallet ${address}: ${balance}`);
+                return { 
+                  symbol, 
+                  holding: {
+                    tokenAddress: tokenConfig.address, 
+                    tokenSymbol: tokenConfig.symbol, 
+                    tokenBalance: balance.toString(), 
+                    tokenDecimals: tokenConfig.decimals, 
+                    balanceFormatted: balance
+                  }
+                };
+              }
+              return null;
+            }
+          });
+          
+          // Wait for all token balance checks to complete
+          const tokenResults = await Promise.all(tokenPromises);
+          
+          // Add the results to the token holdings map
+          for (const result of tokenResults) {
+            if (result) {
+              const { symbol, holding } = result;
+              if (tokenHoldingsMap[symbol]) {
+                tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + holding.balanceFormatted!;
+              } else {
+                tokenHoldingsMap[symbol] = holding;
+              }
+            }
+          }
+          
+          // Process NFT holdings
+          if (walletToNftHoldings.has(address)) {
+            const nftHoldings = walletToNftHoldings.get(address)!;
+            for (const [name, holding] of nftHoldings.entries()) {
+              if (nftHoldingsMap[name]) {
+                nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
+              } else {
+                nftHoldingsMap[name] = holding;
+              }
             }
           }
         }
         
-        if(walletToNftHoldings.has(address)){
-          const nftHoldings = walletToNftHoldings.get(address)!;
-          for (const [name, holding] of nftHoldings.entries()) {
-            if(nftHoldingsMap[name]){
-              nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
-            }else nftHoldingsMap[name] = holding;
-          }
+        // Check eligibility using the leaderboard implementation
+        const isEligible = await leaderboard.checkEligibility(
+          Object.values(tokenHoldingsMap),
+          Object.values(nftHoldingsMap),
+          leaderboardTokens,
+          leaderboardNfts
+        );
+        
+        if (!isEligible) {
+          if (verbose) console.log(`${handle} is not eligible for the leaderboard`);
+          return null;
         }
         
+        if (verbose) console.log(`${handle} is eligible for the leaderboard`);
+        
+        // Calculate points using the leaderboard implementation
+        const holderPoints = await leaderboard.calculatePoints(
+          Object.values(tokenHoldingsMap),
+          Object.values(nftHoldingsMap),
+          leaderboardTokens,
+          leaderboardNfts,
+          verbose
+        );
+        
+        // Create and return holder points object
+        return {
+          address: addressesToUse[0], // Use the first address as the primary
+          twitterHandle: handle,
+          profileImageUrl: arenaPictureMapping.get(handle) || null,
+          points: holderPoints,
+        };
+      });
+
+      await sleep(REQUEST_DELAY_MS);
+      
+      const batchResults = await Promise.all(batchPromises);
+      // Add valid results to the holder points array
+      for (const result of batchResults) {
+        if (result) {
+          holderPointsArray.push(result);
+        }
       }
-      
-      // Check eligibility using the leaderboard implementation
-      const isEligible = await leaderboard.checkEligibility(
-        Object.values(tokenHoldingsMap),
-        Object.values(nftHoldingsMap),
-        leaderboardTokens,
-        leaderboardNfts
-      );
-      
-      if (!isEligible) {
-        if (verbose) console.log(`${handle} is not eligible for the leaderboard`);
-        continue;
-      }
-      if (verbose) console.log(`${handle} is eligible for the leaderboard`);
-      // Calculate points using the leaderboard implementation
-      const holderPoints = await leaderboard.calculatePoints(
-        Object.values(tokenHoldingsMap),
-        Object.values(nftHoldingsMap),
-        leaderboardTokens,
-        leaderboardNfts,
-        verbose
-      );
-      
-      // Create holder points object
-      const holderEntry: HolderEntry = {
-        address: addressesToUse[0], // Use the first address as the primary
-        twitterHandle: handle,
-        profileImageUrl: arenaPictureMapping.get(handle) || null, // Will be fetched later
-        points: holderPoints,
-      };
-      
-      // Add to holder points array
-      holderPointsArray.push(holderEntry);
+
+
+      if (verbose) console.log(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${batchPromises.filter(r => r !== null).length} eligible users`);
     }
     
     // Step 8: Filter out excluded accounts

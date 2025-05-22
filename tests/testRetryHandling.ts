@@ -4,11 +4,7 @@
  * This script tests the error propagation and handling in the blockchain module
  * by attempting to fetch NFT holders with an invalid contract address.
  */
-import * as dotenv from 'dotenv';
 import { fetchNftHoldersFromEthers } from '../src/api/blockchain';
-
-// Load environment variables
-dotenv.config();
 
 // Run the test
 async function runTest() {
