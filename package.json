@@ -34,8 +34,8 @@
     "test:arena-api": "ts-node tests/arenaApiTest.ts",
     "kill": "taskkill /F /IM node.exe"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Gustavo Sena",
+  "license": "MIT",
   "dependencies": {
     "@ankr.com/ankr.js": "^0.6.0",
     "@supabase/supabase-js": "^2.49.6",
