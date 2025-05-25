@@ -275,14 +275,6 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
           
           const twitterHandle = profile.twitter_handle.toLowerCase();
 
-          // If sumOfBalances is false and we already have this Twitter handle, skip
-          if (!sumOfBalances && userWallets.has(twitterHandle)) {
-            
-            if (verbose) {
-              console.log(`Twitter handle ${twitterHandle} already exists and sumOfBalances is disabled, skipping wallet ${walletAddress}...`);
-            }
-            return;
-          }
           if (!userWallets.has(twitterHandle)){
             userWallets.set(twitterHandle, {});
           }
@@ -314,13 +306,11 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
       if (permanentAccounts.includes(twitterHandle)) {
         continue;
       }
-      const addresses = Object.keys(addressRecord);
+      const addressesToUse = Object.keys(addressRecord);
       // Skip if no address holdings
-      if (addresses.length === 0) continue;
+      if (addressesToUse.length === 0) continue;
       
-      // If sumOfBalances is false, use only the first address
-      const addressesToUse = sumOfBalances ? addresses : [addresses[0]];
-      if (verbose) console.log(`Processing ${addressesToUse.length} addresses for Twitter handle ${twitterHandle}`);
+     if (verbose) console.log(`Processing ${addressesToUse.length} addresses for Twitter handle ${twitterHandle}`);
       const tokenHoldingsMap: {[key:string]:TokenHolding} = {};
       const nftHoldingsMap: {[key:string]:NftHolding} = {};
   
@@ -333,10 +323,17 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
           const tokenAddress = tokenConfig.address.toLowerCase();
           
           if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(tokenAddress)) {
+            const holding = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
             if(tokenHoldingsMap[tokenAddress]){
-              if(verbose) console.log(`Adding token holding for ${tokenAddress} for wallet ${address}: ${walletToTokenHoldings.get(address)!.get(tokenAddress)!.balanceFormatted}`);
-              tokenHoldingsMap[tokenAddress].balanceFormatted = tokenHoldingsMap[tokenAddress]!.balanceFormatted + walletToTokenHoldings.get(address)!.get(tokenAddress)!.balanceFormatted;
-            }else tokenHoldingsMap[tokenAddress] = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
+              if(sumOfBalances){
+                if(verbose) console.log(`Adding token holding for ${tokenAddress} for wallet ${address}: ${holding.balanceFormatted}`);
+                tokenHoldingsMap[tokenAddress].balanceFormatted = tokenHoldingsMap[tokenAddress]!.balanceFormatted + holding.balanceFormatted;
+              }else{
+                if(holding.balanceFormatted > tokenHoldingsMap[tokenAddress]!.balanceFormatted){
+                  tokenHoldingsMap[tokenAddress] = holding;
+                }
+              }
+            }else tokenHoldingsMap[tokenAddress] = holding;
           }else{
             if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${address}...`);
             const balance = await fetchTokenBalance(
@@ -350,7 +347,13 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
             if (balance > 0) {
               if (verbose) console.log(`Adding token holding for ${tokenAddress} for wallet ${address}: ${balance}`);
               if(tokenHoldingsMap[tokenAddress]){
-                tokenHoldingsMap[tokenAddress].balanceFormatted = tokenHoldingsMap[tokenAddress].balanceFormatted! + balance;
+                if(sumOfBalances){
+                  tokenHoldingsMap[tokenAddress].balanceFormatted = tokenHoldingsMap[tokenAddress].balanceFormatted! + balance;
+                }else{
+                  if(balance > tokenHoldingsMap[tokenAddress].balanceFormatted!){
+                    tokenHoldingsMap[tokenAddress] = {tokenAddress: tokenConfig.address, tokenSymbol: tokenConfig.symbol, tokenBalance: balance.toString(), tokenDecimals: tokenConfig.decimals, balanceFormatted: balance};
+                  }
+                }              
               }else tokenHoldingsMap[tokenAddress] = {tokenAddress: tokenConfig.address, tokenSymbol: tokenConfig.symbol, tokenBalance: balance.toString(), tokenDecimals: tokenConfig.decimals, balanceFormatted: balance};
               if(verbose) console.log(`Added token holding for ${tokenAddress} for wallet ${address}: ${tokenHoldingsMap[tokenAddress]?.balanceFormatted}`);
             }
@@ -361,7 +364,13 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig, verbose: bo
           const nftHoldings = walletToNftHoldings.get(address)!;
           for (const [nftAddress, holding] of nftHoldings.entries()) {
             if(nftHoldingsMap[nftAddress]){
-              nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
+              if(sumOfBalances){
+                nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
+              }else{
+                if(holding.tokenBalance > nftHoldingsMap[nftAddress].tokenBalance){
+                  nftHoldingsMap[nftAddress] = holding;
+                }
+              }
             }else nftHoldingsMap[nftAddress] = holding;
           }
         }

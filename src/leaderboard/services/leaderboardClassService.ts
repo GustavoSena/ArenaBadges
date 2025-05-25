@@ -252,10 +252,7 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
 
           if (!userWallets.has(lowerHandle) ) {
             userWallets.set(lowerHandle, {});
-          } else if (!sumOfBalances && userWallets.get(lowerHandle)!){
-            if (verbose) console.log(`sumOfBalances is disabled and we already have this Twitter handle ${lowerHandle}, skipping...`);
-            return;
-          } 
+          }
 
           // Add to user holdings
           userWallets.get(lowerHandle)![address] = "arena";
@@ -350,7 +347,13 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
             if (result) {
               const { symbol, holding } = result;
               if (tokenHoldingsMap[symbol]) {
-                tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + holding.balanceFormatted!;
+                if(sumOfBalances){
+                  tokenHoldingsMap[symbol].balanceFormatted = tokenHoldingsMap[symbol].balanceFormatted! + holding.balanceFormatted!;
+                }else{
+                  if(holding.balanceFormatted! > tokenHoldingsMap[symbol].balanceFormatted!){
+                    tokenHoldingsMap[symbol] = holding;
+                  }
+                }
               } else {
                 tokenHoldingsMap[symbol] = holding;
               }
@@ -362,7 +365,13 @@ export async function calculateHolderPoints(appConfig: AppConfig, leaderboard: B
             const nftHoldings = walletToNftHoldings.get(address)!;
             for (const [name, holding] of nftHoldings.entries()) {
               if (nftHoldingsMap[name]) {
-                nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
+                if(sumOfBalances){
+                  nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
+                }else{
+                  if(holding.tokenBalance! > nftHoldingsMap[name].tokenBalance!){
+                    nftHoldingsMap[name] = holding;
+                  }
+                }
               } else {
                 nftHoldingsMap[name] = holding;
               }

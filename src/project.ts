@@ -17,6 +17,7 @@ import { setupProvider } from './api/blockchain';
 import { setupMoralisProvider } from './api/moralis';
 import { setupSnowtraceProvider } from './api/snowtrace';
 import { setupLeaderboardProvider } from './leaderboard/services/leaderboardClassService';
+import { setupAlchemy } from './api/alchemy';
 
 // Load environment variables
 dotenv.config();
@@ -82,13 +83,14 @@ function checkProjectConfigs(projectName: string): { badge: boolean, leaderboard
 }
 
 function setupEnvVariables(): boolean {
-  const MORALIS_API_KEYS =process.env.MORALIS_API_KEYS || ''; 
+  const MORALIS_API_KEYS = process.env.MORALIS_API_KEYS || ''; 
   const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY || '';
   const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || '';
   setupMoralisProvider(MORALIS_API_KEYS);
   setupSnowtraceProvider(SNOWTRACE_API_KEY);
   setupProvider(ALCHEMY_API_KEY);
   setupLeaderboardProvider(ALCHEMY_API_KEY);
+  setupAlchemy(ALCHEMY_API_KEY);  
   return (MORALIS_API_KEYS || SNOWTRACE_API_KEY || ALCHEMY_API_KEY)  ? true : false;
 } 
 
