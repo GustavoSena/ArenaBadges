@@ -3,6 +3,7 @@ import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { ethers } from 'ethers';
 import { LeaderboardTokenConfig, LeaderboardNftConfig, HolderPoints } from '../../types/leaderboard';
 import logger from '../../utils/logger';
+import { formatTokenBalance } from '../../utils/helpers';
 /**
  * MU leaderboard implementation with MU-specific point calculation logic
  */
@@ -127,7 +128,7 @@ export class MuLeaderboard extends BaseLeaderboard {
       if (this.mugMuPrice === 0) {
         const price = await this.priceProviderContract.getMugMuPrice();
         // Remove 18 decimal places as specified
-        this.mugMuPrice = +ethers.formatUnits(price, 18);
+        this.mugMuPrice = formatTokenBalance(price, 18);
         logger.log(`Retrieved MUG/MU price from contract: ${this.mugMuPrice}`);
       }
       return this.mugMuPrice;
