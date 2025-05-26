@@ -17,7 +17,6 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
     return {};
   }
   
-
   try {
     // Check for project-specific mapping first
     let filePath: string;
@@ -85,11 +84,10 @@ export function getHandleToWalletMapping(walletMapping: Record<string, string>):
  * @returns The wallet address or null if not found
  */
 export async function getArenaAddressForHandle(handle: string): Promise<ArenaWalletResponse> {
-
   
   try {
     const apiUrl = `https://api.starsarena.com/user/handle?handle=${handle}`;
-    logger.log(`Fetching Arena address for handle: ${handle}`);
+    logger.verboseLog(`Fetching Arena address for handle: ${handle}`);
     
     const response = await axios.get(apiUrl);
     
@@ -99,7 +97,6 @@ export async function getArenaAddressForHandle(handle: string): Promise<ArenaWal
 
       return { address, picture_url};
     }
-    
 
     return { address: "", picture_url: ""};
   } catch (error) {

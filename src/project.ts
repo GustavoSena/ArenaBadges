@@ -149,7 +149,7 @@ async function runProject(
       
       // Get the project-specific API key
       const apiKey = badgeKeys[projectName];
-      if (!apiKey) {
+      if (!apiKey && !dryRun) {
         logger.error(`Error: No API key found for project '${projectName}' in BADGE_KEYS environment variable`);
         process.exit(1);
       }

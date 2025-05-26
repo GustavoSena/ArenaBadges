@@ -5,25 +5,21 @@ import { ethers } from 'ethers';
 import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { HolderEntry, Leaderboard } from '../../types/leaderboard';
 import { BaseLeaderboard } from '../../types/leaderboard';
-import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
+import { createLeaderboard } from './leaderboardFactory';
+import { BATCH_SIZE, REQUEST_DELAY_MS, AVALANCHE_RPC_URL } from '../../types/constants';
 
 // Import from API modules
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
+import { fetchTwitterProfilePicture, fetchArenabookSocial } from '../../api/arenabook';
 
 // Import shared utility functions
-import {
-  saveLeaderboard,
-  processWalletHoldings
-} from '../utils/leaderboardUtils';
-import { fetchTokenHolders } from '../../utils/helpers';
-import { fetchTwitterProfilePicture } from '../../api/arenabook';
-import { sleep } from '../../utils/helpers';
-import { ProjectConfig } from '../../utils/config';
-import { AppConfig } from '../../utils/config';
+import {saveLeaderboard, processWalletHoldings} from '../utils/leaderboardUtils';
+import { fetchTokenHolders, sleep } from '../../utils/helpers';
+import { ProjectConfig, AppConfig } from '../../utils/config';
 import { getArenaAddressForHandle, loadWalletMapping } from '../../utils/walletMapping';
-import { fetchArenabookSocial } from '../../api/arenabook';
-import { createLeaderboard } from './leaderboardFactory';
+import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
 import logger from '../../utils/logger';
+
 // Setup ethers provider for Avalanche
 let provider: ethers.JsonRpcProvider;
 export function setupLeaderboardProvider(apiKey: string) {
@@ -34,10 +30,9 @@ export function setupLeaderboardProvider(apiKey: string) {
   }
 
   // Avalanche RPC URL using Alchemy API key
-  const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${apiKey}`;
-
-  provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+  provider = new ethers.JsonRpcProvider(`${AVALANCHE_RPC_URL}${apiKey}`);
 }
+
 /**
  * Calculate points for each holder based on their token and NFT holdings
  * using the specified leaderboard implementation
@@ -204,15 +199,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       }
     }
 
-
     // Process addresses that haven't been processed yet
     const addressesToProcess = Array.from(allAddresses);
     logger.verboseLog(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
     
-    // Process addresses in batches to improve performance and avoid rate limiting
-    const BATCH_SIZE = 10;
-    const REQUEST_DELAY_MS = 500; // 500ms delay between requests
-
     for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
       const batch = addressesToProcess.slice(i, i + BATCH_SIZE);
       
@@ -235,9 +225,8 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
             arenaPictureMapping.set(lowerHandle, social.twitter_pfp_url);
 
           // Initialize user holdings array if it doesn't exist
-          if (!userWallets.has(lowerHandle) ) {
-            userWallets.set(lowerHandle, {});
-          }
+          if (!userWallets.has(lowerHandle) )
+            userWallets.set(lowerHandle, {});  
 
           // Add to user holdings
           userWallets.get(lowerHandle)![address] = "arena";
@@ -248,10 +237,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
 
       });
       
-      // Add delay between requests to avoid rate limiting
-      await sleep(REQUEST_DELAY_MS);
       // Wait for all promises in this batch to complete before moving to the next batch
       await Promise.all(promises);
+      // Add delay between requests to avoid rate limiting
+      await sleep(REQUEST_DELAY_MS);
     }
     
     // Step 7: Check eligibility and calculate points
@@ -291,13 +280,9 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       
       const batchResults = await Promise.all(batchPromises);
       // Add valid results to the holder points array
-      for (const result of batchResults) {
-        if (result) {
-          holderPointsArray.push(result);
-        }
-      }
+      holderPointsArray.push(...batchResults.filter(r => r !== null));
 
-      logger.verboseLog(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${batchPromises.filter(r => r !== null).length} eligible users`);
+      logger.verboseLog(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${holderPointsArray.length} eligible users`);
     }
     
     for (const entry of holderPointsArray) {
@@ -326,46 +311,49 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
 async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard): Promise<Leaderboard> {
   logger.verboseLog('\nFetching Twitter profile pictures for leaderboard entries...');
 
-  const batchSize = 5;
+  // First, filter out entries that need profile pictures
+  const entriesToUpdate = leaderboard.entries
+    .filter(entry => entry.twitterHandle && !entry.profileImageUrl)
+    .map((entry, index) => ({ entry, originalIndex: index }));
   
-  // Process entries in batches to avoid rate limiting
-  for (let i = 0; i < leaderboard.entries.length; i += batchSize) {
-    const batch = leaderboard.entries.slice(i, i + batchSize);
-    const batchPromises = [];
-    let updatedThisBatch = 0;
-    for (const entry of batch) {
-      // Only process entries that have a Twitter handle but no profile picture
-      if (entry.twitterHandle && !entry.profileImageUrl) {
-        batchPromises.push((async () => {
-          try {
-            const profilePicture = await fetchTwitterProfilePicture(entry.twitterHandle);
-            
-            if (profilePicture) {
-              entry.profileImageUrl = profilePicture;
-              updatedThisBatch++;
-              logger.verboseLog(`Found profile picture for ${entry.twitterHandle}`);
-            } else {
-              logger.verboseLog(`No profile picture found for ${entry.twitterHandle}`);
-            }
-          } catch (error) {
-            logger.error(`Error fetching profile picture for ${entry.twitterHandle}:`, error);
+  logger.verboseLog(`Found ${entriesToUpdate.length} entries that need profile pictures`);
+  
+  if (entriesToUpdate.length === 0) {
+    logger.verboseLog('No entries need profile pictures, skipping fetch');
+    return leaderboard;
+  }
+  
+  // Process filtered entries in batches to avoid rate limiting
+  for (let i = 0; i < entriesToUpdate.length; i += BATCH_SIZE) {
+    const batch = entriesToUpdate.slice(i, i + BATCH_SIZE);
+    const batchPromises = [];    
+    for (const { entry } of batch) {
+      batchPromises.push((async () => {
+        try {
+          const profilePicture = await fetchTwitterProfilePicture(entry.twitterHandle);
+          
+          if (profilePicture) {
+            entry.profileImageUrl = profilePicture;
+            logger.verboseLog(`Found profile picture for ${entry.twitterHandle}`);
+          } else {
+            logger.verboseLog(`No profile picture found for ${entry.twitterHandle}`);
           }
-        })());
-      }
+        } catch (error) {
+          logger.error(`Error fetching profile picture for ${entry.twitterHandle}:`, error);
+        }
+      })());
     }
     
     // Wait for all promises in this batch to complete
     await Promise.all(batchPromises);
     
-    logger.verboseLog(`Updated profile pictures for ${updatedThisBatch} entries in batch ${i / batchSize + 1}`);
+    logger.verboseLog(`Updated profile pictures for ${batch.length} entries in batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(entriesToUpdate.length / BATCH_SIZE)}`);
 
     // Add a small delay between batches to avoid rate limiting
-    if (updatedThisBatch > 0) {
-      await sleep(500);
-    }
+    await sleep(REQUEST_DELAY_MS);
   }
   
-  
+  logger.verboseLog(`Completed fetching profile pictures for leaderboard entries`);
   return leaderboard;
 }
 
@@ -377,9 +365,8 @@ export async function generateAndSaveLeaderboard(appConfig: AppConfig): Promise<
     logger.verboseLog(`Starting leaderboard generation for ${appConfig.projectName}...`);
     
     const leaderboardConfig = appConfig.leaderboardConfig;
-    if (!leaderboardConfig) {
+    if (!leaderboardConfig)
       throw new Error('Leaderboard configuration not found');
-    }
     
     // Create StandardLeaderboard instance
     const leaderboardType = createLeaderboard(provider, leaderboardConfig, appConfig.projectName);
@@ -412,10 +399,7 @@ export async function generateAndSaveLeaderboard(appConfig: AppConfig): Promise<
     logger.verboseLog(`Saved leaderboard JSON to ${jsonOutputPath}`);
     
     // Save leaderboard to HTML file
-    let htmlOutputPath = jsonOutputPath.replace('.json', '.html');
-    if (leaderboardConfig.output && leaderboardConfig.output.fileName) {
-      htmlOutputPath = path.join(outputDir, leaderboardConfig.output.fileName);
-    }
+    let htmlOutputPath = (leaderboardConfig.output && leaderboardConfig.output.fileName) ? path.join(outputDir, leaderboardConfig.output.fileName) : jsonOutputPath.replace('.json', '.html');
     saveLeaderboardHtml(leaderboard, htmlOutputPath, leaderboardConfig.output);
     
     logger.verboseLog(`Saved leaderboard HTML to ${htmlOutputPath}`);
@@ -437,12 +421,12 @@ export async function generateAndSaveLeaderboard(appConfig: AppConfig): Promise<
     }
     
     // Print total number of entries
-    logger.log(`Standard leaderboard generated and saved to ${outputDir}`);
+    logger.log(`${leaderboardType.constructor.name} leaderboard generated and saved to ${outputDir}`);
     logger.log(`Total entries: ${leaderboard.entries.length}`);
     
     return leaderboard;
   } catch (error) {
-    logger.error('Error generating standard leaderboard:', error);
+    logger.error(`Error generating leaderboard:`, error);
     throw error;
   }
 }

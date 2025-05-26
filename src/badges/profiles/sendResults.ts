@@ -17,7 +17,7 @@ import logger from '../../utils/logger';
  * @param options.dryRun If true, print JSON to console instead of sending to API
  * @returns Promise resolving to the API response
  */
-export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions, apiKey?: string): Promise<any> {
+export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders: string[], upgradedHolders?: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions, apiKey?: string): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     logger.log('Sending results to API...');
@@ -56,7 +56,7 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
       const permanentAccountsSet = new Set(permanentAccounts.map((handle: string) => handle.toLowerCase()));
       
       // Exclude basic badge holders who also have the upgraded badge, but preserve permanent accounts
-      const upgradedSet = new Set(data.upgradedHolders);
+      const upgradedSet = data.upgradedHolders ? new Set(data.upgradedHolders) : new Set<string>();
       basicHandles = data.basicHolders.filter((handle: string) => 
         !upgradedSet.has(handle) || permanentAccountsSet.has(handle.toLowerCase())
       );
@@ -72,10 +72,11 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
       timestamp: data.timestamp || new Date().toISOString()
     };
     
-    const upgradedData = {
+    // Only create upgraded data if upgradedHolders exists
+    const upgradedData = data.upgradedHolders ? {
       handles: data.upgradedHolders,
       timestamp: data.timestamp || new Date().toISOString()
-    };
+    } : null;
     
     // Construct endpoints with key as query parameter
     const basicEndpoint = `${API_BASE_URL}/${BASIC_ENDPOINT}?key=${apiKey}`;
@@ -88,8 +89,13 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
       logger.log('\nBASIC BADGE DATA (would be sent to ' + `${API_BASE_URL}/${BASIC_ENDPOINT}` + '):')
       logger.log(JSON.stringify(basicData, null, 2));
       
-      logger.log('\nUPGRADED DATA (would be sent to ' + `${API_BASE_URL}/${UPGRADED_ENDPOINT}` + '):');
-      logger.log(JSON.stringify(upgradedData, null, 2));
+      // Only log upgraded data if it exists
+      if (upgradedData) {
+        logger.log('\nUPGRADED DATA (would be sent to ' + `${API_BASE_URL}/${UPGRADED_ENDPOINT}` + '):');
+        logger.log(JSON.stringify(upgradedData, null, 2));
+      } else {
+        logger.log('\nNo upgraded badge data available');
+      }
       
       // Export addresses to files if the exportAddresses flag is set
       if (options.exportAddresses && data.basicAddresses) {
@@ -104,7 +110,7 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
       logger.log('\nDRY RUN COMPLETED - No data was sent to the API');
       return {
         basic: { status: 'dry-run', handles: basicData.handles.length },
-        upgraded: { status: 'dry-run', handles: upgradedData.handles.length }
+        upgraded: upgradedData ? { status: 'dry-run', handles: upgradedData.handles.length } : { status: 'dry-run', handles: 0 }
       };
     } else {
       // Send data to both endpoints
@@ -116,18 +122,24 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
         }
       });
       
-      logger.log(`Sending upgraded badge holders to ${API_BASE_URL}/${UPGRADED_ENDPOINT}`);
-      logger.log(`Upgraded badge holders: ${upgradedData.handles.length}`);
-      const upgradedResponse = await axios.post(upgradedEndpoint, upgradedData, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // Only send upgraded data if it exists
+      let upgradedResponse = null;
+      if (upgradedData) {
+        logger.log(`Sending upgraded badge holders to ${API_BASE_URL}/${UPGRADED_ENDPOINT}`);
+        logger.log(`Upgraded badge holders: ${upgradedData.handles.length}`);
+        upgradedResponse = await axios.post(upgradedEndpoint, upgradedData, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+      } else {
+        logger.log('No upgraded badge data to send');
+      }
       
       logger.log('Results sent successfully to both endpoints');
       return {
         basic: basicResponse.data,
-        upgraded: upgradedResponse.data
+        upgraded: upgradedResponse ? upgradedResponse.data : null
       };
     }
   } catch (error: any) {

@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { NftHolder, TokenHolder } from '../types/interfaces';
 import { formatTokenBalance, sleep } from '../utils/helpers';
 import logger from '../utils/logger';
+import { AVALANCHE_RPC_URL, REQUEST_DELAY_MS } from '../types/constants';
 
 let provider: ethers.Provider;
 
@@ -17,8 +18,6 @@ const ERC20_ABI = [
   "function symbol() view returns (string)"
 ];
 
-const RETRY_DELAY = 500 ;
-
 export function setupProvider(apiKey: string) {
 
   if (!apiKey) {
@@ -27,9 +26,7 @@ export function setupProvider(apiKey: string) {
   }
 
   // Avalanche RPC URL using Alchemy API key
-  const AVALANCHE_RPC_URL = `https://avax-mainnet.g.alchemy.com/v2/${apiKey}`;
-
-  provider = new ethers.JsonRpcProvider(AVALANCHE_RPC_URL);
+  provider = new ethers.JsonRpcProvider(`${AVALANCHE_RPC_URL}${apiKey}`);
 }
 /**
  * Fetch NFT holders using sequential token ID scanning with robust error handling and retries
@@ -120,8 +117,8 @@ export async function fetchNftHoldersFromEthers(
                 // Always retry rate limiting with a longer backoff
                 retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    logger.verboseLog(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
-                    await sleep(RETRY_DELAY * retryCount);
+                    logger.verboseLog(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${REQUEST_DELAY_MS}ms...`);
+                    await sleep(REQUEST_DELAY_MS * retryCount);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`;
                     logger.error(errorMsg);
@@ -130,8 +127,8 @@ export async function fetchNftHoldersFromEthers(
                 } else {
                   retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    logger.verboseLog(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
-                    await sleep(RETRY_DELAY);
+                    logger.verboseLog(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${REQUEST_DELAY_MS}ms...`);
+                    await sleep(REQUEST_DELAY_MS);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries: ${error instanceof Error ? error.message : String(error)}`;
                     logger.error(errorMsg);
@@ -165,7 +162,7 @@ export async function fetchNftHoldersFromEthers(
       tokenId += batchSize;
       
       // Add delay between batches to avoid rate limiting
-      await sleep(RETRY_DELAY);
+      await sleep(REQUEST_DELAY_MS);
     }
     
     // Convert holder map to array
@@ -231,9 +228,9 @@ export async function fetchTokenBalanceWithEthers(
       
       if (retryCount <= MAX_RETRIES) {
         
-        logger.verboseLog(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+        logger.verboseLog(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${REQUEST_DELAY_MS}ms...`);
         
-        await sleep(RETRY_DELAY);
+        await sleep(REQUEST_DELAY_MS);
       } else {
         logger.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
         throw error;
@@ -301,8 +298,8 @@ export async function fetchTokenBalancesWithEthers(
         batchRetries++;
         if (batchRetries <= MAX_BATCH_RETRIES) {
           logger.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
-          logger.verboseLog(`Retrying batch after ${RETRY_DELAY}ms...`);
-          await sleep(RETRY_DELAY);
+          logger.verboseLog(`Retrying batch after ${REQUEST_DELAY_MS}ms...`);
+          await sleep(REQUEST_DELAY_MS);
         } else {
           logger.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
           throw error;
@@ -313,8 +310,8 @@ export async function fetchTokenBalancesWithEthers(
     // Add delay between batches to avoid rate limiting
     if (i + batchSize < holderAddresses.length) {
       logger.verboseLog(`Processed ${batchSize * i}/${holderAddresses.length} addresses...`);
-      logger.verboseLog(`Waiting ${RETRY_DELAY}ms before next batch...`);
-      await sleep(RETRY_DELAY);
+      logger.verboseLog(`Waiting ${REQUEST_DELAY_MS}ms before next batch...`);
+      await sleep(REQUEST_DELAY_MS);
     }
   }
   

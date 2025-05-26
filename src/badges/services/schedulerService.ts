@@ -1,4 +1,4 @@
-import { fetchTokenHolderProfiles } from '../profiles/fetchTokenHolderProfiles';
+import { fetchBadgeHolders } from '../profiles/fetchBadgeHolder';
 import { sendResults } from '../profiles/sendResults';
 import { AppConfig } from '../../utils/config';
 import logger from '../../utils/logger';
@@ -42,7 +42,7 @@ export async function runAndSendResults(appConfig: AppConfig, runOptions: RunOpt
     let results;
     try {
       // Pass the project name to fetchTokenHolderProfiles
-      results = await fetchTokenHolderProfiles(appConfig);
+      results = await fetchBadgeHolders(appConfig);
     } catch (fetchError) {
       // Check if this is a retry failure
       const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -63,7 +63,7 @@ export async function runAndSendResults(appConfig: AppConfig, runOptions: RunOpt
       throw new Error('No basic badge holders found');
     }
     
-    logger.verboseLog(`Fetched ${results.basicHolders.length} basic badge holders and ${results.upgradedHolders.length} upgraded badge holders`);
+    logger.verboseLog(`Fetched ${results.basicHolders.length} basic badge holders${results.upgradedHolders ? ` and ${results.upgradedHolders.length} upgraded badge holders` : ''}`);
     
     // Send the results to the API
     try {
@@ -72,20 +72,15 @@ export async function runAndSendResults(appConfig: AppConfig, runOptions: RunOpt
       }
       await sendResults(appConfig.badgeConfig, {
         basicHolders: results.basicHolders,
-        upgradedHolders: results.upgradedHolders,
         basicAddresses: results.basicAddresses,
-        upgradedAddresses: results.upgradedAddresses,
-        timestamp: new Date().toISOString()
+        timestamp: results.timestamp || new Date().toISOString(),
+        upgradedHolders: results.upgradedHolders,
+        upgradedAddresses: results.upgradedAddresses
       }, runOptions, apiKey);
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
-      if (errorMessage.includes('429') || 
-          errorMessage.includes('rate limit') ||
-          errorMessage.includes('too many requests')) {
-        logger.error('API rate limit detected in sending results. Will reschedule for 2 hours later WITHOUT sending data to API.');
-        throw new Error(`API rate limit in sendResults: ${errorMessage}`);
-      }
+      logger.error(`Error detected in badge processing: ${errorMessage}`);
       throw sendError; // Re-throw other errors
     }
     
@@ -124,7 +119,7 @@ export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): v
   logger.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
   
   if (!apiKey && !config.runOptions?.dryRun) 
-    throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
+    throw new Error('API key is required. Set it in the BADGE_KEYS environment variable.');
   
   logger.log(`Starting scheduler for project '${projectName}' to run every ${intervalHours} hours`);
   

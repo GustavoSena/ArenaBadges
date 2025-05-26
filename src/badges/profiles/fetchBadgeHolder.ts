@@ -7,27 +7,34 @@ import { sleep, fetchTokenHolders } from '../../utils/helpers';
 import { updateTokenHoldingsMap, processTokenBalances } from '../../utils/tokenUtils';
 import { AppConfig } from '../../utils/config';
 import logger from '../../utils/logger';
+import { BATCH_SIZE, REQUEST_DELAY_MS } from '../../types/constants';
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
   basicHolders: string[];
-  upgradedHolders: string[];
+  upgradedHolders?: string[];
   basicAddresses: string[];
-  upgradedAddresses: string[];
+  upgradedAddresses?: string[];
+  timestamp: string;
 }
 
-// Constants
-const REQUEST_DELAY_MS = 500; // 500ms delay between requests
-
 /**
- * Main function to fetch token holder profiles
+ * Main function to fetch badge holder profiles
  */
-export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<HolderResults> {
-  logger.log(`Fetching token holder profiles for project: ${appConfig.projectName}`);
+export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderResults> {
+  logger.log(`Fetching badge holder profiles for project: ${appConfig.projectName}`);
   
   try {
     // Get badge configurations with the project-specific config
     const basicRequirements = appConfig.badgeConfig.badges.basic;
     const upgradedRequirements = appConfig.badgeConfig.badges.upgraded || null;
+
+    basicRequirements?.tokens?.map(token => {
+      token.address = token.address.toLowerCase();
+    });
+    
+    upgradedRequirements?.tokens?.map(token => {
+      token.address = token.address.toLowerCase();
+    });
     
     // Check if sum of balances feature is enabled
     const sumOfBalances = appConfig.badgeConfig.sumOfBalances || false;
@@ -41,13 +48,9 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     const excludeBasicForUpgraded = appConfig.badgeConfig.excludeBasicForUpgraded || false;
     logger.log(`Exclude basic badges for upgraded badge holders: ${excludeBasicForUpgraded ? 'yes' : 'no'}`);
     
-
-    
     // Step 1: Collect all unique tokens and NFTs from both badge tiers
     const allTokens = new Array<TokenConfig>();
     const allNfts = new Array<NftConfig>();
-    
-    logger.log(`Found ${allTokens.length} unique tokens and ${allNfts.length} unique NFTs across all badge tiers`);
     
     // Step 2: Create a map of token address to minimum balance required
     // If a token appears in both basic and upgraded, use the lower balance
@@ -56,67 +59,41 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     
     // Process tokens from basic requirements
     if (basicRequirements.tokens) {
+      allTokens.push(...basicRequirements.tokens);
       for (const token of basicRequirements.tokens) {
-        if (!allTokens.find(t => t.address.toLowerCase() === token.address.toLowerCase())) {
-          allTokens.push(token)
-        }
-        const lowerAddress = token.address.toLowerCase();
-        let minBalance = token.minBalance;
-        
-        tokenMinBalances.set(lowerAddress, { minBalance, token });
+        tokenMinBalances.set(token.address, { minBalance: token.minBalance, token });
       }
     }
 
     if (basicRequirements.nfts) {
+      allNfts.push(...basicRequirements.nfts);
       for (const nft of basicRequirements.nfts) {
-        if (!allNfts.find(t => t.address.toLowerCase() === nft.address.toLowerCase())) {
-          allNfts.push(nft)
-        }
-        const lowerAddress = nft.address.toLowerCase();
-        let minBalance = nft.minBalance;
-        
-        nftMinBalances.set(lowerAddress, { minBalance, nft });
+        nftMinBalances.set(nft.address, { minBalance: nft.minBalance, nft });
       }
     }
     // Process tokens from upgraded requirements (if they exist)
     if (upgradedRequirements?.tokens) {
       for (const token of upgradedRequirements.tokens) {
-        if (!allTokens.find(t => t.address.toLowerCase() === token.address.toLowerCase())) {
+        if (!allTokens.find(t => t.address === token.address)) {
           allTokens.push(token)
         }
-        const lowerAddress = token.address.toLowerCase();
-        let minBalance = token.minBalance;
         
         // If token already exists in the map, use the lower of the two balances
-        if (tokenMinBalances.has(lowerAddress)) {
-          const existingEntry = tokenMinBalances.get(lowerAddress)!;
-          if (minBalance < existingEntry.minBalance) {
-            tokenMinBalances.set(lowerAddress, { minBalance, token });
-          }
-        } else {
-          tokenMinBalances.set(lowerAddress, { minBalance, token });
-        }
+        if (!tokenMinBalances.has(token.address) || token.minBalance < tokenMinBalances.get(token.address)!.minBalance) 
+          tokenMinBalances.set(token.address, { minBalance: token.minBalance, token });
       }
     }
     if (upgradedRequirements?.nfts) {
       for (const nft of upgradedRequirements.nfts) {
-        if (!allNfts.find(t => t.address.toLowerCase() === nft.address.toLowerCase())) {
+        if (!allNfts.find(t => t.address === nft.address))
           allNfts.push(nft)
-        }
-        const lowerAddress = nft.address.toLowerCase();
-        let minBalance = nft.minBalance;
         
         // If token already exists in the map, use the lower of the two balances
-        if (nftMinBalances.has(lowerAddress)) {
-          const existingEntry = nftMinBalances.get(lowerAddress)!;
-          if (minBalance < existingEntry.minBalance) {
-            nftMinBalances.set(lowerAddress, { minBalance, nft });
-          }
-        } else {
-          nftMinBalances.set(lowerAddress, { minBalance, nft });
-        }
+        if (!nftMinBalances.has(nft.address) || nft.minBalance < nftMinBalances.get(nft.address)!.minBalance) 
+          nftMinBalances.set(nft.address, { minBalance: nft.minBalance, nft });
       }
     }
+    logger.log(`Found ${allTokens.length} unique tokens and ${allNfts.length} unique NFTs across all badge tiers`);
 
     // Step 3: Create mappings to store token and NFT holdings by wallet address
     const walletToTokenHoldings = new Map<string, Map<string, TokenHolding>>();
@@ -125,16 +102,12 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     // Step 4: Fetch all addresses that have the minimum balance for each token
     logger.log('Fetching token holders...');
     for (const [tokenAddress, { minBalance, token }] of tokenMinBalances.entries()) {
-      let minBal = minBalance;
-      if (sumOfBalances) {
-        minBal = minBalance / 2;
-      }
-      logger.log(`Fetching holders for ${token.symbol} (${tokenAddress}) with min balance ${minBal}...`);
+      let minBal = sumOfBalances ? minBalance / 2 : minBalance;
+      logger.verboseLog(`Fetching holders for ${token.symbol} (${tokenAddress}) with min balance ${minBal}...`);
 
-      
       // Fetch token holders with the minimum balance
       const tokenHolders = await fetchTokenHolders(
-        tokenAddress.toLowerCase(),
+        tokenAddress,
         token.symbol,
         minBal,
         token.decimals
@@ -144,32 +117,25 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
       
       // Store token holdings for each wallet
       for (const holder of tokenHolders) {
-        const walletAddress = holder.address.toLowerCase();
-        
         // Initialize token holdings map for this wallet if it doesn't exist
-        if (!walletToTokenHoldings.has(walletAddress)) {
-          walletToTokenHoldings.set(walletAddress, new Map<string, TokenHolding>());
-        }
+        if (!walletToTokenHoldings.has(holder.address))
+          walletToTokenHoldings.set(holder.address, new Map<string, TokenHolding>());
         
-        walletToTokenHoldings.get(walletAddress)!.set(tokenAddress.toLowerCase(), holder.holding);
+        walletToTokenHoldings.get(holder.address)!.set(tokenAddress, holder.holding);
       }
     }
     const nftValidAddresses = new Set<string>();
     // Step 5: Fetch all NFT holders for each NFT
     logger.log('Fetching NFT holders...');
     for (const nft of allNfts) {
-      const nftAddress = nft.address.toLowerCase();
-      let minNftBalance = nftMinBalances.get(nftAddress)!.minBalance;
-      if (sumOfBalances) {
-        minNftBalance = minNftBalance / 2;
-      }
-      const collectionSize = nft.collectionSize || 1000; // Default to 1000 if not specified
+      let minNftBalance = sumOfBalances ? nftMinBalances.get(nft.address)!.minBalance / 2 : nftMinBalances.get(nft.address)!.minBalance;
+      const collectionSize = nft.collectionSize || 20000; // Default to 1000 if not specified
       
-      logger.log(`Fetching holders for ${nft.name} (${nftAddress}) with min balance ${minNftBalance}...`);
+      logger.log(`Fetching holders for ${nft.name} (${nft.address}) with min balance ${minNftBalance}...`);
       
       // Fetch NFT holders
       const nftHolders = await fetchNftHoldersFromEthers(
-        nftAddress,
+        nft.address,
         nft.name,
         1,
         collectionSize
@@ -179,24 +145,21 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
       
       // Store NFT holdings for each wallet
       for (const holder of nftHolders) {
-        const walletAddress = holder.address.toLowerCase();
-        
         // Initialize NFT holdings map for this wallet if it doesn't exist
-        if (!walletToNftHoldings.has(walletAddress)) {
-          walletToNftHoldings.set(walletAddress, new Map<string, NftHolding>());
-        }
-
-        if (holder.tokenCount >= minNftBalance) {
-          nftValidAddresses.add(walletAddress);
-        }
+        if (!walletToNftHoldings.has(holder.address))
+          walletToNftHoldings.set(holder.address, new Map<string, NftHolding>());
+        
+        if (holder.tokenCount >= minNftBalance)
+          nftValidAddresses.add(holder.address);
+        
         // Add NFT holding to the wallet's map
         const nftHolding: NftHolding = {
-          tokenAddress: nftAddress,
+          tokenAddress: nft.address,
           tokenSymbol: nft.name,
           tokenBalance: holder.tokenCount.toString()
         };
         
-        walletToNftHoldings.get(walletAddress)!.set(nftAddress, nftHolding);
+        walletToNftHoldings.get(holder.address)!.set(nft.address, nftHolding);
       }
     }
     
@@ -212,47 +175,35 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
       walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
       userWallets = getHandleToWalletMapping(walletMapping);
       logger.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
-    } else {
-      logger.log(`No wallet mapping file specified. Skipping wallet mapping.`);
-    }
+    } else logger.log(`No wallet mapping file specified. Skipping wallet mapping.`);
+    
 
     if(sumOfBalances){
       for (const handle of userWallets.keys()){
         logger.verboseLog(`Fetching Arena profile for handle ${handle}...`);
-        await sleep(500);
+        
         const social = await getArenaAddressForHandle(handle);
         
-        if (social) {
-          if (!userWallets.has(handle)){
-            userWallets.set(handle, {});
-          }
-          if (!(userWallets.get(handle)![social.address.toLowerCase()])){
-            logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
-            userWallets.get(handle)![social.address.toLowerCase()] = "arena";
-          }
-          
-        }
-        else{
-          logger.warn(`No Arena address found for handle ${handle}`);
-        } 
+        if (social && social.address && !(userWallets.get(handle)![social.address.toLowerCase()])) {
+          logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
+          userWallets.get(handle)![social.address.toLowerCase()] = "arena";
+        } else logger.warn(`No new Arena address found for handle ${handle}`);
+        await sleep(200);
       }
     }
     // Step 8: Process remaining wallets (not in mapping) by fetching Arena profiles
     logger.log('Processing remaining wallets by fetching Arena profiles...');
-    
-    // Collect all wallet addresses that have token or NFT holdings
-    
+        
     // Filter out wallets that are already in the mapping
     const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ... nftValidAddresses]);
     userWallets.forEach((value, key) => {
       allAddresses.delete(key);
     });
-    const addressessToProcess = Array.from(allAddresses);
+    const addressessToProcess = Array.from(allAddresses).map(address => address.toLowerCase());
     
     logger.log(`Found ${addressessToProcess.length} unmapped wallets with token or NFT holdings`);
     
     // Process unmapped wallets in batches to avoid rate limiting
-    const BATCH_SIZE = 10;
     for (let i = 0; i < addressessToProcess.length; i += BATCH_SIZE) {
       const batch = addressessToProcess.slice(i, i + BATCH_SIZE);
       
@@ -299,9 +250,9 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     // Check eligibility for each Twitter handle
     for (const [twitterHandle, addressRecord] of userWallets.entries()) {
       // Skip checking if this is a permanent account (they'll be added later)
-      if (permanentAccounts.includes(twitterHandle)) {
+      if (permanentAccounts.includes(twitterHandle))
         continue;
-      }
+      
       const addressesToUse = Object.keys(addressRecord);
       // Skip if no address holdings
       if (addressesToUse.length === 0) continue;
@@ -330,27 +281,21 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
         }
         
         // Process missing tokens in batch
-        if (missingTokens.length > 0) {
-          tokenHoldingsMap = await processTokenBalances(
-            address,
-            missingTokens,
-            tokenHoldingsMap,
-            sumOfBalances
-          );
-        }
+        tokenHoldingsMap = await processTokenBalances(
+          address,
+          missingTokens,
+          tokenHoldingsMap,
+          sumOfBalances
+        );
         
         if(walletToNftHoldings.has(address)){
           const nftHoldings = walletToNftHoldings.get(address)!;
           for (const [nftAddress, holding] of nftHoldings.entries()) {
-            if(nftHoldingsMap[nftAddress]){
-              if(sumOfBalances){
-                nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
-              }else{
-                if(holding.tokenBalance > nftHoldingsMap[nftAddress].tokenBalance){
-                  nftHoldingsMap[nftAddress] = holding;
-                }
-              }
-            }else nftHoldingsMap[nftAddress] = holding;
+            if(sumOfBalances && nftHoldingsMap[nftAddress]){
+              nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
+            }else if(!nftHoldingsMap[nftAddress] || holding.tokenBalance > nftHoldingsMap[nftAddress].tokenBalance){
+              nftHoldingsMap[nftAddress] = holding;
+            }
           }
         }
         
@@ -361,34 +306,27 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
         
         // Check token requirements
         if (basicRequirements.tokens && basicRequirements.tokens.length > 0) {
-          for (const tokenConfig of basicRequirements.tokens) {
-            const tokenAddress = tokenConfig.address.toLowerCase();
-            const requiredBalance = tokenConfig.minBalance;
-            
+          for (const tokenConfig of basicRequirements.tokens) {            
             // Check if total balance meets requirement
-            if (!tokenHoldingsMap[tokenAddress] || tokenHoldingsMap[tokenAddress].balanceFormatted < requiredBalance) {
+            if (!tokenHoldingsMap[tokenConfig.address] || tokenHoldingsMap[tokenConfig.address].balanceFormatted < tokenConfig.minBalance) {
               isBasicEligible = false;
-              logger.verboseLog(`${twitterHandle} does not meet basic requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenAddress]?.balanceFormatted } < ${requiredBalance}`);
+              logger.verboseLog(`${twitterHandle} does not meet basic requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenConfig.address]?.balanceFormatted } < ${tokenConfig.minBalance}`);
               break;
             }
-            logger.verboseLog(`${twitterHandle} meets basic requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenAddress]?.balanceFormatted } >= ${requiredBalance}`);
+            logger.verboseLog(`${twitterHandle} meets basic requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenConfig.address]?.balanceFormatted } >= ${tokenConfig.minBalance}`);
           }
         }
         
         // Check NFT requirements if still eligible
         if (isBasicEligible && basicRequirements.nfts && basicRequirements.nfts.length > 0) {
           for (const nftConfig of basicRequirements.nfts) {
-            const nftAddress = nftConfig.address.toLowerCase();
-            const requiredBalance = nftConfig.minBalance;
-            
-            
             // Check if total NFTs meets requirement
-            if (!nftHoldingsMap[nftAddress] || +nftHoldingsMap[nftAddress].tokenBalance < requiredBalance) {
+            if (!nftHoldingsMap[nftConfig.address] || +nftHoldingsMap[nftConfig.address].tokenBalance < nftConfig.minBalance) {
               isBasicEligible = false;
-              logger.verboseLog(`${twitterHandle} does not meet basic requirement for ${nftConfig.name}: ${nftHoldingsMap[nftAddress]?.tokenBalance} < ${requiredBalance}`);
+              logger.verboseLog(`${twitterHandle} does not meet basic requirement for ${nftConfig.name}: ${nftHoldingsMap[nftConfig.address]?.tokenBalance} < ${nftConfig.minBalance}`);
               break;
             }
-            logger.verboseLog(`${twitterHandle} meets basic requirement for ${nftConfig.name}: ${nftHoldingsMap[nftAddress]?.tokenBalance} >= ${requiredBalance}`);
+            logger.verboseLog(`${twitterHandle} meets basic requirement for ${nftConfig.name}: ${nftHoldingsMap[nftConfig.address]?.tokenBalance} >= ${nftConfig.minBalance}`);
           }
         }
         
@@ -406,32 +344,26 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
         // Check token requirements
         if (upgradedRequirements.tokens && upgradedRequirements.tokens.length > 0) {
           for (const tokenConfig of upgradedRequirements.tokens) {
-            const tokenAddress = tokenConfig.address.toLowerCase();
-            const requiredBalance = tokenConfig.minBalance;
-            
             // Check if total balance meets requirement
-            if (!tokenHoldingsMap[tokenAddress] || tokenHoldingsMap[tokenAddress].balanceFormatted < requiredBalance) {
+            if (!tokenHoldingsMap[tokenConfig.address] || tokenHoldingsMap[tokenConfig.address].balanceFormatted < tokenConfig.minBalance) {
               isUpgradedEligible = false;
-              logger.verboseLog(`${twitterHandle} does not meet upgraded requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenAddress]?.balanceFormatted} < ${requiredBalance}`);
+              logger.verboseLog(`${twitterHandle} does not meet upgraded requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenConfig.address]?.balanceFormatted} < ${tokenConfig.minBalance}`);
               break;
             }
-            logger.verboseLog(`${twitterHandle} meets upgraded requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenAddress]?.balanceFormatted} >= ${requiredBalance}`);
+            logger.verboseLog(`${twitterHandle} meets upgraded requirement for ${tokenConfig.symbol}: ${tokenHoldingsMap[tokenConfig.address]?.balanceFormatted} >= ${tokenConfig.minBalance}`);
           }
         }
         
         // Check NFT requirements if still eligible
         if (isUpgradedEligible && upgradedRequirements.nfts && upgradedRequirements.nfts.length > 0) {
           for (const nftConfig of upgradedRequirements.nfts) {
-            const nftAddress = nftConfig.address.toLowerCase();
-            const requiredBalance = nftConfig.minBalance;
-            
             // Check if total NFTs meets requirement
-            if (!nftHoldingsMap[nftAddress] || +nftHoldingsMap[nftAddress].tokenBalance < requiredBalance) {
+            if (!nftHoldingsMap[nftConfig.address] || +nftHoldingsMap[nftConfig.address].tokenBalance < nftConfig.minBalance) {
               isUpgradedEligible = false;
-              logger.verboseLog(`${twitterHandle} does not meet upgraded requirement for ${nftConfig.name}: ${nftHoldingsMap[nftAddress]?.tokenBalance} < ${requiredBalance}`);
+              logger.verboseLog(`${twitterHandle} does not meet upgraded requirement for ${nftConfig.name}: ${nftHoldingsMap[nftConfig.address]?.tokenBalance} < ${nftConfig.minBalance}`);
               break;
             }
-            logger.verboseLog(`${twitterHandle} meets upgraded requirement for ${nftConfig.name}: ${nftHoldingsMap[nftAddress]?.tokenBalance} >= ${requiredBalance}`);
+            logger.verboseLog(`${twitterHandle} meets upgraded requirement for ${nftConfig.name}: ${nftHoldingsMap[nftConfig.address]?.tokenBalance} >= ${nftConfig.minBalance}`);
           }
         }
         
@@ -468,17 +400,15 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     const upgradedEligibleAddresses = new Set<string>();
     
     for (const [handle, holdings] of userWallets.entries()) {
-      if (basicEligibleHandles.has(handle)) {
-        for (const holding of Object.keys(holdings)) {
+      if (basicEligibleHandles.has(handle))
+        Object.keys(holdings).forEach((holding) => {
           basicEligibleAddresses.add(holding);
-        }
-      }
+        });
       
-      if (upgradedEligibleHandles.has(handle)) {
-        for (const holding of Object.keys(holdings)) {
+      if (upgradedEligibleHandles.has(handle)) 
+        Object.keys(holdings).forEach((holding) => {
           upgradedEligibleAddresses.add(holding);
-        }
-      }
+        });
     }
     
     // Add addresses from wallet mapping for permanent accounts that might not have been processed
@@ -493,13 +423,16 @@ export async function fetchTokenHolderProfiles(appConfig: AppConfig): Promise<Ho
     // Step 13: Return the results
     const results: HolderResults = {
       basicHolders: Array.from(basicEligibleHandles),
-      upgradedHolders: Array.from(upgradedEligibleHandles),
       basicAddresses: Array.from(basicEligibleAddresses),
-      upgradedAddresses: Array.from(upgradedEligibleAddresses)
+      timestamp: new Date().toISOString()
     };
-    
     logger.log(`Found ${results.basicHolders.length} eligible basic badge holders`);
-    logger.log(`Found ${results.upgradedHolders.length} eligible upgraded badge holders`);
+    // Only include upgraded data if there are upgraded requirements
+    if (upgradedRequirements) {
+      results.upgradedHolders = Array.from(upgradedEligibleHandles);
+      results.upgradedAddresses = Array.from(upgradedEligibleAddresses);
+      logger.log(`Found ${results.upgradedHolders.length} eligible upgraded badge holders`);
+    }    
     
     return results;
   } catch (error) {
