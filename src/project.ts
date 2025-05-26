@@ -156,7 +156,7 @@ async function runProject(
       
       if (runOnce) {
         logger.log(`Running badge component once for project ${projectName}`);
-        await runAndSendResults(appConfig, apiKey, { dryRun, runOnce, exportAddresses });
+        await runAndSendResults(appConfig, { dryRun, runOnce, exportAddresses }, apiKey);
       } else {
         logger.log(`Starting badge scheduler for project ${projectName}`);
         startScheduler(appConfig, {

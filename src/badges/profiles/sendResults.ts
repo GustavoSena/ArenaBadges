@@ -1,10 +1,11 @@
 // Send Results Module
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 import axios from 'axios';
 import { BadgeConfig } from '../../types/badge';
 import { RunOptions } from '../services/schedulerService';
 import { ensureOutputDirectory } from '../../utils/helpers';
+import { exportWalletAddresses } from '../utils/exportUtils';
 import logger from '../../utils/logger';
 
 /**
@@ -16,7 +17,7 @@ import logger from '../../utils/logger';
  * @param options.dryRun If true, print JSON to console instead of sending to API
  * @returns Promise resolving to the API response
  */
-export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions): Promise<any> {
+export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders: string[], upgradedHolders: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions, apiKey?: string): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
     logger.log('Sending results to API...');
@@ -43,7 +44,7 @@ export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data
     logger.verboseLog(`- Upgraded endpoint: ${UPGRADED_ENDPOINT}`);
     
     
-    if (!apiKey) {
+    if (!apiKey && !options.dryRun) {
       throw new Error('API_KEY environment variable is not set');
     }
     
@@ -91,55 +92,13 @@ export async function sendResults(badgeConfig: BadgeConfig, apiKey: string, data
       logger.log(JSON.stringify(upgradedData, null, 2));
       
       // Export addresses to files if the exportAddresses flag is set
-      if (options.exportAddresses) {
-        logger.log('\nEXPORTING ADDRESSES: Saving wallet addresses to files');
-        
-        // Create output directory if it doesn't exist
-        const outputDir = path.join(process.cwd(), 'output', 'addresses');
-        ensureOutputDirectory(outputDir);
-        
-        // Generate timestamp for filenames
-        const timestamp = new Date().toISOString().replace(/:/g, '-');
-        
-        // Check if we have wallet addresses available
-        if (!data.basicAddresses || !data.upgradedAddresses) {
-          logger.log('WARNING: Wallet addresses not available in the data. Cannot export wallet addresses.');
-          return;
-        }
-        
-        // Save basic badge holder wallet addresses
-        const basicAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_basic_wallet_addresses_${timestamp}.json`);
-        fs.writeFileSync(basicAddressesFile, JSON.stringify({
-          addresses: data.basicAddresses,
-          count: data.basicAddresses.length,
-          timestamp: data.timestamp,
-          type: 'basic',
-          project: badgeConfig.projectName
-        }, null, 2));
-        logger.log(`Exported ${data.basicAddresses.length} basic badge holder wallet addresses to ${basicAddressesFile}`);
-        
-        // Save upgraded badge holder wallet addresses
-        const upgradedAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_upgraded_wallet_addresses_${timestamp}.json`);
-        fs.writeFileSync(upgradedAddressesFile, JSON.stringify({
-          addresses: data.upgradedAddresses,
-          count: data.upgradedAddresses.length,
-          timestamp: data.timestamp,
-          type: 'upgraded',
-          project: badgeConfig.projectName
-        }, null, 2));
-        logger.log(`Exported ${data.upgradedAddresses.length} upgraded badge holder wallet addresses to ${upgradedAddressesFile}`);
-        
-        // Save all unique wallet addresses (combined)
-        const allAddresses = [...new Set([...data.basicAddresses, ...data.upgradedAddresses])];
-        const allAddressesFile = path.join(outputDir, `${badgeConfig.projectName}_all_wallet_addresses_${timestamp}.json`);
-        fs.writeFileSync(allAddressesFile, JSON.stringify({
-          addresses: allAddresses,
-          count: allAddresses.length,
-          timestamp: data.timestamp,
-          type: 'all',
-          project: badgeConfig.projectName
-        }, null, 2));
-        logger.log(`Exported ${allAddresses.length} total unique badge holder wallet addresses to ${allAddressesFile}`);
+      if (options.exportAddresses && data.basicAddresses) {
+        exportWalletAddresses(
+          badgeConfig.projectName,
+          data.basicAddresses,
+          data.upgradedAddresses,
+          data.timestamp
+        );
       }
       
       logger.log('\nDRY RUN COMPLETED - No data was sent to the API');

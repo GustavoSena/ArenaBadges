@@ -30,7 +30,7 @@ export enum ErrorType {
  * @param exportAddresses If true, export addresses to a CSV file
  * @returns ErrorType if there was an error, undefined if successful
  */
-export async function runAndSendResults(appConfig: AppConfig, apiKey: string, runOptions: RunOptions): Promise<ErrorType | undefined> {
+export async function runAndSendResults(appConfig: AppConfig, runOptions: RunOptions, apiKey?: string): Promise<ErrorType | undefined> {
 
   
   // Get customizable retry interval from config (default to 2 hours if not specified)
@@ -70,13 +70,13 @@ export async function runAndSendResults(appConfig: AppConfig, apiKey: string, ru
       if (runOptions.dryRun) {
         logger.log('Running in dry run mode - will print JSON instead of sending to API');
       }
-      await sendResults(appConfig.badgeConfig, apiKey, {
+      await sendResults(appConfig.badgeConfig, {
         basicHolders: results.basicHolders,
         upgradedHolders: results.upgradedHolders,
         basicAddresses: results.basicAddresses,
         upgradedAddresses: results.upgradedAddresses,
         timestamp: new Date().toISOString()
-      }, runOptions);
+      }, runOptions, apiKey);
     } catch (sendError) {
       // Check if this is a retry failure in the API
       const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
@@ -123,7 +123,7 @@ export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): v
   
   logger.log(`Retry interval: ${retryIntervalHours} hours (when errors occur)`);
   
-  if (!apiKey) 
+  if (!apiKey && !config.runOptions?.dryRun) 
     throw new Error('API key is required. Set it in the config or as API_KEY environment variable.');
   
   logger.log(`Starting scheduler for project '${projectName}' to run every ${intervalHours} hours`);
@@ -161,7 +161,7 @@ export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): v
       
       // Run the scheduled task with project name
       logger.log(`Running scheduled task for project: ${projectName}`);
-      const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
+      const errorType = await runAndSendResults(appConfig, config.runOptions, apiKey);
       
       // Determine the next interval based on the result
       let nextIntervalMs = intervalMs;
@@ -188,7 +188,7 @@ export function startScheduler(appConfig: AppConfig, config: SchedulerConfig): v
     
     // Run the scheduled task with project name
     logger.log(`Running scheduled task for project: ${projectName}`);
-    const errorType = await runAndSendResults(appConfig, apiKey, config.runOptions);
+    const errorType = await runAndSendResults(appConfig, config.runOptions, apiKey);
     
     // Determine the next interval based on the result
     let nextIntervalMs = intervalMs;
