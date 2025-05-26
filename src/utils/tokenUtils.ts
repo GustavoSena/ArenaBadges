@@ -2,6 +2,7 @@
 import { TokenConfig, TokenHolding } from '../types/interfaces';
 import { getTokensBalance } from '../api/alchemy';
 import { fetchTokenBalance } from './helpers';
+import logger from './logger';
 
 /**
  * Updates the token holdings map with a new holding
@@ -9,7 +10,6 @@ import { fetchTokenBalance } from './helpers';
  * @param tokenAddress Token address (lowercase)
  * @param holding Token holding to add or update
  * @param shouldSum Whether to sum balances or take the max
- * @param verbose Enable verbose logging
  * @param walletAddress Wallet address for logging
  * @returns Updated token holdings map
  */
@@ -17,15 +17,14 @@ export function updateTokenHoldingsMap(
   map: {[key: string]: TokenHolding}, 
   tokenAddress: string, 
   holding: TokenHolding, 
-  shouldSum: boolean, 
-  verbose: boolean, 
+  shouldSum: boolean,
   walletAddress: string
 ): {[key: string]: TokenHolding} {
   const updatedMap = {...map};
   
   if (updatedMap[tokenAddress]) {
     if (shouldSum) {
-      if (verbose) console.log(`Adding token holding for ${tokenAddress} for wallet ${walletAddress}: ${holding.balanceFormatted}`);
+      logger.verboseLog(`Adding token holding for ${tokenAddress} for wallet ${walletAddress}: ${holding.balanceFormatted}`);
       updatedMap[tokenAddress].balanceFormatted = updatedMap[tokenAddress].balanceFormatted! + holding.balanceFormatted;
     } else {
       if (holding.balanceFormatted > updatedMap[tokenAddress].balanceFormatted!) {
@@ -36,7 +35,7 @@ export function updateTokenHoldingsMap(
     updatedMap[tokenAddress] = holding;
   }
   
-  if (verbose) console.log(`Updated token holding for ${tokenAddress} for wallet ${walletAddress}: ${updatedMap[tokenAddress]?.balanceFormatted}`);
+  logger.verboseLog(`Updated token holding for ${tokenAddress} for wallet ${walletAddress}: ${updatedMap[tokenAddress]?.balanceFormatted}`);
   return updatedMap;
 }
 
@@ -72,15 +71,13 @@ export function convertHexBalance(hexBalance: string | null, decimals: number): 
  * @param missingTokens Array of token configs to check
  * @param tokenHoldingsMap Current token holdings map
  * @param sumOfBalances Whether to sum balances or take the max
- * @param verbose Enable verbose logging
  * @returns Updated token holdings map
  */
 export async function processTokenBalances(
   walletAddress: string,
   missingTokens: TokenConfig[],
   tokenHoldingsMap: {[key: string]: TokenHolding},
-  sumOfBalances: boolean,
-  verbose: boolean
+  sumOfBalances: boolean
 ): Promise<{[key: string]: TokenHolding}> {
   let updatedMap = {...tokenHoldingsMap};
   
@@ -88,13 +85,13 @@ export async function processTokenBalances(
     return updatedMap;
   }
   
-  if (verbose) console.log(`Batch fetching balances for ${missingTokens.length} tokens for address ${walletAddress}...`);
+  logger.verboseLog(`Batch fetching balances for ${missingTokens.length} tokens for address ${walletAddress}...`);
   
   try {
     const tokenAddresses = missingTokens.map(config => config.address);
     const balanceResults = await getTokensBalance(walletAddress, tokenAddresses);
     
-    if (verbose) console.log(`Received batch balance results for ${walletAddress}`);
+    logger.verboseLog(`Received batch balance results for ${walletAddress}`);
     
     // Process the results
     for (let i = 0; i < missingTokens.length; i++) {
@@ -105,7 +102,7 @@ export async function processTokenBalances(
       // Convert the balance to the correct format with decimals
       const balanceValue = convertHexBalance(tokenBalance.tokenBalance, config.decimals);
       
-      if (verbose) console.log(`Processed token balance for ${tokenAddress}: ${balanceValue}`);
+      logger.verboseLog(`Processed token balance for ${tokenAddress}: ${balanceValue}`);
       
       // Only add if balance is greater than 0
       if (balanceValue > 0) {
@@ -114,7 +111,6 @@ export async function processTokenBalances(
           tokenAddress, 
           createTokenHolding(config, balanceValue), 
           sumOfBalances, 
-          verbose, 
           walletAddress
         );
       }
@@ -122,24 +118,23 @@ export async function processTokenBalances(
     
     return updatedMap;
   } catch (error) {
-    console.error(`Error batch fetching token balances for ${walletAddress}:`, error);
+    logger.error(`Error batch fetching token balances for ${walletAddress}:`, error);
     
     // Fallback to individual fetching if batch fails
-    if (verbose) console.log(`Falling back to individual token balance fetching for ${walletAddress}`);
+    logger.verboseLog(`Falling back to individual token balance fetching for ${walletAddress}`);
     
     for (const config of missingTokens) {
       const tokenAddress = config.address.toLowerCase();
-      if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${walletAddress}...`);
+      logger.verboseLog(`Fetching token balance for ${tokenAddress} for address ${walletAddress}...`);
       
       try {
         const balance = await fetchTokenBalance(
           config.address,
           walletAddress,
-          config.decimals,
-          verbose
+          config.decimals
         );
         
-        if (verbose) console.log(`Fetched token balance for ${tokenAddress} for address ${walletAddress}: ${balance}`);
+        logger.verboseLog(`Fetched token balance for ${tokenAddress} for address ${walletAddress}: ${balance}`);
         
         // Only add if balance is greater than 0
         if (balance > 0) {
@@ -148,12 +143,11 @@ export async function processTokenBalances(
             tokenAddress, 
             createTokenHolding(config, balance), 
             sumOfBalances, 
-            verbose, 
             walletAddress
           );
         }
       } catch (fetchError) {
-        console.error(`Error fetching individual token balance for ${tokenAddress}:`, fetchError);
+        logger.error(`Error fetching individual token balance for ${tokenAddress}:`, fetchError);
         throw fetchError;
       }
     }

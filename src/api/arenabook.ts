@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { ArenabookUserResponse, StarsArenaUserResponse } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
+import logger from '../utils/logger';
 
 // Constants
 const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
@@ -21,39 +22,39 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 404) {
-          console.log(`No data found at ${url}`);
+          logger.log(`No data found at ${url}`);
           // No need to retry for 404 errors
           return null;
         } else if (error.response.status === 429) {
           // Rate limit error - always propagate these
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
-            console.log(`Rate limit error fetching from ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            logger.log(`Rate limit error fetching from ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleep(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
           } else {
             const errorMsg = `${errorPrefix} rate limit exceeded after ${MAX_RETRIES} retries`;
-            console.error(errorMsg);
+            logger.error(errorMsg);
             throw new Error(errorMsg);
           }
         } else {
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
-            console.log(`Error fetching from ${url} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+            logger.log(`Error fetching from ${url} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
             await sleep(REQUEST_DELAY_MS);
           } else {
             const errorMsg = `${errorPrefix} error (${error.response.status}) after ${MAX_RETRIES} retries`;
-            console.error(errorMsg, error.response.statusText);
+            logger.error(errorMsg, error.response.statusText);
             throw new Error(errorMsg);
           }
         }
       } else {
         retryCount++;
         if (retryCount <= MAX_RETRIES) {
-          console.log(`Unexpected error for ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
+          logger.log(`Unexpected error for ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
           await sleep(REQUEST_DELAY_MS);
         } else {
           const errorMsg = `${errorPrefix} unexpected error after ${MAX_RETRIES} retries`;
-          console.error(errorMsg, error);
+          logger.error(errorMsg, error);
           throw new Error(errorMsg);
         }
       }
@@ -81,7 +82,7 @@ export async function fetchTwitterProfilePicture(twitterHandle: string): Promise
     }
     return null;
   } catch (error) {
-    console.error(`Error fetching Twitter profile picture for ${twitterHandle}:`, error);
+    logger.error(`Error fetching Twitter profile picture for ${twitterHandle}:`, error);
     throw error;
   }
 }

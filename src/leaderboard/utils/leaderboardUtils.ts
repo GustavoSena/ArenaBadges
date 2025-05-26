@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { Leaderboard, BaseLeaderboard, HolderEntry, LeaderboardTokenConfig, LeaderboardNftConfig } from '../../types/leaderboard';
+import { Leaderboard, BaseLeaderboard, HolderEntry } from '../../types/leaderboard';
 import { TokenConfig, TokenHolding, NftHolding } from '../../types/interfaces';
 import { updateTokenHoldingsMap, processTokenBalances } from '../../utils/tokenUtils';
+import logger from '../../utils/logger';
 
 
 
@@ -22,9 +23,9 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
     
     // Save leaderboard to file
     fs.writeFileSync(outputPath, JSON.stringify(leaderboard, null, 2));
-    console.log(`Leaderboard saved to ${outputPath}`);
+    logger.log(`Leaderboard saved to ${outputPath}`);
   } catch (error) {
-    console.error('Error saving leaderboard:', error);
+    logger.error('Error saving leaderboard:', error);
     throw error;
   }
 }
@@ -39,7 +40,6 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
  * @param leaderboardNfts Array of NFT configs for the leaderboard
  * @param leaderboard Leaderboard implementation
  * @param sumOfBalances Whether to sum balances across wallets
- * @param verbose Whether to log verbose output
  * @returns Holder entry if eligible, null otherwise
  */
 export async function processWalletHoldings(
@@ -47,11 +47,8 @@ export async function processWalletHoldings(
   addressRecord: Record<string, string>,
   walletToTokenHoldings: Map<string, Map<string, TokenHolding>>,
   walletToNftHoldings: Map<string, Map<string, NftHolding>>,
-  leaderboardTokens: LeaderboardTokenConfig[],
-  leaderboardNfts: LeaderboardNftConfig[],
   leaderboard: BaseLeaderboard,
-  sumOfBalances: boolean,
-  verbose: boolean
+  sumOfBalances: boolean
 ): Promise<HolderEntry | null> {
   const addressesToUse = Object.keys(addressRecord);
   // Skip if no address holdings
@@ -62,18 +59,18 @@ export async function processWalletHoldings(
 
   // Process each address
   for (const address of addressesToUse) {
-    if (verbose) console.log(`Processing address ${address} for Twitter handle ${handle}`);
+    logger.verboseLog(`Processing address ${address} for Twitter handle ${handle}`);
     
     // Process token holdings with batch processing
     const missingTokens: TokenConfig[] = [];
     
     // First process tokens that we already have holdings for
-    for (const tokenConfig of leaderboardTokens) {
-      const symbol = tokenConfig.symbol;
+    for (const tokenConfig of leaderboard.getLeaderboardTokens()) {
+      const tokenAddress = tokenConfig.address;
       
-      if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(symbol)) {
-        const holding = walletToTokenHoldings.get(address)!.get(symbol)!;
-        tokenHoldingsMap = updateTokenHoldingsMap(tokenHoldingsMap, symbol, holding, sumOfBalances, verbose, address);
+      if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(tokenAddress)) {
+        const holding = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
+        tokenHoldingsMap = updateTokenHoldingsMap(tokenHoldingsMap, tokenAddress, holding, sumOfBalances, address);
       } else {
         // Store missing token configs for batch processing
         missingTokens.push(tokenConfig);
@@ -86,8 +83,7 @@ export async function processWalletHoldings(
         address,
         missingTokens,
         tokenHoldingsMap,
-        sumOfBalances,
-        verbose
+        sumOfBalances
       );
     }
     
@@ -113,25 +109,20 @@ export async function processWalletHoldings(
   // Check eligibility using the leaderboard implementation
   const isEligible = await leaderboard.checkEligibility(
     Object.values(tokenHoldingsMap),
-    Object.values(nftHoldingsMap),
-    leaderboardTokens,
-    leaderboardNfts
+    Object.values(nftHoldingsMap)
   );
   
   if (!isEligible) {
-    if (verbose) console.log(`${handle} is not eligible for the leaderboard`);
+    logger.verboseLog(`${handle} is not eligible for the leaderboard`);
     return null;
   }
   
-  if (verbose) console.log(`${handle} is eligible for the leaderboard`);
+  logger.verboseLog(`${handle} is eligible for the leaderboard`);
   
   // Calculate points using the leaderboard implementation
   const holderPoints = await leaderboard.calculatePoints(
     Object.values(tokenHoldingsMap),
-    Object.values(nftHoldingsMap),
-    leaderboardTokens,
-    leaderboardNfts,
-    verbose
+    Object.values(nftHoldingsMap)
   );
   
   // Create and return holder points object

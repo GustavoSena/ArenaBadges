@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { NftHolder, TokenHolder } from '../types/interfaces';
-import { sleep } from '../utils/helpers';
+import { formatTokenBalance, sleep } from '../utils/helpers';
+import logger from '../utils/logger';
 
 let provider: ethers.Provider;
 
@@ -21,7 +22,7 @@ const RETRY_DELAY = 500 ;
 export function setupProvider(apiKey: string) {
 
   if (!apiKey) {
-    console.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
+    logger.warn('ALCHEMY_API_KEY not found in .env file. Required for fetching NFT holders.');
     return;
   }
 
@@ -35,27 +36,21 @@ export function setupProvider(apiKey: string) {
  * @param contractAddress The NFT contract address
  * @param tokenName The name of the NFT
  * @param minBalance Minimum balance required (default: 1)
- * @param verbose Whether to show verbose logs
  * @returns Array of NFT holders
  */
 export async function fetchNftHoldersFromEthers(
   contractAddress: string,
   tokenName: string,
   minBalance: number = 1,
-  verbose: boolean = false,
   nftSupply?: number 
 ): Promise<NftHolder[]> {
   if (!provider) {
-    console.error('Provider not initialized. Please call setupProvider first.');
+    logger.error('Provider not initialized. Please call setupProvider first.');
     throw new Error('Provider not initialized');
   }
   
   try {
-    if (verbose) {
-      console.log(`Fetching NFT holders for ${tokenName} (${contractAddress}) using sequential token ID scanning...`);
-    } else {
-      console.log(`Fetching NFT holders for ${tokenName}...`);
-    }
+    logger.verboseLog(`Fetching NFT holders for ${tokenName} (${contractAddress}) using sequential token ID scanning...`);
     
     // Create a contract instance
     const contract = new ethers.Contract(contractAddress, ERC721_ABI, provider);
@@ -73,7 +68,7 @@ export async function fetchNftHoldersFromEthers(
     const MAX_RETRIES = 5;
     
     while (tokenId <= MAX_TOKEN_ID && consecutiveFailures < batchSize) {
-      if (verbose) console.log(`Processing tokens ${tokenId} to ${tokenId + batchSize - 1}...`);
+      logger.verboseLog(`Processing tokens ${tokenId} to ${tokenId + batchSize - 1}...`);
       
       const batchPromises = [];
       let batchSuccesses = 0;
@@ -94,7 +89,7 @@ export async function fetchNftHoldersFromEthers(
                 // Update holder map
                 holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
                 
-                if (verbose) console.log(`Token ${currentTokenId}: Owner ${ownerLower}`);
+                logger.verboseLog(`Token ${currentTokenId}: Owner ${ownerLower}`);
                 
                 batchSuccesses++;
                 return true; // Success
@@ -118,28 +113,28 @@ export async function fetchNftHoldersFromEthers(
                 
                 if (isInvalidTokenId) {
                   // These are definitely invalid tokens, no need to retry
-                  if (verbose) console.log(`Token ${currentTokenId}: Invalid token ID`);
+                  logger.verboseLog(`Token ${currentTokenId}: Invalid token ID`);
                   return false;
                 }
                 else if (isRateLimited) {
                 // Always retry rate limiting with a longer backoff
                 retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    if (verbose) console.log(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+                    logger.verboseLog(`Rate limit hit for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
                     await sleep(RETRY_DELAY * retryCount);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries due to rate limiting`;
-                    console.error(errorMsg);
+                    logger.error(errorMsg);
                     throw new Error(errorMsg);
                   }
                 } else {
                   retryCount++;
                   if (retryCount <= MAX_RETRIES) {
-                    if (verbose) console.log(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+                    logger.verboseLog(`Error fetching owner for token ${currentTokenId}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
                     await sleep(RETRY_DELAY);
                   } else {
                     const errorMsg = `Failed to get owner for token ${currentTokenId} after ${MAX_RETRIES} retries: ${error instanceof Error ? error.message : String(error)}`;
-                    console.error(errorMsg);
+                    logger.error(errorMsg);
                     throw new Error(errorMsg);
                   }
                 }
@@ -160,9 +155,9 @@ export async function fetchNftHoldersFromEthers(
       // Update consecutive failures counter
       if (successCount === 0) {
         consecutiveFailures += batchSize;
-        if (verbose) console.log(`No valid tokens found in batch. Consecutive failures: ${consecutiveFailures}/${batchSize}`);
+        logger.verboseLog(`No valid tokens found in batch. Consecutive failures: ${consecutiveFailures}/${batchSize}`);
       } else {
-        if (verbose) console.log(`Found ${successCount} valid tokens in batch.`);
+        logger.verboseLog(`Found ${successCount} valid tokens in batch.`);
         consecutiveFailures = 0; // Reset counter if we found any valid tokens
       }
       
@@ -170,7 +165,7 @@ export async function fetchNftHoldersFromEthers(
       tokenId += batchSize;
       
       // Add delay between batches to avoid rate limiting
-      await sleep(500);
+      await sleep(RETRY_DELAY);
     }
     
     // Convert holder map to array
@@ -182,11 +177,11 @@ export async function fetchNftHoldersFromEthers(
         tokenName
       }));
     
-    console.log(`Found ${holders.length} holders with at least ${minBalance} ${tokenName}`);
+    logger.log(`Found ${holders.length} holders with at least ${minBalance} ${tokenName}`);
     
     return holders;
   } catch (error) {
-    console.error(`Error fetching NFT holders for ${contractAddress}:`, error);
+    logger.error(`Error fetching NFT holders for ${contractAddress}:`, error);
     
     // If this is a retry-related error, propagate it
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -207,17 +202,14 @@ export async function fetchNftHoldersFromEthers(
  * @param tokenAddress The token contract address
  * @param holderAddress The address to check balance for
  * @param tokenDecimals The number of decimals for the token
- * @param verbose Whether to show verbose logs
  * @returns Formatted token balance as a number
  */
 export async function fetchTokenBalanceWithEthers(
   tokenAddress: string,
   holderAddress: string,
-  tokenDecimals: number,
-  verbose: boolean = false
-): Promise<number> {  
+  tokenDecimals: number): Promise<number> {  
   if (!provider) {
-    console.error('Provider not initialized. Please call setupProvider first.');
+    logger.error('Provider not initialized. Please call setupProvider first.');
     throw new Error('Provider not initialized');
   }
   const MAX_RETRIES = 5;
@@ -232,18 +224,18 @@ export async function fetchTokenBalanceWithEthers(
       const balance = await tokenContract.balanceOf(holderAddress);
       
       // Convert to formatted balance
-      const formattedBalance = parseFloat(ethers.formatUnits(balance, tokenDecimals));
+      const formattedBalance = formatTokenBalance(balance, tokenDecimals);
       return formattedBalance;
     } catch (error) {
       retryCount++;
       
       if (retryCount <= MAX_RETRIES) {
         
-        console.log(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
+        logger.verboseLog(`Error fetching token balance for address ${holderAddress}, retry ${retryCount}/${MAX_RETRIES} after ${RETRY_DELAY}ms...`);
         
         await sleep(RETRY_DELAY);
       } else {
-        console.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
+        logger.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
         throw error;
       }
     }
@@ -259,28 +251,25 @@ export async function fetchTokenBalanceWithEthers(
  * @param tokenSymbol The token symbol
  * @param holderAddresses Array of addresses to check balances for
  * @param tokenDecimals The number of decimals for the token
- * @param verbose Whether to show verbose logs
  * @returns Array of token holders with their balances
  */
 export async function fetchTokenBalancesWithEthers(
   tokenAddress: string,
   tokenSymbol: string,
   holderAddresses: string[],
-  tokenDecimals: number,
-  verbose: boolean = false
+  tokenDecimals: number
 ): Promise<TokenHolder[]> {
   if (!provider) {
-    console.error('Provider not initialized. Please call setupProvider first.');
+    logger.error('Provider not initialized. Please call setupProvider first.');
     throw new Error('Provider not initialized');
   }
   const holders: TokenHolder[] = [];
-  let processedCount = 0;
   
-  if (verbose) console.log(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
+  logger.verboseLog(`Fetching ${tokenSymbol} balances for ${holderAddresses.length} addresses using ethers.js...`);
   
   // Process in batches to avoid rate limiting
   const batchSize = 10;
-  const MAX_BATCH_RETRIES = 2; // Max retries for entire batch failures
+  const MAX_BATCH_RETRIES = 3; // Max retries for entire batch failures
   
   for (let i = 0; i < holderAddresses.length; i += batchSize) {
     const batch = holderAddresses.slice(i, i + batchSize);
@@ -291,7 +280,7 @@ export async function fetchTokenBalancesWithEthers(
       try {
         const batchPromises = batch.map(async (address) => {
           // Individual address balance fetching with retries is handled in fetchTokenBalanceWithEthers
-          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals, verbose);
+          const balance = await fetchTokenBalanceWithEthers(tokenAddress, address, tokenDecimals);
           
           return {
             address,
@@ -311,34 +300,27 @@ export async function fetchTokenBalancesWithEthers(
       } catch (error) {
         batchRetries++;
         if (batchRetries <= MAX_BATCH_RETRIES) {
-          console.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
-          // Exponential backoff for batch retries
-          const batchBackoffTime = 1000 * Math.pow(2, batchRetries - 1);
-          if (verbose) console.log(`Retrying batch after ${batchBackoffTime}ms...`);
-          await sleep(batchBackoffTime);
+          logger.error(`Error processing batch (retry ${batchRetries}/${MAX_BATCH_RETRIES}):`, error);
+          logger.verboseLog(`Retrying batch after ${RETRY_DELAY}ms...`);
+          await sleep(RETRY_DELAY);
         } else {
-          console.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
+          logger.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
           throw error;
         }
       }
     }
-    
-    processedCount += batch.length;
-    if (processedCount % 20 === 0 || processedCount === holderAddresses.length) {
-      if (verbose) console.log(`Processed ${processedCount}/${holderAddresses.length} addresses...`);
-    }
-    
+
     // Add delay between batches to avoid rate limiting
     if (i + batchSize < holderAddresses.length) {
-      const batchDelayTime = 500; // Base delay between batches
-      if (verbose) console.log(`Waiting ${batchDelayTime}ms before next batch...`);
-      await sleep(batchDelayTime);
+      logger.verboseLog(`Processed ${batchSize * i}/${holderAddresses.length} addresses...`);
+      logger.verboseLog(`Waiting ${RETRY_DELAY}ms before next batch...`);
+      await sleep(RETRY_DELAY);
     }
   }
   
   // Count non-zero balances for logging
   const nonZeroBalances = holders.filter(h => h.holding.balanceFormatted > 0).length;
-  if (verbose) console.log(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
+  logger.verboseLog(`Found ${nonZeroBalances} addresses with non-zero ${tokenSymbol} balance`);
   
   return holders;
 }

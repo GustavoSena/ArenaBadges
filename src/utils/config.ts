@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { LeaderboardConfig } from '../types/leaderboard';
 import { BadgeConfig } from '../types/badge';
+import logger from './logger';
 
 // Cache for configurations to avoid multiple disk reads
 const configCache: {
@@ -66,7 +67,7 @@ export function loadAppConfig(projectName: string): AppConfig {
     const targetProject = projectName;
     
     const mainConfigPath = path.join(process.cwd(), 'config', 'config.json');
-    console.log(`Loading app config from ${mainConfigPath}`);
+    logger.log(`Loading app config from ${mainConfigPath}`);
     const mainConfig = JSON.parse(fs.readFileSync(mainConfigPath, 'utf8')) as MainConfig;
     // Cache the result
     const projectConfig = mainConfig.projects[targetProject];
@@ -85,7 +86,7 @@ export function loadAppConfig(projectName: string): AppConfig {
    
     
   } catch (error) {
-    console.error('Error in loadAppConfig:', error);
+    logger.error('Error in loadAppConfig:', error);
     throw new Error(`Failed to load application configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -100,13 +101,13 @@ export function loadLeaderboardConfig(type: string): LeaderboardConfig {
   try {
       // Try to load from the leaderboards directory first (for backward compatibility)
       const configPath = path.join(process.cwd(), 'config', 'leaderboards', `${type}.json`);
-      console.log(`Loading ${type} leaderboard config from ${configPath}`);
+      logger.log(`Loading ${type} leaderboard config from ${configPath}`);
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LeaderboardConfig;
       
       return config;
 
   } catch (error) {
-    console.error(`Error loading ${type} leaderboard config:`, error);
+    logger.error(`Error loading ${type} leaderboard config:`, error);
     throw new Error(`Failed to load ${type} leaderboard configuration`);
   }
 }
@@ -121,16 +122,16 @@ export function loadBadgeConfig(type: string): any | null {
   try {
     const configPath = path.join(process.cwd(), 'config', 'badges', `${type}.json`);
     if (!fs.existsSync(configPath)) {
-      console.log(`Badge config for ${type} not found at ${configPath}`);
+      logger.log(`Badge config for ${type} not found at ${configPath}`);
       throw new Error(`Badge config for ${type} not found at ${configPath}`);
     }
     
-    console.log(`Loading ${type} badge config from ${configPath}`);
+    logger.log(`Loading ${type} badge config from ${configPath}`);
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     
     return config;
   } catch (error) {
-    console.error(`Error loading ${type} badge config:`, error);
+    logger.error(`Error loading ${type} badge config:`, error);
     throw new Error(`Failed to load ${type} badge configuration`);
   }
 }

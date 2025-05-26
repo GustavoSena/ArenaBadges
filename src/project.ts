@@ -18,6 +18,7 @@ import { setupMoralisProvider } from './api/moralis';
 import { setupSnowtraceProvider } from './api/snowtrace';
 import { setupLeaderboardProvider } from './leaderboard/services/leaderboardClassService';
 import { setupAlchemy } from './api/alchemy';
+import logger, { setVerbose } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -112,19 +113,21 @@ async function runProject(
 ) {
   try {
     if (!projectName) {
-      console.error('Error: No project name provided');
+      logger.error('Error: No project name provided');
       process.exit(1);
     }
-    console.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
+    logger.log(`Starting ArenaBadges project: ${projectName}, component: ${component}, runOnce: ${runOnce}`);
     
     // Check if project configurations exist
     const configs = checkProjectConfigs(projectName);
     
     if (!configs.badge && !configs.leaderboard) {
-      console.error(`Error: No configurations found for project '${projectName}'`);
-      console.error(`Please ensure either config/badges/${projectName}.json or config/leaderboards/${projectName}.json exists`);
+      logger.error(`Error: No configurations found for project '${projectName}'`);
+      logger.error(`Please ensure either config/badges/${projectName}.json or config/leaderboards/${projectName}.json exists`);
       process.exit(1);
     }
+
+    setVerbose(verbose);
 
     if(!setupEnvVariables())
       throw new Error('No environment variables found');
@@ -140,35 +143,35 @@ async function runProject(
       try {
         badgeKeys = JSON.parse(process.env.BADGE_KEYS || '{}');
       } catch (error) {
-        console.error('Error parsing BADGE_KEYS environment variable:', error);
+        logger.error('Error parsing BADGE_KEYS environment variable:', error);
         process.exit(1);
       }
       
       // Get the project-specific API key
       const apiKey = badgeKeys[projectName];
       if (!apiKey) {
-        console.error(`Error: No API key found for project '${projectName}' in BADGE_KEYS environment variable`);
+        logger.error(`Error: No API key found for project '${projectName}' in BADGE_KEYS environment variable`);
         process.exit(1);
       }
       
       if (runOnce) {
-        console.log(`Running badge component once for project ${projectName}`);
-        await runAndSendResults(appConfig, apiKey, { verbose, dryRun, runOnce, exportAddresses });
+        logger.log(`Running badge component once for project ${projectName}`);
+        await runAndSendResults(appConfig, apiKey, { dryRun, runOnce, exportAddresses });
       } else {
-        console.log(`Starting badge scheduler for project ${projectName}`);
+        logger.log(`Starting badge scheduler for project ${projectName}`);
         startScheduler(appConfig, {
           apiKey: apiKey,
-          runOptions: { verbose, dryRun, runOnce, exportAddresses },
+          runOptions: { dryRun, runOnce, exportAddresses },
           onSchedule: (nextRunTime) => {
-            console.log(`Next badge refresh scheduled for: ${nextRunTime.toISOString()}`);
+            logger.log(`Next badge refresh scheduled for: ${nextRunTime.toISOString()}`);
           },
           onRun: () => {
-            console.log(`Badge refresh started at: ${new Date().toISOString()}`);
+            logger.log(`Badge refresh started at: ${new Date().toISOString()}`);
           }
         });
       }
     } else if (component === 'badge' && !configs.badge) {
-      console.error(`Error: Badge configuration not found for project '${projectName}'`);
+      logger.error(`Error: Badge configuration not found for project '${projectName}'`);
       process.exit(1);
     }
     
@@ -176,54 +179,53 @@ async function runProject(
     if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
       // Add a delay before starting the leaderboard scheduler to prevent simultaneous API requests
       if (component === 'all' && configs.badge && !runOnce) {
-        console.log('Waiting 30 seconds before starting leaderboard scheduler to prevent API rate limiting...');
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        logger.log('Waiting 60 seconds before starting leaderboard scheduler to prevent API rate limiting...');
+        await new Promise(resolve => setTimeout(resolve, 60000));
       }
       
       const leaderboardType = getLeaderboardTypeFromString(projectName);
       
       if (!leaderboardType) {
-        console.error(`Error: Could not find a matching LeaderboardType for '${projectName}'`);
+        logger.error(`Error: Could not find a matching LeaderboardType for '${projectName}'`);
         if (component === 'leaderboard') {
           process.exit(1);
         }
       } else {
         if (runOnce) {
-          console.log(`Running leaderboard generation once for project ${projectName}`);
-          await runLeaderboardGeneration(appConfig,  verbose );
+          logger.log(`Running leaderboard generation once for project ${projectName}`);
+          await runLeaderboardGeneration(appConfig);
         } else {
-          console.log(`Starting leaderboard scheduler for project ${projectName}`);
+          logger.log(`Starting leaderboard scheduler for project ${projectName}`);
           startLeaderboardScheduler(appConfig, {
             runImmediately: true,
-             verbose ,
             onSchedule: (nextRunTime) => {
-              console.log(`Next leaderboard refresh scheduled for: ${nextRunTime.toISOString()}`);
+                logger.log(`Next leaderboard refresh scheduled for: ${nextRunTime.toISOString()}`);
             },
             onRun: () => {
-              console.log(`Leaderboard refresh started at: ${new Date().toISOString()}`);
+                logger.log(`Leaderboard refresh started at: ${new Date().toISOString()}`);
             }
           });
         }
       }
     } else if (component === 'leaderboard' && !configs.leaderboard) {
-      console.error(`Error: Leaderboard configuration not found for project '${projectName}'`);
+      logger.error(`Error: Leaderboard configuration not found for project '${projectName}'`);
       process.exit(1);
     }
     
     if (runOnce) {
-      console.log(`Completed one-time run for project ${projectName}, component: ${component}`);
+      logger.log(`Completed one-time run for project ${projectName}, component: ${component}`);
       process.exit(0);
     } else {
-      console.log(`Project ${projectName} schedulers started successfully`);
-      if ((component === 'all' || component === 'badge') && configs.badge) {
-        console.log(`Badge scheduler will run every ${appConfig.projectConfig.scheduler.badgeIntervalHours} hours`);
-      }
-      if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
-        console.log(`Leaderboard scheduler will run every ${appConfig.projectConfig.scheduler.leaderboardIntervalHours} hours`);
-      }
+      logger.log(`Project ${projectName} schedulers started successfully`);
+      if ((component === 'all' || component === 'badge') && configs.badge)
+        logger.log(`Badge scheduler will run every ${appConfig.projectConfig.scheduler.badgeIntervalHours} hours`);
+      
+      if ((component === 'all' || component === 'leaderboard') && configs.leaderboard)
+        logger.log(`Leaderboard scheduler will run every ${appConfig.projectConfig.scheduler.leaderboardIntervalHours} hours`);
+      
     }
   } catch (error) {
-    console.error(`Failed to run project ${projectName}:`, error);
+    logger.error(`Failed to run project ${projectName}:`, error);
     process.exit(1);
   }
 }
