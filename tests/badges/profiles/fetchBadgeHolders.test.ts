@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Import the module under test - we need to do this before mocking
-import { fetchTokenHolderProfiles } from '../../../src/badges/profiles/fetchTokenHolderProfiles';
-import { loadAppConfig } from '../../../src/utils/config';
-import type { AppConfig } from '../../../src/utils/config';
+import { fetchBadgeHolders } from '../../src/badges/profiles/fetchBadgeHolder';
+import { loadAppConfig } from '../../src/utils/config';
+import type { AppConfig } from '../../src/utils/config';
 
 // Define types for our mocks
 type TokenHolder = {
@@ -57,7 +57,7 @@ type SchedulerConfig = {
 };
 
 // Mock the loadAppConfig function
-jest.mock('../../../src/utils/config', () => {
+jest.mock('../../src/utils/config', () => {
   return {
     loadAppConfig: jest.fn(),
     // Add mock implementation for AppConfig
@@ -80,13 +80,13 @@ jest.mock('fs', () => {
   };
 });
 
-// Mock the functions in fetchTokenHolderProfiles
-jest.mock('../../../src/badges/profiles/fetchTokenHolderProfiles', () => {
+// Mock the functions in fetchBadgeHolders
+jest.mock('../../src/badges/profiles/fetchBadgeHolder', () => {
   // Get the actual implementation
-  const actualModule = jest.requireActual('../../../src/badges/profiles/fetchTokenHolderProfiles') as typeof import('../../../src/badges/profiles/fetchTokenHolderProfiles');
+  const actualModule = jest.requireActual('../../src/badges/profiles/fetchBadgeHolder') as typeof import('../../src/badges/profiles/fetchBadgeHolder');
   
-  // Create a real implementation of the fetchTokenHolderProfiles function that uses our mocks
-  const realFetchTokenHolderProfiles = actualModule.fetchTokenHolderProfiles;
+  // Create a real implementation of the fetchBadgeHolders function that uses our mocks
+  const realFetchBadgeHolders = actualModule.fetchBadgeHolders;
   
   // Create mock implementations for the helper functions
   const processHoldersMock = jest.fn().mockImplementation(
@@ -140,17 +140,17 @@ jest.mock('../../../src/badges/profiles/fetchTokenHolderProfiles', () => {
     }
   );
   
-  // Create our own version of fetchTokenHolderProfiles that uses the mocks
-  const mockFetchTokenHolderProfiles = jest.fn().mockImplementation(
+  // Create our own version of fetchBadgeHolders that uses the mocks
+  const mockfetchBadgeHolders = jest.fn().mockImplementation(
     async (...args: any[]) => {
       // Call the real function, which will use our mocked helper functions
-      const [projectNameOrVerbose, verboseParam] = args;
-      return await realFetchTokenHolderProfiles(projectNameOrVerbose, verboseParam);
+      const [projectNameOrVerbose] = args;
+      return await realFetchBadgeHolders(projectNameOrVerbose);
     }
   );
   
   return {
-    fetchTokenHolderProfiles: mockFetchTokenHolderProfiles,
+    fetchBadgeHolders: mockfetchBadgeHolders,
     processHoldersWithSocials: processHoldersMock,
     fetchTokenHoldersFromSnowtrace: fetchTokenHoldersMock,
     fetchNftHoldersFromEthers: fetchNftHoldersMock
@@ -162,7 +162,7 @@ const mockedLoadAppConfig = loadAppConfig as jest.MockedFunction<typeof loadAppC
 
 // Define a type for the mock module to help with type checking
 type MockedModule = {
-  fetchTokenHolderProfiles: typeof import('../../../src/badges/profiles/fetchTokenHolderProfiles').fetchTokenHolderProfiles;
+  fetchBadgeHolders: typeof import('../../src/badges/profiles/fetchBadgeHolder').fetchBadgeHolders;
   processHoldersWithSocials: jest.Mock<any>;
   fetchTokenHoldersFromSnowtrace: jest.Mock<any>;
   fetchNftHoldersFromEthers: jest.Mock<any>;
@@ -215,7 +215,7 @@ function createMockAppConfig(options: {
   };
 }
 
-describe('fetchTokenHolderProfiles', () => {
+describe('fetchBadgeHolders', () => {
   // Increase the timeout for all tests in this describe block
   jest.setTimeout(30000);
   
@@ -246,7 +246,7 @@ describe('fetchTokenHolderProfiles', () => {
     
     mockedLoadAppConfig.mockReturnValue(mockConfig);
     
-    const result = await fetchTokenHolderProfiles(mockConfig, false);
+    const result = await fetchBadgeHolders(mockConfig);
     
     // Check if permanent accounts are added to both lists
     expect(result.basicHolders).toContain('permanentAccount1');
@@ -264,7 +264,7 @@ describe('fetchTokenHolderProfiles', () => {
     
     mockedLoadAppConfig.mockReturnValue(mockConfig);
     
-    const result = await fetchTokenHolderProfiles(mockConfig, false);
+    const result = await fetchBadgeHolders(mockConfig);
     
     // With the current implementation, we're only checking that permanent accounts are preserved
     // and that the exclusion flag is respected
@@ -286,7 +286,7 @@ describe('fetchTokenHolderProfiles', () => {
     
     mockedLoadAppConfig.mockReturnValue(mockConfig);
     
-    const result = await fetchTokenHolderProfiles(mockConfig, false);
+    const result = await fetchBadgeHolders(mockConfig);
     
     // Permanent accounts should be in both lists
     expect(result.basicHolders).toContain('permanentAccount1');
@@ -307,13 +307,13 @@ describe('fetchTokenHolderProfiles', () => {
     mockedLoadAppConfig.mockReturnValue(mockConfig);
     
     // Override the mock implementation for NFT holders to avoid the error
-    const mocked = jest.requireMock('../../../src/badges/profiles/fetchTokenHolderProfiles') as MockedModule;
+    const mocked = jest.requireMock('../../src/badges/profiles/fetchBadgeHolders') as MockedModule;
     mocked.fetchNftHoldersFromEthers.mockResolvedValueOnce([
       { address: '0x1111111111111111111111111111111111111111', tokenCount: 3 },
       { address: '0x2222222222222222222222222222222222222222', tokenCount: 1 }
     ]);
     
-    const result = await fetchTokenHolderProfiles(mockConfig, false);
+    const result = await fetchBadgeHolders(mockConfig);
     
     // With the current implementation, we can verify that the result contains arrays
     // and that they're properly initialized
@@ -337,11 +337,11 @@ describe('fetchTokenHolderProfiles', () => {
     mockedLoadAppConfig.mockReturnValue(mockConfig);
     
     // Override the mock implementations for this test to return empty arrays
-    const mocked = jest.requireMock('../../../src/badges/profiles/fetchTokenHolderProfiles') as MockedModule;
+    const mocked = jest.requireMock('../../src/badges/profiles/fetchBadgeHolder') as MockedModule;
     mocked.fetchTokenHoldersFromSnowtrace.mockResolvedValueOnce([]);
     mocked.fetchNftHoldersFromEthers.mockResolvedValueOnce([]);
     
-    const result = await fetchTokenHolderProfiles(mockConfig, false);
+    const result = await fetchBadgeHolders(mockConfig);
     
     // Both lists should be empty
     expect(result.basicHolders).toEqual([]);

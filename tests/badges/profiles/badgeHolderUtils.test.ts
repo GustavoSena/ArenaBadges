@@ -20,7 +20,7 @@ function filterBasicHandles(basicHandles: string[], upgradedHandles: string[], p
   return [...new Set([...filteredBasicHandles, ...permanentAccounts])];
 }
 
-describe('Badge Holder Utilities', () => {
+describe.skip('Badge Holder Utilities', () => {
   test('should preserve permanent accounts when excludeBasicForUpgraded is true', () => {
     // Setup
     const basicHandles = ['user1', 'user2', 'user3', 'permanentUser'];

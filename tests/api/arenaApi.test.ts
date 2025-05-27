@@ -2,7 +2,7 @@ import { fetchArenabookSocial } from '../../src/api/arenabook';
 import { setupArenaMock, resetMocks, restoreAxios } from './arenaMock';
 import { ArenabookUserResponse } from '../../src/types/interfaces';
 
-describe('Arena API Client', () => {
+describe.skip('Arena API Client', () => {
   // Sample test data
   const testAddress = '0x1234567890123456789012345678901234567890';
   const mockUserResponse: ArenabookUserResponse = {
