@@ -33,24 +33,22 @@ export function saveLeaderboard(leaderboard: Leaderboard, outputPath: string): v
 /**
  * Process wallet holdings and check eligibility for leaderboard
  * @param handle Twitter handle
- * @param addressRecord Record of addresses associated with the handle
+ * @param addressSet Set of addresses associated with the handle
  * @param walletToTokenHoldings Map of wallet addresses to token holdings
  * @param walletToNftHoldings Map of wallet addresses to NFT holdings
- * @param leaderboardTokens Array of token configs for the leaderboard
- * @param leaderboardNfts Array of NFT configs for the leaderboard
  * @param leaderboard Leaderboard implementation
  * @param sumOfBalances Whether to sum balances across wallets
  * @returns Holder entry if eligible, null otherwise
  */
 export async function processWalletHoldings(
   handle: string,
-  addressRecord: Record<string, string>,
+  addressSet: Set<string>,
   walletToTokenHoldings: Map<string, Map<string, TokenHolding>>,
   walletToNftHoldings: Map<string, Map<string, NftHolding>>,
   leaderboard: BaseLeaderboard,
   sumOfBalances: boolean
 ): Promise<HolderEntry | null> {
-  const addressesToUse = Object.keys(addressRecord);
+  const addressesToUse = Array.from(addressSet);
   // Skip if no address holdings
   if (addressesToUse.length === 0) return null;
     
@@ -66,42 +64,30 @@ export async function processWalletHoldings(
     
     // First process tokens that we already have holdings for
     for (const tokenConfig of leaderboard.getLeaderboardTokens()) {
-      const tokenAddress = tokenConfig.address;
-      
-      if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(tokenAddress)) {
-        const holding = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
-        tokenHoldingsMap = updateTokenHoldingsMap(tokenHoldingsMap, tokenAddress, holding, sumOfBalances, address);
+      if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(tokenConfig.address)) {
+        const holding = walletToTokenHoldings.get(address)!.get(tokenConfig.address)!;
+        tokenHoldingsMap = updateTokenHoldingsMap(tokenHoldingsMap, tokenConfig.address, holding, sumOfBalances, address);
       } else {
         // Store missing token configs for batch processing
         missingTokens.push(tokenConfig);
       }
     }
     
-    // Process missing tokens in batch
-    if (missingTokens.length > 0) {
-      tokenHoldingsMap = await processTokenBalances(
-        address,
-        missingTokens,
-        tokenHoldingsMap,
-        sumOfBalances
-      );
-    }
+    tokenHoldingsMap = await processTokenBalances(
+      address,
+      missingTokens,
+      tokenHoldingsMap,
+      sumOfBalances
+    );
     
     // Process NFT holdings
     if (walletToNftHoldings.has(address)) {
       const nftHoldings = walletToNftHoldings.get(address)!;
-      for (const [name, holding] of nftHoldings.entries()) {
-        if (nftHoldingsMap[name]) {
-          if (sumOfBalances) {
-            nftHoldingsMap[name].tokenBalance = (+nftHoldingsMap[name].tokenBalance! + +holding.tokenBalance!).toString();
-          } else {
-            if (holding.tokenBalance! > nftHoldingsMap[name].tokenBalance!) {
-              nftHoldingsMap[name] = holding;
-            }
-          }
-        } else {
-          nftHoldingsMap[name] = holding;
-        }
+      for (const [nftAddress, holding] of nftHoldings.entries()) {
+        if(sumOfBalances && nftHoldingsMap[nftAddress])
+          nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
+        else if(!nftHoldingsMap[nftAddress] || holding.tokenBalance > nftHoldingsMap[nftAddress].tokenBalance)
+          nftHoldingsMap[nftAddress] = holding;
       }
     }
   }

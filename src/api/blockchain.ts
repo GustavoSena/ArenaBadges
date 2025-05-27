@@ -169,9 +169,12 @@ export async function fetchNftHoldersFromEthers(
     const holders: NftHolder[] = Array.from(holderMap.entries())
       .filter(([_, count]) => count >= minBalance)
       .map(([address, count]) => ({
-        address,
-        tokenCount: count,
-        tokenName
+        address: address.toLowerCase(),
+        holding: {
+          tokenAddress: contractAddress,
+          tokenSymbol: tokenName,
+          tokenBalance: count.toString()
+        }
       }));
     
     logger.log(`Found ${holders.length} holders with at least ${minBalance} ${tokenName}`);

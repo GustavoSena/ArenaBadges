@@ -2,6 +2,7 @@ import axios from 'axios';
 import { TokenHolder } from '../types/interfaces';
 import { sleep, formatTokenBalance } from '../utils/helpers';
 import logger from '../utils/logger';
+import {REQUEST_DELAY_MS} from '../types/constants';
 
 let snowtraceApiKey: string = '';
 
@@ -79,9 +80,9 @@ export async function fetchTokenHoldersFromSnowtrace(
               consecutiveLowBalanceHolders = 0;
               
               holders.push({
-                address,
+                address: address.toLowerCase(),
                 holding: {
-                  tokenAddress: tokenAddress,
+                  tokenAddress: tokenAddress.toLowerCase(),
                   tokenSymbol: symbol,
                   tokenBalance: balance,
                   tokenDecimals: tokenDecimals,
@@ -114,7 +115,7 @@ export async function fetchTokenHoldersFromSnowtrace(
           } else {
             page++;
             // Add delay between pages to avoid rate limiting
-            await sleep(1000);
+            await sleep(REQUEST_DELAY_MS);
           }
         } else {
           hasMorePages = false;

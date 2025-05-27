@@ -149,22 +149,16 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
         if (!walletToNftHoldings.has(holder.address))
           walletToNftHoldings.set(holder.address, new Map<string, NftHolding>());
         
-        if (holder.tokenCount >= minNftBalance)
+        if (+holder.holding.tokenBalance >= minNftBalance)
           nftValidAddresses.add(holder.address);
         
         // Add NFT holding to the wallet's map
-        const nftHolding: NftHolding = {
-          tokenAddress: nft.address,
-          tokenSymbol: nft.name,
-          tokenBalance: holder.tokenCount.toString()
-        };
-        
-        walletToNftHoldings.get(holder.address)!.set(nft.address, nftHolding);
+        walletToNftHoldings.get(holder.address)!.set(nft.address, holder.holding);
       }
     }
     
     // Step 6: Create a map of Twitter handle to address holdings
-    let userWallets = new Map<string, Record<string, string>>();
+    let userWallets = new Map<string, Set<string>>();
     // Get wallet mapping file path from config (if it exists)
     const walletMappingFile = appConfig.projectConfig.walletMappingFile;
 
@@ -184,10 +178,15 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
         
         const social = await getArenaAddressForHandle(handle);
         
-        if (social && social.address && !(userWallets.get(handle)![social.address.toLowerCase()])) {
-          logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
-          userWallets.get(handle)![social.address.toLowerCase()] = "arena";
-        } else logger.warn(`No new Arena address found for handle ${handle}`);
+        if (social && social.address) {
+          const normalizedAddress = social.address.toLowerCase();
+          if (!userWallets.get(handle)!.has(normalizedAddress)) {
+            logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
+            userWallets.get(handle)!.add(normalizedAddress);
+          } else 
+            logger.warn(`Address ${normalizedAddress} already exists for handle ${handle}`);
+        } else 
+          logger.warn(`No new Arena address found for handle ${handle}`);
         await sleep(200);
       }
     }
@@ -203,6 +202,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     
     logger.log(`Found ${addressessToProcess.length} unmapped wallets with token or NFT holdings`);
     
+    let promises: Promise<void>[] = [];
     // Process unmapped wallets in batches to avoid rate limiting
     for (let i = 0; i < addressessToProcess.length; i += BATCH_SIZE) {
       const batch = addressessToProcess.slice(i, i + BATCH_SIZE);
@@ -210,7 +210,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
       logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(addressessToProcess.length / BATCH_SIZE)}...`);
       
       // Process wallets in parallel with rate limiting
-      const promises = batch.map(async (walletAddress) => {
+      promises.push(...batch.map(async (walletAddress) => {
         try {
           // Fetch Arena profile for this wallet
           const profile = await fetchArenabookSocial(walletAddress);
@@ -223,23 +223,21 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
           
           const twitterHandle = profile.twitter_handle.toLowerCase();
 
-          if (!userWallets.has(twitterHandle)){
-            userWallets.set(twitterHandle, {});
-          }
+          if (!userWallets.has(twitterHandle))
+            userWallets.set(twitterHandle, new Set<string>());
           
-          userWallets.get(twitterHandle)![walletAddress] = "arena";
+          userWallets.get(twitterHandle)!.add(walletAddress);
           
         } catch (error) {
           logger.error(`Error processing wallet ${walletAddress}:`, error);
         }
         
-      });
-
-      await Promise.all(promises);
+      }));
 
       await sleep(REQUEST_DELAY_MS);
     }
-  
+    
+    await Promise.all(promises);
     // Step 9: Check eligibility for basic and upgraded badges
     logger.log('Checking eligibility for badges...');
     
@@ -253,7 +251,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
       if (permanentAccounts.includes(twitterHandle))
         continue;
       
-      const addressesToUse = Object.keys(addressRecord);
+      const addressesToUse = Array.from(addressRecord);
       // Skip if no address holdings
       if (addressesToUse.length === 0) continue;
       
@@ -274,10 +272,8 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
           if (walletToTokenHoldings.has(address) && walletToTokenHoldings.get(address)!.has(tokenAddress)) {
             const holding = walletToTokenHoldings.get(address)!.get(tokenAddress)!;
             tokenHoldingsMap = updateTokenHoldingsMap(tokenHoldingsMap, tokenAddress, holding, sumOfBalances, address);
-          } else {
-            // Store missing token configs for batch processing
+          } else 
             missingTokens.push(tokenConfig);
-          }
         }
         
         // Process missing tokens in batch
@@ -289,8 +285,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
         );
         
         if(walletToNftHoldings.has(address)){
-          const nftHoldings = walletToNftHoldings.get(address)!;
-          for (const [nftAddress, holding] of nftHoldings.entries()) {
+          for (const [nftAddress, holding] of walletToNftHoldings.get(address)!.entries()) {
             if(sumOfBalances && nftHoldingsMap[nftAddress]){
               nftHoldingsMap[nftAddress].tokenBalance = (+nftHoldingsMap[nftAddress].tokenBalance + +holding.tokenBalance).toString();
             }else if(!nftHoldingsMap[nftAddress] || holding.tokenBalance > nftHoldingsMap[nftAddress].tokenBalance){
@@ -400,20 +395,28 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     const upgradedEligibleAddresses = new Set<string>();
     
     for (const [handle, holdings] of userWallets.entries()) {
-      if (basicEligibleHandles.has(handle))
-        Object.keys(holdings).forEach((holding) => {
-          basicEligibleAddresses.add(holding);
-        });
+      if (basicEligibleHandles.has(handle)) {
+        for (const address of holdings) {
+          basicEligibleAddresses.add(address);
+        }
+      }
       
-      if (upgradedEligibleHandles.has(handle)) 
-        Object.keys(holdings).forEach((holding) => {
-          upgradedEligibleAddresses.add(holding);
-        });
+      if (upgradedEligibleHandles.has(handle)) {
+        for (const address of holdings) {
+          upgradedEligibleAddresses.add(address);
+        }
+      }
     }
-    
     // Add addresses from wallet mapping for permanent accounts that might not have been processed
     for (const handle of permanentAccounts) {
-      const address = userWallets.has(handle) ? Object.keys(userWallets.get(handle)!)[0] : Object.keys(await getArenaAddressForHandle(handle))[0];
+      let address: string | undefined;
+      if (userWallets.has(handle) && userWallets.get(handle)!.size > 0) {
+        address = Array.from(userWallets.get(handle)!)[0];
+      } else {
+        const arenaResponse = await getArenaAddressForHandle(handle);
+        address = arenaResponse.address || undefined;
+      }
+      
       if (address) {
         basicEligibleAddresses.add(address);
         upgradedEligibleAddresses.add(address);

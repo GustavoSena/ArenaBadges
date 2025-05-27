@@ -52,7 +52,7 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
     const normalizedMapping: Record<string, string> = {};
     
     for (const [address, handle] of Object.entries(mappingData)) {
-      normalizedMapping[address.toLowerCase()] = handle as string;
+      normalizedMapping[address.toLowerCase()] = (handle as string).toLowerCase();
     }
     
     return normalizedMapping;
@@ -65,14 +65,21 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
 /**
  * Get the inverse mapping (Twitter handle to wallet address)
  * @param walletMapping The wallet-to-twitter mapping
- * @returns A record mapping Twitter handles to wallet addresses
+ * @returns A map of Twitter handles to sets of wallet addresses
  */
-export function getHandleToWalletMapping(walletMapping: Record<string, string>): Map<string,Record<string, string>> {
-  const handleToWallet: Map<string,Record<string, string>> = new Map<string,Record<string, string>>();
+export function getHandleToWalletMapping(walletMapping: Record<string, string>): Map<string, Set<string>> {
+  const handleToWallet: Map<string, Set<string>> = new Map<string, Set<string>>();
   
   for (const [address, handle] of Object.entries(walletMapping)) {
     logger.verboseLog(`Mapping ${address} to ${handle}`);
-    handleToWallet.set(handle.toLowerCase(), { [address.toLowerCase()]: 'mapping'});
+    const normalizedHandle = handle.toLowerCase();
+    const normalizedAddress = address.toLowerCase();
+    
+    if (!handleToWallet.has(normalizedHandle)) {
+      handleToWallet.set(normalizedHandle, new Set<string>());
+    }
+    
+    handleToWallet.get(normalizedHandle)!.add(normalizedAddress);
   }
   
   return handleToWallet;
@@ -95,7 +102,7 @@ export async function getArenaAddressForHandle(handle: string): Promise<ArenaWal
       const address = response.data.user.dynamicAddress;
       const picture_url = response.data.user.twitter_pfp_url;
 
-      return { address, picture_url};
+      return { address: address.toLowerCase(), picture_url};
     }
 
     return { address: "", picture_url: ""};

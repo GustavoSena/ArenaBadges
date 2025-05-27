@@ -183,7 +183,7 @@ export async function fetchTokenHoldersFromMoralis(
                 holders.push({
                   address: holder.owner_address.toLowerCase(),
                   holding: {
-                    tokenAddress: tokenAddress,
+                    tokenAddress: tokenAddress.toLowerCase(),
                     tokenSymbol: tokenSymbol,
                     tokenBalance: holder.balance,
                     tokenDecimals: tokenDecimals,

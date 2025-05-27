@@ -73,25 +73,15 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       
       // Add NFT holdings to the mapping
       for (const holder of nftHolders) {
-        const address = holder.address.toLowerCase();
-        if (holder.tokenCount >= minNftBalance) {
-          qualifyedNftHolders.add(address);
-        }
+        if (+holder.holding.tokenBalance >= minNftBalance) 
+          qualifyedNftHolders.add(holder.address);
         
         // Initialize NFT holdings map for this wallet if it doesn't exist
-        if (!walletToNftHoldings.has(address)) {
-          walletToNftHoldings.set(address, new Map<string, NftHolding>());
-        }
-        
-        // Create NFT holding
-        const nftHolding: NftHolding = {
-          tokenAddress: nftConfig.address,
-          tokenSymbol: nftConfig.name,
-          tokenBalance: holder.tokenCount.toString()
-        };
+        if (!walletToNftHoldings.has(holder.address)) 
+          walletToNftHoldings.set(holder.address, new Map<string, NftHolding>());
         
         // Add to wallet's NFT holdings
-        walletToNftHoldings.get(address)!.set(nftConfig.name, nftHolding);
+        walletToNftHoldings.get(holder.address)!.set(holder.holding.tokenAddress, holder.holding);
       }
     }
     
@@ -100,9 +90,9 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
     
     for (const tokenConfig of leaderboardTokens) {
       let minTokenBalance = await leaderboard.calculateDynamicMinimumBalance(tokenConfig.symbol);
-      if (sumOfBalances) {
+      if (sumOfBalances)
         minTokenBalance = minTokenBalance * 0.5;
-      }
+      
       logger.verboseLog(`Fetching ${tokenConfig.symbol} token holders (min balance: ${minTokenBalance})...`);
       
       const tokenHolders = await fetchTokenHolders(
@@ -116,30 +106,20 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       
       // Add token holdings to the mapping
       for (const holder of tokenHolders) {
-        const address = holder.address.toLowerCase();
         
         // Initialize token holdings map for this wallet if it doesn't exist
-        if (!walletToTokenHoldings.has(address)) {
-          walletToTokenHoldings.set(address, new Map<string, TokenHolding>());
-        }
+        if (!walletToTokenHoldings.has(holder.address))
+          walletToTokenHoldings.set(holder.address, new Map<string, TokenHolding>());
         
-        // Create token holding
-        const tokenHolding: TokenHolding = {
-          tokenAddress: tokenConfig.address,
-          tokenSymbol: tokenConfig.symbol,
-          tokenBalance: holder.holding.tokenBalance,
-          tokenDecimals: tokenConfig.decimals,
-          balanceFormatted: holder.holding.balanceFormatted
-        };
-        logger.verboseLog(`Adding token holding for ${tokenConfig.symbol} for wallet ${address}: ${holder.holding.tokenBalance}`);
+        logger.verboseLog(`Adding token holding for ${tokenConfig.symbol} for wallet ${holder.address}: ${holder.holding.tokenBalance}`);
         // Add to wallet's token holdings
-        walletToTokenHoldings.get(address)!.set(tokenConfig.symbol, tokenHolding);
+        walletToTokenHoldings.get(holder.address)!.set(holder.holding.tokenAddress, holder.holding);
         
       }
     }
     
-    // Step 4: Create a map of twitter_handle to wallet and origin
-    const userWallets = new Map<string, Record<string, string>>();
+    // Step 4: Create a map of twitter_handle to wallet addresses
+    const userWallets = new Map<string, Set<string>>();
     
     // Step 5: Check which wallets are in the wallet mapping file
     logger.verboseLog('\nProcessing wallet mappings...');
@@ -160,16 +140,12 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       
       // Process wallets from mapping
       for (const [address, handle] of Object.entries(walletMapping)) {
-        const lowerAddress = address.toLowerCase();
-        const lowerHandle = handle.toLowerCase();
-        
-        // Initialize user holdings array if it doesn't exist
-        if (!userWallets.has(lowerHandle)) {
-          userWallets.set(lowerHandle, {});
-        }
+        // Initialize user holdings set if it doesn't exist
+        if (!userWallets.has(handle))
+          userWallets.set(handle, new Set<string>());
         
         // Add to user holdings
-        userWallets.get(lowerHandle)![lowerAddress] = "mapping";
+        userWallets.get(handle)!.add(address);
       }
     } else 
       logger.verboseLog('No wallet mapping file specified');
@@ -185,11 +161,11 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
         const social = await getArenaAddressForHandle(handle);
         
         if (social) {
-          arenaPictureMapping.set(social.address.toLowerCase(), social.picture_url);
-          allAddresses.delete(social.address.toLowerCase());
-          if (!(userWallets.get(handle)![social.address.toLowerCase()])){
+          arenaPictureMapping.set(social.address, social.picture_url);
+          allAddresses.delete(social.address);
+          if (!userWallets.get(handle)!.has(social.address)) {
             logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
-            userWallets.get(handle)![social.address.toLowerCase()] = "arena";
+            userWallets.get(handle)!.add(social.address);
           }
         }
         else 
@@ -202,14 +178,14 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
     // Process addresses that haven't been processed yet
     const addressesToProcess = Array.from(allAddresses);
     logger.verboseLog(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
-    
+    let promises: Promise<void>[] = [];
     for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
       const batch = addressesToProcess.slice(i, i + BATCH_SIZE);
       
       logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(addressesToProcess.length / BATCH_SIZE)}...`);
       
       // Process wallets in parallel with rate limiting
-      const promises = batch.map(async (address) => {
+      promises.push(...batch.map(async (address) => {
         try {
           // Fetch Arena profile for this wallet
           const social = await fetchArenabookSocial(address);
@@ -224,25 +200,24 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
           if(social.twitter_pfp_url)
             arenaPictureMapping.set(lowerHandle, social.twitter_pfp_url);
 
-          // Initialize user holdings array if it doesn't exist
-          if (!userWallets.has(lowerHandle) )
-            userWallets.set(lowerHandle, {});  
-
-          // Add to user holdings
-          userWallets.get(lowerHandle)![address] = "arena";
+          // Initialize user holdings set if it doesn't exist
+          if (!userWallets.has(lowerHandle))
+            userWallets.set(lowerHandle, new Set<string>());
+          
+          userWallets.get(lowerHandle)!.add(address);
         } catch (error) {
           if (error instanceof Error) logger.error(`Error processing wallet ${address}:`, error.message);
           else logger.verboseLog(`Error processing wallet ${address}: ${error}`, `Error processing wallet ${address}`);
         }
 
-      });
+      }));
       
-      // Wait for all promises in this batch to complete before moving to the next batch
-      await Promise.all(promises);
       // Add delay between requests to avoid rate limiting
       await sleep(REQUEST_DELAY_MS);
     }
     
+    // Wait for all promises in this batch to complete before moving to the next batch
+    await Promise.all(promises);
     // Step 7: Check eligibility and calculate points
     logger.verboseLog('\nChecking eligibility and calculating points...');
     
@@ -255,7 +230,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
     const totalBatches = Math.ceil(userWalletsArray.length / BATCH_SIZE);
     
     logger.verboseLog(`Processing ${userWalletsArray.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
-    
+    let batchPromises: Promise<HolderEntry | null>[] = [];
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
       const startIdx = batchIndex * BATCH_SIZE;
       const endIdx = Math.min(startIdx + BATCH_SIZE, userWalletsArray.length);
@@ -264,7 +239,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       logger.verboseLog(`Processing batch ${batchIndex + 1}/${totalBatches} with ${currentBatch.length} users`);
       
       // Process each user in the batch in parallel
-      const batchPromises = currentBatch.map(async ([handle, addressRecord]) => {
+      batchPromises.push(...currentBatch.map(async ([handle, addressRecord]) => {
         // Use the extracted function to process wallet holdings and check eligibility
         return processWalletHoldings(
           handle,
@@ -274,17 +249,16 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
           leaderboard,
           sumOfBalances
         );
-      });
+      }));
 
       await sleep(REQUEST_DELAY_MS);
       
-      const batchResults = await Promise.all(batchPromises);
-      // Add valid results to the holder points array
-      holderPointsArray.push(...batchResults.filter(r => r !== null));
-
-      logger.verboseLog(`Completed batch ${batchIndex + 1}/${totalBatches}, processed ${holderPointsArray.length} eligible users`);
+      logger.verboseLog(`Completed batch ${batchIndex + 1}/${totalBatches}`);
     }
-    
+    const batchResults = await Promise.all(batchPromises);
+    // Add valid results to the holder points array
+    holderPointsArray.push(...batchResults.filter(r => r !== null));
+
     for (const entry of holderPointsArray) {
       if (entry.twitterHandle && !entry.profileImageUrl) {
         entry.profileImageUrl = arenaPictureMapping.get(entry.twitterHandle) || null;
