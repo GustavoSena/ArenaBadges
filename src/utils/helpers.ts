@@ -4,6 +4,7 @@ import { TokenHolder } from '../types/interfaces';
 import { fetchTokenBalanceWithMoralis, fetchTokenHoldersFromMoralis } from '../api/moralis';
 import { fetchTokenHoldersFromSnowtrace } from '../api/snowtrace';
 import { fetchTokenBalanceWithEthers } from '../api/blockchain';
+import logger from './logger';
 
 
 /**
@@ -20,7 +21,7 @@ export function formatTokenBalance(balance: string, decimals: number = 18): numb
   try {
     return parseFloat(ethers.formatUnits(balance, decimals));
   } catch (error) {
-    console.warn(`Error formatting balance ${balance} with ${decimals} decimals:`, error);
+    logger.error(`Error formatting balance ${balance} with ${decimals} decimals:`, error);
     return +balance / Math.pow(10, decimals);
   }
 }
@@ -45,20 +46,19 @@ export async function fetchTokenHolders(
   tokenAddress: string, 
   tokenSymbol: string,
   minBalance: number = 0,
-  tokenDecimals: number,
-  verbose: boolean = false
+  tokenDecimals: number
 ): Promise<TokenHolder[]> {
   let tokenHolders: TokenHolder[] = [];
   try{
-    console.log(`Fetching token holders for ${tokenAddress} from Moralis...`);
-    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, tokenDecimals, minBalance, verbose);
+    logger.log(`Fetching token holders for ${tokenAddress} from Moralis...`);
+    tokenHolders = await fetchTokenHoldersFromMoralis(tokenAddress, tokenSymbol, tokenDecimals, minBalance);
   }catch(error){
-    console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+    logger.error(`Error fetching token holders for ${tokenAddress}:`, error);
     try {
-      console.log(`Fetching token holders for ${tokenAddress} from Snowtrace...`);
-      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals, verbose);
+      logger.log(`Fetching token holders for ${tokenAddress} from Snowtrace...`);
+      tokenHolders = await fetchTokenHoldersFromSnowtrace(tokenAddress, tokenSymbol, minBalance, tokenDecimals);
     } catch (error) {
-      console.error(`Error fetching token holders for ${tokenAddress}:`, error);
+      logger.error(`Error fetching token holders for ${tokenAddress}:`, error);
       throw error;
     }
   }
@@ -71,27 +71,25 @@ export async function fetchTokenHolders(
  * @param tokenAddress The token contract address
  * @param holderAddress The holder address
  * @param tokenDecimals The token decimals
- * @param verbose Whether to show verbose logging
  * @returns The token balance
  */
 export async function fetchTokenBalance(
   tokenAddress: string,
   holderAddress: string,
-  tokenDecimals: number,
-  verbose: boolean = false
+  tokenDecimals: number
 ): Promise<number> {
   try {
-    if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
-    const balance = await fetchTokenBalanceWithEthers(tokenAddress, holderAddress, tokenDecimals, verbose);
+    logger.log(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
+    const balance = await fetchTokenBalanceWithEthers(tokenAddress, holderAddress, tokenDecimals);
     return balance;
   } catch (error) {
-    console.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress} with ethers, try with Moralis`);
+    logger.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress} with ethers, try with Moralis`);
     try {
-      if (verbose) console.log(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
-      const balance = await fetchTokenBalanceWithMoralis(tokenAddress, holderAddress, tokenDecimals, verbose);
+      logger.verboseLog(`Fetching token balance for ${tokenAddress} for address ${holderAddress}...`);
+      const balance = await fetchTokenBalanceWithMoralis(tokenAddress, holderAddress, tokenDecimals);
       return balance;
     } catch (error) {
-      console.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress}:`, error);
+      logger.error(`Error fetching token balance for ${tokenAddress} for address ${holderAddress}:`, error);
       throw error;
     }
   }

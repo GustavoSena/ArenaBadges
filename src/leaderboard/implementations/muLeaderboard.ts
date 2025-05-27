@@ -1,7 +1,9 @@
-import { BaseLeaderboard } from '../../types/leaderboard';
+import { BaseLeaderboard, LeaderboardConfig } from '../../types/leaderboard';
 import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { ethers } from 'ethers';
 import { LeaderboardTokenConfig, LeaderboardNftConfig, HolderPoints } from '../../types/leaderboard';
+import logger from '../../utils/logger';
+import { formatTokenBalance } from '../../utils/helpers';
 /**
  * MU leaderboard implementation with MU-specific point calculation logic
  */
@@ -13,8 +15,8 @@ export class MuLeaderboard extends BaseLeaderboard {
    * Constructor for the MU leaderboard
    * @param provider The ethers provider for blockchain interactions
    */
-  constructor(provider: ethers.JsonRpcProvider, excludedAccounts: string[]) {
-    super(provider, excludedAccounts);
+  constructor(provider: ethers.JsonRpcProvider, leaderboardConfig: LeaderboardConfig) {
+    super(provider, leaderboardConfig);
     
     // ABI for the price provider contract
     const priceProviderAbi = [
@@ -28,6 +30,18 @@ export class MuLeaderboard extends BaseLeaderboard {
       provider
     );
   }
+
+  public getLeaderboardTokens(): LeaderboardTokenConfig[] {
+    return this.leaderboardConfig.weights.tokens;
+  }
+
+  public getLeaderboardNFTs(): LeaderboardNftConfig[] {
+    return this.leaderboardConfig.weights.nfts;
+  }
+
+  public getSumOfBalances(): boolean {
+    return this.leaderboardConfig.sumOfBalances;
+  }
   
   /**
    * Calculate points for a holder
@@ -35,7 +49,7 @@ export class MuLeaderboard extends BaseLeaderboard {
    * @param nftHoldings NFT holdings
    * @returns Total points
    */
-  public async calculatePoints(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[], verbose?: boolean): Promise<HolderPoints> {
+  public async calculatePoints(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[]): Promise<HolderPoints> {
     let holderPoints: HolderPoints = {
       totalPoints: 0,
       tokenPoints: {},
@@ -44,20 +58,19 @@ export class MuLeaderboard extends BaseLeaderboard {
     
     // Calculate points for tokens
     for (const holding of tokenHoldings) {
-
       holderPoints.tokenPoints[holding.tokenSymbol] = 2 * holding.balanceFormatted! * await this.getTokenMultiplier(holding.tokenSymbol);
-      if(verbose) console.log(`Token points for ${holding.tokenSymbol} for balance ${holding.balanceFormatted}: ${holderPoints.tokenPoints[holding.tokenSymbol]}`);
+      logger.verboseLog(`Token points for ${holding.tokenSymbol} for balance ${holding.balanceFormatted}: ${holderPoints.tokenPoints[holding.tokenSymbol]}`);
       holderPoints.totalPoints += holderPoints.tokenPoints[holding.tokenSymbol];
     }
     
     // Calculate points for NFTs
     for (const holding of nftHoldings) {
         holderPoints.nftPoints[holding.tokenSymbol] = 2 * +holding.tokenBalance * await this.getTokenMultiplier(holding.tokenSymbol);
-        if(verbose) console.log(`NFT points for ${holding.tokenSymbol} for balance ${holding.tokenBalance}: ${holderPoints.nftPoints[holding.tokenSymbol]}`);
+        logger.verboseLog(`NFT points for ${holding.tokenSymbol} for balance ${holding.tokenBalance}: ${holderPoints.nftPoints[holding.tokenSymbol]}`);
         holderPoints.totalPoints += holderPoints.nftPoints[holding.tokenSymbol];
     }
     
-    if (verbose) console.log(`Total points for ${tokenHoldings.length} token holdings and ${nftHoldings.length} NFT holdings: ${holderPoints.totalPoints}`);
+    logger.verboseLog(`Total points for ${tokenHoldings.length} token holdings and ${nftHoldings.length} NFT holdings: ${holderPoints.totalPoints}`);
     return holderPoints;
   }
   
@@ -67,7 +80,7 @@ export class MuLeaderboard extends BaseLeaderboard {
    * @param nftHoldings NFT holdings
    * @returns Whether the holder is eligible
    */
-  public async checkEligibility(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[], tokens: LeaderboardTokenConfig[], nfts: LeaderboardNftConfig[], verbose?: boolean): Promise<boolean> {
+  public async checkEligibility(tokenHoldings: TokenHolding[], nftHoldings: NftHolding[]): Promise<boolean> {
     
     // Check if the holder meets the minimum balance for any token
     let meetsTokenMinimum = false;
@@ -77,9 +90,8 @@ export class MuLeaderboard extends BaseLeaderboard {
       // Dynamic minimum balances based on MUG/MU price
 
       let minBalance = 100 / await this.getTokenMultiplier(holding.tokenSymbol);
-      if (holding.tokenBalance === '0') {
+      if (holding.tokenBalance === '0')
         continue; // Skip tokens with zero balance
-      }
       
       // Check if the holder meets the minimum balance
       if (holding.balanceFormatted! >= minBalance) {
@@ -93,9 +105,8 @@ export class MuLeaderboard extends BaseLeaderboard {
 
       let minBalance = Math.ceil(100 / await this.getTokenMultiplier(holding.tokenSymbol));
       const formattedBalance = +holding.tokenBalance;
-      if (formattedBalance === 0) {
+      if (formattedBalance === 0) 
         continue; // Skip tokens with zero balance
-      }
       
       // Check if the holder meets the minimum balance
       if (formattedBalance >= minBalance) {
@@ -117,12 +128,12 @@ export class MuLeaderboard extends BaseLeaderboard {
       if (this.mugMuPrice === 0) {
         const price = await this.priceProviderContract.getMugMuPrice();
         // Remove 18 decimal places as specified
-        this.mugMuPrice = +ethers.formatUnits(price, 18);
-        console.log(`Retrieved MUG/MU price from contract: ${this.mugMuPrice}`);
+        this.mugMuPrice = formatTokenBalance(price, 18);
+        logger.log(`Retrieved MUG/MU price from contract: ${this.mugMuPrice}`);
       }
       return this.mugMuPrice;
     } catch (error) {
-      console.error('Error getting MUG/MU price:', error);
+      logger.error('Error getting MUG/MU price:', error);
       // Default fallback price if contract call fails
       return 2.0;
     }

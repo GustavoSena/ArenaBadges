@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { NftConfig, NftHolding, TokenConfig, TokenHolding } from "./interfaces";
 import { ethers } from 'ethers';
 
@@ -118,11 +119,11 @@ export interface Leaderboard {
  */
 export abstract class BaseLeaderboard {
   protected provider: ethers.JsonRpcProvider;
-  protected excludedAccounts: string[] = [];
+  protected leaderboardConfig: LeaderboardConfig;
   
-  constructor(provider: ethers.JsonRpcProvider, excludedAccounts: string[]) {
+  constructor(provider: ethers.JsonRpcProvider, leaderboardConfig: LeaderboardConfig) {
     this.provider = provider;
-    this.excludedAccounts = excludedAccounts;
+    this.leaderboardConfig = leaderboardConfig;
   }
   
   /**
@@ -132,10 +133,7 @@ export abstract class BaseLeaderboard {
    */
   abstract calculatePoints(
     tokenHoldings: TokenHolding[],
-    nftHoldings: NftHolding[],
-    tokens: LeaderboardTokenConfig[],
-    nfts: LeaderboardNftConfig[],
-    verbose?: boolean
+    nftHoldings: NftHolding[]
   ): Promise<HolderPoints>;
   
   /**
@@ -145,10 +143,7 @@ export abstract class BaseLeaderboard {
    */
   abstract checkEligibility(
     tokenHoldings: TokenHolding[],
-    nftHoldings: NftHolding[],
-    tokens: LeaderboardTokenConfig[],
-    nfts: LeaderboardNftConfig[],
-    verbose?: boolean
+    nftHoldings: NftHolding[]
   ): Promise<boolean>;
   
   /**
@@ -161,6 +156,33 @@ export abstract class BaseLeaderboard {
    * @returns The calculated minimum balance
    */
   abstract calculateDynamicMinimumBalance(tokenSymbol?: string): Promise<number>;
+
+  /**
+   * Get the leaderboard tokens
+   */
+  abstract getLeaderboardTokens(): LeaderboardTokenConfig[];
+
+  /**
+   * Get the leaderboard NFTs
+   */
+  abstract getLeaderboardNFTs(): LeaderboardNftConfig[];
+
+  /**
+   * Get the leaderboard configuration
+   */
+  abstract getSumOfBalances(): boolean;
+
+
+  filterExcludedAccounts(holderPoints: HolderEntry[]): HolderEntry[] {
+    return holderPoints.filter(holder => {
+      if (holder.twitterHandle && this.leaderboardConfig.excludedAccounts.includes(holder.twitterHandle.toLowerCase())) {
+        logger.log(`Excluding account from leaderboard: ${holder.twitterHandle}`);
+        return false;
+      }
+      return true;
+    });
+  }
+
   /**
    * Generate a leaderboard from holder points
    * @param holderPoints Holder points
@@ -170,8 +192,8 @@ export abstract class BaseLeaderboard {
     try {
       // Filter out excluded accounts
       const filteredHolders = holderPoints.filter(holder => {
-        if (holder.twitterHandle && this.excludedAccounts.includes(holder.twitterHandle.toLowerCase())) {
-          console.log(`Excluding account from leaderboard: ${holder.twitterHandle}`);
+        if (holder.twitterHandle && this.leaderboardConfig.excludedAccounts.includes(holder.twitterHandle.toLowerCase())) {
+          logger.log(`Excluding account from leaderboard: ${holder.twitterHandle}`);
           return false;
         }
         return true;
@@ -201,7 +223,7 @@ export abstract class BaseLeaderboard {
       
       return leaderboard;
     } catch (error) {
-      console.error('Error generating leaderboard:', error);
+      logger.error('Error generating leaderboard:', error);
       throw error;
     }
   }

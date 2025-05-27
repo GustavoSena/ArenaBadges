@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Leaderboard } from '../types/leaderboard';
+import logger from './logger';
 
 /**
  * Generate HTML for the leaderboard with pagination
@@ -16,6 +17,10 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
     Object.keys(entry.tokenPoints).forEach(token => tokenTypes.add(token));
     Object.keys(entry.nftPoints).forEach(nft => nftTypes.add(nft));
   });
+  
+  // Convert sets to sorted arrays
+  const tokenTypesArray = Array.from(tokenTypes).sort();
+  const nftTypesArray = Array.from(nftTypes).sort();
   
   // Calculate pagination info
   const entriesPerPage = 100;
@@ -57,14 +62,20 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
         maximumFractionDigits: 0
       });
       
-      // Format token points
-      const muPoints = entry.tokenPoints.MU ? entry.tokenPoints.MU.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
-      const mugPoints = entry.tokenPoints.MUG ? entry.tokenPoints.MUG.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
-      const muoPoints = entry.tokenPoints.MUO ? entry.tokenPoints.MUO.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
-      const muvPoints = entry.tokenPoints.MUV ? entry.tokenPoints.MUV.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
+      // Format token and NFT points
+      const formattedTokenPoints: Record<string, string> = {};
+      tokenTypesArray.forEach(token => {
+        formattedTokenPoints[token] = entry.tokenPoints[token] 
+          ? entry.tokenPoints[token].toLocaleString(undefined, { maximumFractionDigits: 0 }) 
+          : '0';
+      });
       
-      // Format NFT points
-      const muPupsPoints = entry.nftPoints['Mu Pups'] ? entry.nftPoints['Mu Pups'].toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
+      const formattedNftPoints: Record<string, string> = {};
+      nftTypesArray.forEach(nft => {
+        formattedNftPoints[nft] = entry.nftPoints[nft] 
+          ? entry.nftPoints[nft].toLocaleString(undefined, { maximumFractionDigits: 0 }) 
+          : '0';
+      });
       
       // Twitter handle with link
       const twitterHandle = entry.twitterHandle ? 
@@ -97,11 +108,8 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
             </a>
           </td>
           <td class="points">${formattedPoints}</td>
-          <td class="points">${muPoints}</td>
-          <td class="points">${mugPoints}</td>
-          <td class="points">${muoPoints}</td>
-          <td class="points">${muvPoints}</td>
-          <td class="points">${muPupsPoints}</td>
+          ${tokenTypesArray.map(token => `<td class="points">${formattedTokenPoints[token]}</td>`).join('')}
+          ${nftTypesArray.map(nft => `<td class="points">${formattedNftPoints[nft]}</td>`).join('')}
         </tr>
       `;
     }).join('');
@@ -115,11 +123,8 @@ export function generateLeaderboardHtml(leaderboard: Leaderboard, config?: any):
               <th>Twitter</th>
               <th>Address</th>
               <th>Total Points</th>
-              <th>MU Points</th>
-              <th>MUG Points</th>
-              <th>MUO Points</th>
-              <th>MUV Points</th>
-              <th>Mu Pups Points</th>
+              ${tokenTypesArray.map(token => `<th>${token} Points</th>`).join('')}
+              ${nftTypesArray.map(nft => `<th>${nft} Points</th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -571,9 +576,9 @@ export function saveLeaderboardHtml(leaderboard: Leaderboard, outputPath: string
     
     // Ensure the directory exists
     const outputDir = path.dirname(outputPath);
-    if (!fs.existsSync(outputDir)) {
+    if (!fs.existsSync(outputDir)) 
       fs.mkdirSync(outputDir, { recursive: true });
-    }
+    
     
     // Copy logo file if specified
     if (config?.logoPath) {
@@ -583,24 +588,24 @@ export function saveLeaderboardHtml(leaderboard: Leaderboard, outputPath: string
       const destLogoPath = path.join(outputAssetsDir, logoPath);
       
       // Create assets directory in output folder if it doesn't exist
-      if (!fs.existsSync(outputAssetsDir)) {
+      if (!fs.existsSync(outputAssetsDir)) 
         fs.mkdirSync(outputAssetsDir, { recursive: true });
-      }
+      
       
       // Copy the logo file
       if (fs.existsSync(sourceLogoPath)) {
         fs.copyFileSync(sourceLogoPath, destLogoPath);
-        console.log(`Copied logo from ${sourceLogoPath} to ${destLogoPath}`);
-      } else {
-        console.warn(`Logo file not found at ${sourceLogoPath}`);
-      }
+        logger.log(`Copied logo from ${sourceLogoPath} to ${destLogoPath}`);
+      } else 
+        logger.warn(`Logo file not found at ${sourceLogoPath}`);
+      
     }
     
     // Save the HTML to a file
     fs.writeFileSync(outputPath, html);
-    console.log(`Leaderboard HTML saved to ${outputPath}`);
+    logger.log(`Leaderboard HTML saved to ${outputPath}`);
   } catch (error) {
-    console.error('Error saving leaderboard HTML:', error);
+    logger.error('Error saving leaderboard HTML:', error);
     throw error;
   }
 }

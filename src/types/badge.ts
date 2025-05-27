@@ -20,7 +20,7 @@ export interface BadgeConfig {
     /** Basic tier requirements */
     basic: BadgeRequirement;
     /** Upgraded tier requirements (optional) */
-    upgraded: BadgeRequirement;
+    upgraded?: BadgeRequirement;
   };
   /** Twitter handles that should be excluded from badge lists */
   excludedAccounts: string[];
