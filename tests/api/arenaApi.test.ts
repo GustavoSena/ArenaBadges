@@ -1,8 +1,11 @@
 import { fetchArenabookSocial } from '../../src/api/arenabook';
 import { setupArenaMock, resetMocks, restoreAxios } from './arenaMock';
 import { ArenabookUserResponse } from '../../src/types/interfaces';
-
-describe.skip('Arena API Client', () => {
+import logger from '../../src/utils/logger';
+jest.spyOn(logger, 'log').mockImplementation(() => {});
+jest.spyOn(logger, 'verboseLog').mockImplementation(() => {});
+jest.spyOn(logger, 'error').mockImplementation(() => {});
+describe('Arena API Client', () => {
   // Sample test data
   const testAddress = '0x1234567890123456789012345678901234567890';
   const mockUserResponse: ArenabookUserResponse = {

@@ -18,7 +18,7 @@ jest.mock('ethers', () => {
   return {
     ...safeCopy,
     Contract: jest.fn().mockImplementation(() => ({
-      getMugMuPrice: jest.fn().mockResolvedValue(2000000000000000000n) // 2 * 10^18
+      getMugMuPrice: () => 2000000000000000000n // 2 * 10^18
     }))
   };
 });

@@ -23,13 +23,17 @@ jest.mock('path');
 import { sendResults } from '../../src/badges/profiles/sendResults';
 import { BadgeConfig } from '../../src/types/badge';
 import { RunOptions } from '../../src/badges/services/schedulerService';
+import logger from '../../src/utils/logger';
 
+jest.spyOn(logger, 'log').mockImplementation(() => {});
+jest.spyOn(logger, 'verboseLog').mockImplementation(() => {});
+jest.spyOn(logger, 'error').mockImplementation(() => {});
 // Create proper mock types
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedPath = path as jest.Mocked<typeof path>;
 
-describe.skip('apiService', () => {
+describe('apiService', () => {
   // Setup test data
   const mockBasicHolders = { handles: ['user1', 'user2', 'user3'] };
   const mockUpgradedHolders = { handles: ['user4', 'user5'] };
@@ -134,7 +138,7 @@ describe.skip('apiService', () => {
     mockedFs.existsSync.mockReturnValue(false);
     
     // Call the function with the new signature
-    await sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions);
+    await sendResults(mockBadgeConfig, mockResults, mockOptions, mockApiKey);
     
     // Verify axios.post was called twice (once for each tier)
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
@@ -172,7 +176,7 @@ describe.skip('apiService', () => {
     };
     
     // Call the function with dryRun set to true
-    const result = await sendResults(mockBadgeConfig, mockApiKey, mockResults, dryRunOptions);
+    const result = await sendResults(mockBadgeConfig, mockResults, dryRunOptions, mockApiKey);
     
     // Verify the result contains dry-run status
     expect(result).toEqual({
@@ -189,7 +193,7 @@ describe.skip('apiService', () => {
     const badConfig = { ...mockBadgeConfig, projectName: '' };
     
     // Call the function without a project name and expect it to throw
-    await expect(sendResults(badConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow('Project name is required');
+    await expect(sendResults(badConfig, mockResults, mockOptions, mockApiKey)).rejects.toThrow('Project name is required');
   });
   
   test('should handle API errors gracefully', async () => {
@@ -198,7 +202,7 @@ describe.skip('apiService', () => {
     mockedAxios.post.mockRejectedValue(mockError);
     
     // Call the function and expect it to throw
-    await expect(sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow();
+    await expect(sendResults(mockBadgeConfig, mockResults, mockOptions, mockApiKey)).rejects.toThrow();
     
     // Verify console.error was called
     expect(console.error).toHaveBeenCalled();
@@ -214,7 +218,7 @@ describe.skip('apiService', () => {
     const consoleErrorSpy = jest.spyOn(console, 'error');
     
     // Call the function and expect it to throw
-    await expect(sendResults(mockBadgeConfig, mockApiKey, mockResults, mockOptions)).rejects.toThrow('API request failed');
+    await expect(sendResults(mockBadgeConfig, mockResults, mockOptions, mockApiKey)).rejects.toThrow('API request failed');
     
     // Verify console.error was called
     expect(consoleErrorSpy).toHaveBeenCalled();
