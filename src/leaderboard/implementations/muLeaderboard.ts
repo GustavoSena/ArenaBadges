@@ -102,8 +102,7 @@ export class MuLeaderboard extends BaseLeaderboard {
 
     for (const holding of nftHoldings) {
       // Dynamic minimum balances based on MUG/MU price
-
-      let minBalance = Math.ceil(100 / await this.getTokenMultiplier(holding.tokenSymbol));
+      let minBalance = (holding.tokenSymbol.toLowerCase() === 'mu pups') ? 1 : Math.ceil(100 / await this.getTokenMultiplier(holding.tokenSymbol));
       const formattedBalance = +holding.tokenBalance;
       if (formattedBalance === 0) 
         continue; // Skip tokens with zero balance

@@ -1,5 +1,9 @@
 import { describe, expect, test } from '@jest/globals';
+import logger from '../../../src/utils/logger';
 
+jest.spyOn(logger, 'log').mockImplementation(() => {});
+jest.spyOn(logger, 'verboseLog').mockImplementation(() => {});
+jest.spyOn(logger, 'error').mockImplementation(() => {});
 // Create a simplified version of the filtering function to test
 function filterBasicHandles(basicHandles: string[], upgradedHandles: string[], permanentAccounts: string[], excludeBasicForUpgraded: boolean): string[] {
   let filteredBasicHandles = basicHandles;
