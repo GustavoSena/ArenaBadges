@@ -386,8 +386,8 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     // Step 11: Add permanent accounts to both lists
     logger.log('Adding permanent accounts to badge lists...');
     for (const handle of permanentAccounts) {
-      basicEligibleHandles.add(handle);
-      upgradedEligibleHandles.add(handle);
+      basicEligibleHandles.add(handle.toLowerCase());
+      upgradedEligibleHandles.add(handle.toLowerCase());
     }
     
     // Step 12: Collect wallet addresses for eligible handles
