@@ -208,6 +208,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
         } catch (error) {
           if (error instanceof Error) logger.error(`Error processing wallet ${address}:`, error.message);
           else logger.verboseLog(`Error processing wallet ${address}: ${error}`, `Error processing wallet ${address}`);
+          throw error;
         }
 
       }));

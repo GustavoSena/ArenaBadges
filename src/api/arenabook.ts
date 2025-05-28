@@ -21,11 +21,7 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
-        if (error.response.status === 404) {
-          logger.log(`No data found at ${url}`);
-          // No need to retry for 404 errors
-          return null;
-        } else if (error.response.status === 429) {
+        if (error.response.status === 429 || error.response.status === 504) {
           // Rate limit error - always propagate these
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
@@ -91,7 +87,7 @@ export async function fetchTwitterProfilePicture(twitterHandle: string): Promise
  * Fetch Arenabook social profile for a given address
  */
 export async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
-  if (!address) return null;
+  if (!address) throw new Error('Address is required');
   try {
     const data = await makeApiRequestWithRetry<ArenabookUserResponse[]>(
       `${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`,
