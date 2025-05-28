@@ -123,6 +123,7 @@ export async function fetchTokenHoldersFromSnowtrace(
       } catch (error) {
         logger.error(`Error fetching token holders page ${page}:`, error);
         hasMorePages = false;
+        throw error;
       }
     }
     
@@ -133,6 +134,6 @@ export async function fetchTokenHoldersFromSnowtrace(
     return holders;
   } catch (error) {
     logger.error(`Error fetching token holders for ${tokenAddress}:`, error);
-    return [];
+    throw error;
   }
 }

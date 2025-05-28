@@ -236,13 +236,12 @@ export async function fetchTokenBalanceWithEthers(
         await sleep(REQUEST_DELAY_MS);
       } else {
         logger.error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries:`, error);
-        throw error;
+        throw new Error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries`);
       }
     }
   }
   
-  // If all retries failed, return 0
-  return 0;
+  throw new Error(`Failed to fetch token balance for address ${holderAddress} after ${MAX_RETRIES} retries`);
 }
 
 /**
@@ -305,7 +304,7 @@ export async function fetchTokenBalancesWithEthers(
           await sleep(REQUEST_DELAY_MS);
         } else {
           logger.error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries. Skipping batch.`);
-          throw error;
+          throw new Error(`Failed to process batch after ${MAX_BATCH_RETRIES} retries`);
         }
       }
     }

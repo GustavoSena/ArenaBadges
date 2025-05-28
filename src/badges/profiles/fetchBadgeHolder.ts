@@ -230,6 +230,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
           
         } catch (error) {
           logger.error(`Error processing wallet ${walletAddress}:`, error);
+          throw error;
         }
         
       }));

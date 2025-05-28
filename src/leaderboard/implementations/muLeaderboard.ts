@@ -134,7 +134,7 @@ export class MuLeaderboard extends BaseLeaderboard {
     } catch (error) {
       logger.error('Error getting MUG/MU price:', error);
       // Default fallback price if contract call fails
-      return 2.0;
+      return 20;
     }
   }
   
