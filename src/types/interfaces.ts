@@ -20,8 +20,7 @@ export interface TokenHolder {
 
 export interface NftHolder {
   address: string;
-  tokenCount: number;
-  tokenName: string;
+  holding: NftHolding;
 }
 
 // Social profile interfaces
