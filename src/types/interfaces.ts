@@ -35,6 +35,7 @@ export interface StarsArenaUserResponse {
     id: string;
     twitterHandle: string;
     twitterPicture: string;
+    dynamicAddress?: string;
   };
 }
 

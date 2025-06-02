@@ -10,13 +10,13 @@ import { BATCH_SIZE, REQUEST_DELAY_MS, AVALANCHE_RPC_URL } from '../../types/con
 
 // Import from API modules
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
-import { fetchTwitterProfilePicture, fetchArenabookSocial } from '../../api/arenabook';
+import { fetchTwitterProfilePicture, fetchArenabookSocial, fetchArenaAddressForHandle } from '../../api/arenabook';
 
 // Import shared utility functions
 import {saveLeaderboard, processWalletHoldings} from '../utils/leaderboardUtils';
 import { fetchTokenHolders, sleep } from '../../utils/helpers';
 import { ProjectConfig, AppConfig } from '../../utils/config';
-import { getArenaAddressForHandle, loadWalletMapping } from '../../utils/walletMapping';
+import { loadWalletMapping } from '../../utils/walletMapping';
 import { saveLeaderboardHtml } from '../../utils/htmlGenerator';
 import logger from '../../utils/logger';
 
@@ -156,23 +156,42 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
     
     const arenaPictureMapping = new Map<string, string>();
     if(sumOfBalances){
-      for (const handle of userWallets.keys()){
-        logger.verboseLog(`Fetching Arena profile for handle ${handle}...`);
-        const social = await getArenaAddressForHandle(handle);
+      const handles = Array.from(userWallets.keys());
+      logger.log(`Processing ${handles.length} handles to fetch Arena profiles...`);
+      
+      let handlePromises: Promise<void>[] = [];
+      // Process handles in batches to avoid rate limiting
+      for (let i = 0; i < handles.length; i += BATCH_SIZE) {
+        const batch = handles.slice(i, i + BATCH_SIZE);
         
-        if (social) {
-          arenaPictureMapping.set(social.address, social.picture_url);
-          allAddresses.delete(social.address);
-          if (!userWallets.get(handle)!.has(social.address)) {
-            logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
-            userWallets.get(handle)!.add(social.address);
+        logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(handles.length / BATCH_SIZE)}...`);
+        
+        // Process handles in parallel with rate limiting
+        handlePromises.push(...batch.map(async (handle) => {
+          try {
+            logger.verboseLog(`Fetching Arena profile for handle ${handle}...`);
+            const social = await fetchArenaAddressForHandle(handle);
+            
+            if (social) {
+              arenaPictureMapping.set(social.address, social.picture_url);
+              allAddresses.delete(social.address);
+              if (!userWallets.get(handle)!.has(social.address)) {
+                logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
+                userWallets.get(handle)!.add(social.address);
+              }
+            }
+            else 
+              logger.verboseLog(`No Arena address found for handle ${handle}`);
+          } catch (error) {
+            logger.error(`Error processing handle ${handle}:`, error);
+            // Don't throw the error to allow other handles to be processed
           }
-        }
-        else 
-          logger.verboseLog(`No Arena address found for handle ${handle}`);
-        
-        await sleep(200);
+        }));
+
+        await sleep(REQUEST_DELAY_MS);
       }
+      
+      await Promise.all(handlePromises);
     }
 
     // Process addresses that haven't been processed yet

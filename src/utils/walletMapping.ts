@@ -1,7 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import axios from 'axios';
-import { ArenaWalletResponse } from '../types/interfaces';
+import fs from 'fs';
+import path from 'path';
 import logger from './logger';
 
 /**
@@ -63,51 +61,50 @@ export function loadWalletMapping(filename?: string, projectId?: string): Record
 }
 
 /**
- * Get the inverse mapping (Twitter handle to wallet address)
- * @param walletMapping The wallet-to-twitter mapping
- * @returns A map of Twitter handles to sets of wallet addresses
+ * Get a mapping of Twitter handles to wallet addresses
+ * @param walletMapping A record mapping wallet addresses to Twitter handles, or a filename to load from
+ * @returns A map of Twitter handles to wallet addresses
  */
-export function getHandleToWalletMapping(walletMapping: Record<string, string>): Map<string, Set<string>> {
-  const handleToWallet: Map<string, Set<string>> = new Map<string, Set<string>>();
+export function getHandleToWalletMapping(walletMapping: Record<string, string> | string): Map<string, Set<string>> {
+  const handleToWallet = new Map<string, Set<string>>();
   
-  for (const [address, handle] of Object.entries(walletMapping)) {
-    logger.verboseLog(`Mapping ${address} to ${handle}`);
-    const normalizedHandle = handle.toLowerCase();
-    const normalizedAddress = address.toLowerCase();
-    
-    if (!handleToWallet.has(normalizedHandle)) {
-      handleToWallet.set(normalizedHandle, new Set<string>());
+  // If walletMapping is a string, treat it as a filename
+  if (typeof walletMapping === 'string') {
+    try {
+      const configPath = path.resolve(process.cwd(), 'config', walletMapping);
+      const rawData = fs.readFileSync(configPath, 'utf8');
+      const data = JSON.parse(rawData);
+
+      // Process each entry in the mapping file
+      for (const [handle, addresses] of Object.entries(data)) {
+        const normalizedHandle = handle.toLowerCase();
+        const addressSet = new Set<string>();
+        
+        // Convert addresses object to a Set of normalized addresses
+        for (const address of Object.values(addresses as Record<string, string>)) {
+          const normalizedAddress = address.toLowerCase();
+          addressSet.add(normalizedAddress);
+        }
+        
+        handleToWallet.set(normalizedHandle, addressSet);
+      }
+    } catch (error) {
+      logger.error(`Error loading wallet mapping from ${walletMapping}:`, error);
     }
-    
-    handleToWallet.get(normalizedHandle)!.add(normalizedAddress);
+  } else {
+    // Process the wallet-to-handle mapping to create a handle-to-wallet mapping
+    for (const [address, handle] of Object.entries(walletMapping)) {
+      const normalizedHandle = handle.toLowerCase();
+      const normalizedAddress = address.toLowerCase();
+      
+      if (!handleToWallet.has(normalizedHandle)) {
+        handleToWallet.set(normalizedHandle, new Set<string>());
+      }
+      
+      handleToWallet.get(normalizedHandle)!.add(normalizedAddress);
+    }
   }
   
   return handleToWallet;
 }
 
-/**
- * Fetch a wallet address for a Twitter handle from the Arena API
- * @param handle Twitter handle to lookup
- * @returns The wallet address or null if not found
- */
-export async function getArenaAddressForHandle(handle: string): Promise<ArenaWalletResponse> {
-  
-  try {
-    const apiUrl = `https://api.starsarena.com/user/handle?handle=${handle}`;
-    logger.verboseLog(`Fetching Arena address for handle: ${handle}`);
-    
-    const response = await axios.get(apiUrl);
-    
-    if (response.data && response.data.user && response.data.user.dynamicAddress) {
-      const address = response.data.user.dynamicAddress;
-      const picture_url = response.data.user.twitter_pfp_url;
-
-      return { address: address.toLowerCase(), picture_url};
-    }
-
-    return { address: "", picture_url: ""};
-  } catch (error) {
-    logger.error(`Error fetching Arena address for handle ${handle}:`, error);
-    throw error;
-  }
-}

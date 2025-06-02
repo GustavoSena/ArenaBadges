@@ -1,7 +1,7 @@
 // Token Holder Profiles Fetcher
 import { TokenConfig, NftConfig, TokenHolding, NftHolding } from '../../types/interfaces';
-import { loadWalletMapping, getHandleToWalletMapping, getArenaAddressForHandle } from '../../utils/walletMapping';
-import { fetchArenabookSocial } from '../../api/arenabook';
+import { loadWalletMapping, getHandleToWalletMapping } from '../../utils/walletMapping';
+import { fetchArenaAddressForHandle, fetchArenabookSocial } from '../../api/arenabook';
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
 import { sleep, fetchTokenHolders } from '../../utils/helpers';
 import { updateTokenHoldingsMap, processTokenBalances } from '../../utils/tokenUtils';
@@ -173,22 +173,42 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     
 
     if(sumOfBalances){
-      for (const handle of userWallets.keys()){
-        logger.verboseLog(`Fetching Arena profile for handle ${handle}...`);
+      const handles = Array.from(userWallets.keys());
+      logger.log(`Processing ${handles.length} handles to fetch Arena profiles...`);
+      
+      let promises: Promise<void>[] = [];
+      // Process handles in batches to avoid rate limiting
+      for (let i = 0; i < handles.length; i += BATCH_SIZE) {
+        const batch = handles.slice(i, i + BATCH_SIZE);
         
-        const social = await getArenaAddressForHandle(handle);
+        logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(handles.length / BATCH_SIZE)}...`);
         
-        if (social && social.address) {
-          const normalizedAddress = social.address.toLowerCase();
-          if (!userWallets.get(handle)!.has(normalizedAddress)) {
-            logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
-            userWallets.get(handle)!.add(normalizedAddress);
-          } else 
-            logger.warn(`Address ${normalizedAddress} already exists for handle ${handle}`);
-        } else 
-          logger.warn(`No new Arena address found for handle ${handle}`);
-        await sleep(200);
+        // Process handles in parallel with rate limiting
+        promises.push(...batch.map(async (handle) => {
+          try {
+            logger.verboseLog(`Fetching Arena profile for handle ${handle}...`);
+            
+            const social = await fetchArenaAddressForHandle(handle);
+            
+            if (social && social.address) {
+              const normalizedAddress = social.address.toLowerCase();
+              if (!userWallets.get(handle)!.has(normalizedAddress)) {
+                logger.verboseLog(`Adding Arena address for handle ${handle}: ${social.address}`);
+                userWallets.get(handle)!.add(normalizedAddress);
+              } else 
+                logger.warn(`Address ${normalizedAddress} already exists for handle ${handle}`);
+            } else 
+              logger.warn(`No new Arena address found for handle ${handle}`);
+          } catch (error) {
+            logger.error(`Error processing handle ${handle}:`, error);
+            // Don't throw the error to allow other handles to be processed
+          }
+        }));
+
+        await sleep(REQUEST_DELAY_MS);
       }
+      
+      await Promise.all(promises);
     }
     // Step 8: Process remaining wallets (not in mapping) by fetching Arena profiles
     logger.log('Processing remaining wallets by fetching Arena profiles...');
@@ -414,7 +434,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
       if (userWallets.has(handle) && userWallets.get(handle)!.size > 0) {
         address = Array.from(userWallets.get(handle)!)[0];
       } else {
-        const arenaResponse = await getArenaAddressForHandle(handle);
+        const arenaResponse = await fetchArenaAddressForHandle(handle);
         address = arenaResponse.address || undefined;
       }
       
