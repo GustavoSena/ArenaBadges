@@ -1,12 +1,12 @@
 import axios from 'axios';
-import { ArenabookUserResponse, StarsArenaUserResponse } from '../types/interfaces';
+import { ArenabookUserResponse, StarsArenaUserResponse, ArenaWalletResponse } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 import logger from '../utils/logger';
+import { REQUEST_DELAY_MS } from '../types/constants';
 
 // Constants
 const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
 const STARS_ARENA_API_URL = 'https://api.starsarena.com/user/handle';
-const REQUEST_DELAY_MS = 1000; // 500ms delay between requests
 const MAX_RETRIES = 3;
 
 /**
@@ -26,7 +26,7 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             logger.log(`Rate limit error fetching from ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleep(REQUEST_DELAY_MS * 2); // Use longer delay for rate limits
+            await sleep(REQUEST_DELAY_MS * 4); // Use longer delay for rate limits
           } else {
             const errorMsg = `${errorPrefix} rate limit exceeded after ${MAX_RETRIES} retries`;
             logger.error(errorMsg);
@@ -106,5 +106,32 @@ export async function fetchArenabookSocial(address: string): Promise<ArenabookUs
       throw new Error(`${error.message} for address ${address}`);
     }
     throw error;
+  }
+}
+
+/**
+ * Fetch a wallet address for a Twitter handle from the Stars Arena API
+ * @param handle Twitter handle to lookup
+ * @returns The wallet address and profile picture URL
+ */
+export async function fetchArenaAddressForHandle(handle: string): Promise<ArenaWalletResponse> {
+  try {
+    const data = await makeApiRequestWithRetry<StarsArenaUserResponse>(
+      `${STARS_ARENA_API_URL}/?handle=${handle.toLowerCase()}`,
+      'Stars Arena API'
+    );
+    
+    if (data?.user?.dynamicAddress) {
+      return { 
+        address: data.user.dynamicAddress.toLowerCase(), 
+        picture_url: data.user.twitterPicture || ''
+      };
+    }
+
+    return { address: '', picture_url: '' };
+  } catch (error) {
+    // Log the error but don't throw it - this allows batch processing to continue
+    logger.error(`Error fetching Arena address for handle ${handle}:`, error);
+    return { address: '', picture_url: '' };
   }
 }
