@@ -161,10 +161,14 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
 
     // Step 6: Create a map of Twitter handle to addresses
     let userWallets = new Map<string, Set<string>>();
-    if (isDatabaseInitialized()) {
+    
+    // Check if this project uses Supabase for wallet lookups
+    const useSupabase = appConfig.badgeConfig.useSupabase === true;
+    
+    if (useSupabase && isDatabaseInitialized()) {
       try {
         let wallets = Array.from(allAddresses);
-        logger.log(`Fetching wallet mappings from database for ${wallets.length} wallets...`);
+        logger.log(`Project uses Supabase. Fetching wallet mappings from database for ${wallets.length} wallets...`);
         
         // Process wallets in batches of 100
         const BATCH_SIZE_DB = 100;

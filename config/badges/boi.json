@@ -35,5 +35,6 @@
     }
   },
   "excludeBasicForUpgraded": true,
-  "sumOfBalances": false
+  "sumOfBalances": false,
+  "useSupabase": true
 }
