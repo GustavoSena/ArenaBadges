@@ -10,6 +10,9 @@ export class DBInitError extends Error {
 let supabase :SupabaseClient<Database,"public"> 
 
 export function setupSupabase(url: string, key: string) {
+  if (!url || !key) {
+    return
+  }
   supabase = createClient<Database>(url, key)
   return supabase;
 }
