@@ -2,12 +2,14 @@ import axios from 'axios';
 import { ArenabookUserResponse, StarsArenaUserResponse, ArenaWalletResponse } from '../types/interfaces';
 import { sleep } from '../utils/helpers';
 import logger from '../utils/logger';
-import { REQUEST_DELAY_MS } from '../types/constants';
+import { REQUEST_DELAY_MS_ARENA } from '../types/constants';
 
 // Constants
-const ARENABOOK_API_URL = 'https://api.arena.trade/user_info';
+const ARENA_API_URL = 'https://data.arena.trade/user-trades/user_by_address';
 const STARS_ARENA_API_URL = 'https://api.starsarena.com/user/handle';
 const MAX_RETRIES = 3;
+
+
 
 /**
  * Generic function to make API requests with retry logic
@@ -17,7 +19,16 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
   
   while (retryCount <= MAX_RETRIES) {
     try {
-      const response = await axios.get<T>(url);
+      // Simple request with no authentication needed
+      const response = await axios.get<T>(url, {
+        headers: {
+          'User-Agent': 'PostmanRuntime/7.44.1'
+        }
+      });
+      
+      // Log successful response
+      logger.verboseLog(`Successful response from ${url}`);
+      
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
@@ -26,7 +37,7 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             logger.log(`Rate limit error fetching from ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleep(REQUEST_DELAY_MS * 4); // Use longer delay for rate limits
+            await sleep(REQUEST_DELAY_MS_ARENA * 2); // Use longer delay for rate limits
           } else {
             const errorMsg = `${errorPrefix} rate limit exceeded after ${MAX_RETRIES} retries`;
             logger.error(errorMsg);
@@ -36,7 +47,7 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
           retryCount++;
           if (retryCount <= MAX_RETRIES) {
             logger.log(`Error fetching from ${url} (${error.response.status}). Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-            await sleep(REQUEST_DELAY_MS);
+            await sleep(REQUEST_DELAY_MS_ARENA);
           } else {
             const errorMsg = `${errorPrefix} error (${error.response.status}) after ${MAX_RETRIES} retries`;
             logger.error(errorMsg, error.response.statusText);
@@ -47,7 +58,7 @@ async function makeApiRequestWithRetry<T>(url: string, errorPrefix: string): Pro
         retryCount++;
         if (retryCount <= MAX_RETRIES) {
           logger.log(`Unexpected error for ${url}. Retry ${retryCount}/${MAX_RETRIES} after delay...`);
-          await sleep(REQUEST_DELAY_MS);
+          await sleep(REQUEST_DELAY_MS_ARENA);
         } else {
           const errorMsg = `${errorPrefix} unexpected error after ${MAX_RETRIES} retries`;
           logger.error(errorMsg, error);
@@ -89,14 +100,19 @@ export async function fetchTwitterProfilePicture(twitterHandle: string): Promise
 export async function fetchArenabookSocial(address: string): Promise<ArenabookUserResponse | null> {
   if (!address) throw new Error('Address is required');
   try {
-    const data = await makeApiRequestWithRetry<ArenabookUserResponse[]>(
-      `${ARENABOOK_API_URL}?user_address=eq.${address.toLowerCase()}`,
+    const data = await makeApiRequestWithRetry<ArenabookUserResponse>(
+      `${ARENA_API_URL}/${address.toLowerCase()}`,
       'Arena API'
     );
     
-    // The API returns an array, but we expect only one result for a specific address
-    if (data && data.length > 0) {
-      return data[0];
+    if (data) {
+      // Extract only the two fields we care about
+      // Use type assertion to access the full response properties
+      const fullResponse = data as any;
+      return {
+        twitter_handle: fullResponse.twitter_handle_lc || fullResponse.twitter_handle, // Prefer lowercase version if available
+        twitter_pfp_url: fullResponse.twitter_pfp_url
+      };
     }
     
     return null;

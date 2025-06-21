@@ -27,15 +27,17 @@
   "permanentAccounts": [
     "mucoinofficial",
     "ceojonvaughn",
-    "aunkitanandi"
+    "aunkitanandi",
+    "roti_dao"
   ],
   "api": {
-    "baseUrl": "http://api.arena.social/badges",
+    "baseUrl": "https://api.starsarena.com/badges",
     "endpoints": {
       "basic": "mu-tier-1",
       "upgraded": "mu-tier-2"
     }
   },
   "excludeBasicForUpgraded": false,
-  "sumOfBalances": true
+  "sumOfBalances": true,
+  "useSupabase": false
 }

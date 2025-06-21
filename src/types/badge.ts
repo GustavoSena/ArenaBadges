@@ -32,6 +32,8 @@ export interface BadgeConfig {
   excludeBasicForUpgraded: boolean;
   /** Whether to sum balances across wallets belonging to the same user */
   sumOfBalances: boolean;
+  /** Whether to use Supabase database for wallet lookups */
+  useSupabase?: boolean;
 }
 
 export interface BadgeApiConfig {
