@@ -28,7 +28,7 @@
     "Boithebear"
   ],
   "api": {
-    "baseUrl": "http://api.arena.social/badges",
+    "baseUrl": "https://api.starsarena.com/badges",
     "endpoints": {
       "basic": "bois-club",
       "upgraded": "bad-bois"
