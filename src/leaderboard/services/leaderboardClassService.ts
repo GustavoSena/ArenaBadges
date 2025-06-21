@@ -6,7 +6,7 @@ import { TokenHolding, NftHolding } from '../../types/interfaces';
 import { HolderEntry, Leaderboard } from '../../types/leaderboard';
 import { BaseLeaderboard } from '../../types/leaderboard';
 import { createLeaderboard } from './leaderboardFactory';
-import { BATCH_SIZE, REQUEST_DELAY_MS, AVALANCHE_RPC_URL } from '../../types/constants';
+import { BATCH_SIZE, REQUEST_DELAY_MS, AVALANCHE_RPC_URL, BATCH_SIZE_ARENA, REQUEST_DELAY_MS_ARENA } from '../../types/constants';
 
 // Import from API modules
 import { fetchNftHoldersFromEthers } from '../../api/blockchain';
@@ -161,10 +161,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       
       let handlePromises: Promise<void>[] = [];
       // Process handles in batches to avoid rate limiting
-      for (let i = 0; i < handles.length; i += BATCH_SIZE) {
-        const batch = handles.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < handles.length; i += BATCH_SIZE_ARENA) {
+        const batch = handles.slice(i, i + BATCH_SIZE_ARENA);
         
-        logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(handles.length / BATCH_SIZE)}...`);
+        logger.verboseLog(`Processing batch ${i / BATCH_SIZE_ARENA + 1} of ${Math.ceil(handles.length / BATCH_SIZE_ARENA)}...`);
         
         // Process handles in parallel with rate limiting
         handlePromises.push(...batch.map(async (handle) => {
@@ -188,7 +188,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
           }
         }));
 
-        await sleep(REQUEST_DELAY_MS);
+        await sleep(REQUEST_DELAY_MS_ARENA);
       }
       
       await Promise.all(handlePromises);
@@ -198,10 +198,10 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
     const addressesToProcess = Array.from(allAddresses);
     logger.verboseLog(`Fetching Arena profiles for ${addressesToProcess.length} addresses...`);
     let promises: Promise<void>[] = [];
-    for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE) {
-      const batch = addressesToProcess.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < addressesToProcess.length; i += BATCH_SIZE_ARENA) {
+      const batch = addressesToProcess.slice(i, i + BATCH_SIZE_ARENA);
       
-      logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(addressesToProcess.length / BATCH_SIZE)}...`);
+      logger.verboseLog(`Processing batch ${i / BATCH_SIZE_ARENA + 1} of ${Math.ceil(addressesToProcess.length / BATCH_SIZE_ARENA)}...`);
       
       // Process wallets in parallel with rate limiting
       promises.push(...batch.map(async (address) => {
@@ -233,7 +233,7 @@ export async function calculateHolderPoints(leaderboard: BaseLeaderboard, projec
       }));
       
       // Add delay between requests to avoid rate limiting
-      await sleep(REQUEST_DELAY_MS);
+      await sleep(REQUEST_DELAY_MS_ARENA);
     }
     
     // Wait for all promises in this batch to complete before moving to the next batch
@@ -318,8 +318,8 @@ async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard): Pro
   }
   
   // Process filtered entries in batches to avoid rate limiting
-  for (let i = 0; i < entriesToUpdate.length; i += BATCH_SIZE) {
-    const batch = entriesToUpdate.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < entriesToUpdate.length; i += BATCH_SIZE_ARENA) {
+    const batch = entriesToUpdate.slice(i, i + BATCH_SIZE_ARENA);
     const batchPromises = [];    
     for (const { entry } of batch) {
       batchPromises.push((async () => {
@@ -341,10 +341,10 @@ async function fetchProfilePicturesForLeaderboard(leaderboard: Leaderboard): Pro
     // Wait for all promises in this batch to complete
     await Promise.all(batchPromises);
     
-    logger.verboseLog(`Updated profile pictures for ${batch.length} entries in batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(entriesToUpdate.length / BATCH_SIZE)}`);
+    logger.verboseLog(`Updated profile pictures for ${batch.length} entries in batch ${Math.floor(i / BATCH_SIZE_ARENA) + 1} of ${Math.ceil(entriesToUpdate.length / BATCH_SIZE_ARENA)}`);
 
     // Add a small delay between batches to avoid rate limiting
-    await sleep(REQUEST_DELAY_MS);
+    await sleep(REQUEST_DELAY_MS_ARENA);
   }
   
   logger.verboseLog(`Completed fetching profile pictures for leaderboard entries`);

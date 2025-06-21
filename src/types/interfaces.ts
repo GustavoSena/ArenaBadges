@@ -65,10 +65,15 @@ export interface Database {
     Tables: {
       users: {
         Row: {               // the data expected from .select()
-          id: number
+          twitter_id: number
           twitter_handle: string
+          twitter_name: string
           twitter_image_url: string
-          wallet: string
+          social_score: number
+          wallet_score: number
+          total_score: number
+          wallet: string | null
+          state: string
           updated_at: string
         }
       }

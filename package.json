@@ -13,6 +13,7 @@
     "mu:run:dry-run:once:verbose": "ts-node src/project.ts run mu --dry-run --once --verbose",
     "mu:badge": "ts-node src/project.ts badge mu",
     "mu:badge:once": "ts-node src/project.ts badge mu --once",
+    "mu:badge:once:verbose": "ts-node src/project.ts badge mu --once --verbose",
     "mu:badge:verbose": "ts-node src/project.ts badge mu --verbose",
     "mu:badge:dry-run": "ts-node src/project.ts badge mu --dry-run",
     "mu:badge:dry-run:once": "ts-node src/project.ts badge mu --dry-run --once",

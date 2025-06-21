@@ -19,6 +19,7 @@ import { setupSnowtraceProvider } from './api/snowtrace';
 import { setupLeaderboardProvider } from './leaderboard/services/leaderboardClassService';
 import { setupAlchemy } from './api/alchemy';
 import logger, { setVerbose } from './utils/logger';
+import { setupSupabase } from './api/supabase';
 
 // Load environment variables
 dotenv.config();
@@ -87,12 +88,15 @@ function setupEnvVariables(): boolean {
   const MORALIS_API_KEYS = process.env.MORALIS_API_KEYS || ''; 
   const SNOWTRACE_API_KEY = process.env.SNOWTRACE_API_KEY || '';
   const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || '';
+  const SUPABASE_URL = process.env.SUPABASE_URL || '';
+  const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
   setupMoralisProvider(MORALIS_API_KEYS);
   setupSnowtraceProvider(SNOWTRACE_API_KEY);
   setupProvider(ALCHEMY_API_KEY);
   setupLeaderboardProvider(ALCHEMY_API_KEY);
-  setupAlchemy(ALCHEMY_API_KEY);  
-  return (MORALIS_API_KEYS || SNOWTRACE_API_KEY || ALCHEMY_API_KEY)  ? true : false;
+  setupAlchemy(ALCHEMY_API_KEY);
+  setupSupabase(SUPABASE_URL, SUPABASE_KEY);
+  return (MORALIS_API_KEYS || SNOWTRACE_API_KEY || ALCHEMY_API_KEY) ? true : false;
 } 
 
 /**
@@ -179,8 +183,8 @@ async function runProject(
     if ((component === 'all' || component === 'leaderboard') && configs.leaderboard) {
       // Add a delay before starting the leaderboard scheduler to prevent simultaneous API requests
       if (component === 'all' && configs.badge && !runOnce) {
-        logger.log('Waiting 60 seconds before starting leaderboard scheduler to prevent API rate limiting...');
-        await new Promise(resolve => setTimeout(resolve, 60000));
+        logger.log('Waiting 180 seconds before starting leaderboard scheduler to prevent API rate limiting...');
+        await new Promise(resolve => setTimeout(resolve, 180000));
       }
       
       const leaderboardType = getLeaderboardTypeFromString(projectName);

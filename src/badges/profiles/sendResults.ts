@@ -1,12 +1,15 @@
 // Send Results Module
-import * as fs from 'fs';
-import * as path from 'path';
 import axios from 'axios';
+import { setTimeout } from 'timers/promises';
 import { BadgeConfig } from '../../types/badge';
 import { RunOptions } from '../services/schedulerService';
-import { ensureOutputDirectory } from '../../utils/helpers';
 import { exportWalletAddresses } from '../utils/exportUtils';
 import logger from '../../utils/logger';
+
+// Constants
+const MAX_RETRIES = 3;
+const REQUEST_TIMEOUT_MS = 10000; // 10 seconds
+const RETRY_DELAY_MS = 2000; // 2 seconds
 
 /**
  * Send results to the API endpoints
@@ -17,6 +20,62 @@ import logger from '../../utils/logger';
  * @param options.dryRun If true, print JSON to console instead of sending to API
  * @returns Promise resolving to the API response
  */
+/**
+ * Makes a POST request with retry logic and timeout handling
+ * @param url The URL to send the request to
+ * @param data The data to send in the request body
+ * @param requestType Description of the request type for logging
+ * @returns The response from the server
+ */
+async function makePostRequestWithRetry(url: string, data: any, requestType: string): Promise<any> {
+  let retryCount = 0;
+  
+  while (retryCount <= MAX_RETRIES) {
+    try {
+      logger.log(`Attempt ${retryCount + 1}/${MAX_RETRIES + 1} to send ${requestType}...`);
+      
+      // Set up the request with timeout
+      const response = await axios.post(url, data, {
+        headers: {
+          'accept': '*/*',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+          'Content-Type': 'application/json'
+        },
+        timeout: REQUEST_TIMEOUT_MS
+      });
+      
+      logger.log(`✅ Successfully sent ${requestType}`);
+      return response;
+    } catch (error) {
+      retryCount++;
+      
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          logger.log(`⚠️ Request timeout for ${requestType}. Retry ${retryCount}/${MAX_RETRIES}...`);
+        } else if (error.response) {
+          logger.log(`⚠️ Server returned ${error.response.status} for ${requestType}. Retry ${retryCount}/${MAX_RETRIES}...`);
+        } else {
+          logger.log(`⚠️ Network error for ${requestType}: ${error.message}. Retry ${retryCount}/${MAX_RETRIES}...`);
+        }
+      } else {
+        logger.log(`⚠️ Unknown error for ${requestType}. Retry ${retryCount}/${MAX_RETRIES}...`);
+      }
+      
+      if (retryCount <= MAX_RETRIES) {
+        // Wait before retrying
+        logger.log(`Waiting ${RETRY_DELAY_MS}ms before next attempt...`);
+        await setTimeout(RETRY_DELAY_MS);
+      } else {
+        logger.log(`❌ Failed to send ${requestType} after ${MAX_RETRIES + 1} attempts`);
+        throw error;
+      }
+    }
+  }
+  
+  // This should never be reached due to the throw in the loop
+  throw new Error(`Failed to send ${requestType} after ${MAX_RETRIES + 1} attempts`);
+}
+
 export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders: string[], upgradedHolders?: string[], basicAddresses?: string[], upgradedAddresses?: string[], timestamp: string }, options: RunOptions, apiKey?: string): Promise<any> {
   // Get project-specific API key if project name is provided
   try {
@@ -68,14 +127,12 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
     }
     
     const basicData = {
-      handles: basicHandles,
-      timestamp: data.timestamp || new Date().toISOString()
+      handles: basicHandles
     };
     
     // Only create upgraded data if upgradedHolders exists
     const upgradedData = data.upgradedHolders ? {
-      handles: data.upgradedHolders,
-      timestamp: data.timestamp || new Date().toISOString()
+      handles: data.upgradedHolders
     } : null;
     
     // Construct endpoints with key as query parameter
@@ -116,22 +173,18 @@ export async function sendResults(badgeConfig: BadgeConfig, data: { basicHolders
       // Send data to both endpoints
       logger.log(`Sending basic badge holders to ${API_BASE_URL}/${BASIC_ENDPOINT}`);
       logger.log(`Basic badge holders: ${basicData.handles.length}`);
-      const basicResponse = await axios.post(basicEndpoint, basicData, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      
+      // Make the POST request for basic badge holders with retry logic
+      const basicResponse = await makePostRequestWithRetry(basicEndpoint, basicData, 'basic badge holders');
       
       // Only send upgraded data if it exists
       let upgradedResponse = null;
       if (upgradedData) {
         logger.log(`Sending upgraded badge holders to ${API_BASE_URL}/${UPGRADED_ENDPOINT}`);
         logger.log(`Upgraded badge holders: ${upgradedData.handles.length}`);
-        upgradedResponse = await axios.post(upgradedEndpoint, upgradedData, {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        
+        // Make the POST request for upgraded badge holders with retry logic
+        upgradedResponse = await makePostRequestWithRetry(upgradedEndpoint, upgradedData, 'upgraded badge holders');
       } else {
         logger.log('No upgraded badge data to send');
       }

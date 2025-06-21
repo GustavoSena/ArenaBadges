@@ -4,16 +4,16 @@
       "enableLeaderboard": true,
       "scheduler": {
         "badgeIntervalHours": 6,
-        "badgeRetryIntervalHours": 2,
-        "leaderboardIntervalHours": 3,
-        "leaderboardRetryIntervalHours": 2
+        "badgeRetryIntervalHours": 3,
+        "leaderboardIntervalHours": 4,
+        "leaderboardRetryIntervalHours": 3
       },
       "walletMappingFile": "mappings/mu_wallet_mapping.json"
     },
     "boi": {
       "scheduler": {
-        "badgeIntervalHours": 3,
-        "badgeRetryIntervalHours": 1
+        "badgeIntervalHours": 4,
+        "badgeRetryIntervalHours": 2
       },
       "walletMappingFile": "mappings/boi_wallet_mapping.json"
     }

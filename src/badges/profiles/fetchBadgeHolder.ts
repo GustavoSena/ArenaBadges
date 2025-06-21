@@ -7,7 +7,8 @@ import { sleep, fetchTokenHolders } from '../../utils/helpers';
 import { updateTokenHoldingsMap, processTokenBalances } from '../../utils/tokenUtils';
 import { AppConfig } from '../../utils/config';
 import logger from '../../utils/logger';
-import { BATCH_SIZE, REQUEST_DELAY_MS } from '../../types/constants';
+import { BATCH_SIZE_ARENA, REQUEST_DELAY_MS, REQUEST_DELAY_MS_ARENA } from '../../types/constants';
+import { isDatabaseInitialized, queryWallets } from '../../api/supabase';
 // Export the HolderResults interface for use in other files
 export interface HolderResults {
   basicHolders: string[];
@@ -156,21 +157,53 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
         walletToNftHoldings.get(holder.address)!.set(nft.address, holder.holding);
       }
     }
-    
-    // Step 6: Create a map of Twitter handle to address holdings
-    let userWallets = new Map<string, Set<string>>();
-    // Get wallet mapping file path from config (if it exists)
-    const walletMappingFile = appConfig.projectConfig.walletMappingFile;
+    let allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ... nftValidAddresses]);
 
-    if (walletMappingFile) {
-      logger.log(`Loading wallet mapping from ${walletMappingFile}...`);
-      // Initialize wallet mapping variables
-      let walletMapping: Record<string, string> = {};
-      walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
-      userWallets = getHandleToWalletMapping(walletMapping);
-      logger.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
-    } else logger.log(`No wallet mapping file specified. Skipping wallet mapping.`);
+    // Step 6: Create a map of Twitter handle to addresses
+    let userWallets = new Map<string, Set<string>>();
     
+    // Check if this project uses Supabase for wallet lookups
+    const useSupabase = appConfig.badgeConfig.useSupabase === true;
+    
+    if (useSupabase && isDatabaseInitialized()) {
+      try {
+        let wallets = Array.from(allAddresses);
+        logger.log(`Project uses Supabase. Fetching wallet mappings from database for ${wallets.length} wallets...`);
+        
+        // Process wallets in batches of 100
+        const BATCH_SIZE_DB = 100;
+        
+        for (let i = 0; i < wallets.length; i += BATCH_SIZE_DB) {
+          const batch = wallets.slice(i, i + BATCH_SIZE_DB);
+          logger.verboseLog(`Processing batch ${Math.floor(i/BATCH_SIZE_DB) + 1}/${Math.ceil(wallets.length/BATCH_SIZE_DB)} (${batch.length} wallets)...`);
+          
+          const batchResults = await queryWallets(batch);
+          
+          // Add batch results to the userWallets map
+          batchResults.forEach(wallet => {
+            userWallets.set(wallet.twitter_handle.toLowerCase(), new Set<string>([wallet.wallet.toLowerCase()]));
+            logger.verboseLog(`Found wallet mapping for ${wallet.twitter_handle} (${wallet.wallet})`);
+          });
+        }
+        await sleep(REQUEST_DELAY_MS);
+      } catch (error) {
+        logger.error(`Error fetching wallet mappings from database:`, error);
+        throw error;
+      }
+    } 
+    // Get wallet mapping file path from config (if it exists)
+    if (userWallets.size === 0){
+      const walletMappingFile = appConfig.projectConfig.walletMappingFile;
+
+      if (walletMappingFile) {
+        logger.log(`Loading wallet mapping from ${walletMappingFile}...`);
+        // Initialize wallet mapping variables
+        let walletMapping: Record<string, string> = {};
+        walletMapping = loadWalletMapping(walletMappingFile, appConfig.projectName);
+        userWallets = getHandleToWalletMapping(walletMapping);
+        logger.log(`Loaded ${Object.keys(walletMapping).length} wallet-to-handle mappings`);
+      } else logger.log(`No wallet mapping file specified. Skipping wallet mapping.`);
+    }
 
     if(sumOfBalances){
       const handles = Array.from(userWallets.keys());
@@ -178,10 +211,10 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
       
       let promises: Promise<void>[] = [];
       // Process handles in batches to avoid rate limiting
-      for (let i = 0; i < handles.length; i += BATCH_SIZE) {
-        const batch = handles.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < handles.length; i += BATCH_SIZE_ARENA) {
+        const batch = handles.slice(i, i + BATCH_SIZE_ARENA);
         
-        logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(handles.length / BATCH_SIZE)}...`);
+        logger.verboseLog(`Processing batch ${i / BATCH_SIZE_ARENA + 1} of ${Math.ceil(handles.length / BATCH_SIZE_ARENA)}...`);
         
         // Process handles in parallel with rate limiting
         promises.push(...batch.map(async (handle) => {
@@ -205,7 +238,7 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
           }
         }));
 
-        await sleep(REQUEST_DELAY_MS);
+        await sleep(REQUEST_DELAY_MS_ARENA);
       }
       
       await Promise.all(promises);
@@ -214,9 +247,10 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     logger.log('Processing remaining wallets by fetching Arena profiles...');
         
     // Filter out wallets that are already in the mapping
-    const allAddresses = new Set<string>([...walletToTokenHoldings.keys(), ... nftValidAddresses]);
     userWallets.forEach((value, key) => {
-      allAddresses.delete(key);
+      value.forEach(address => {
+        allAddresses.delete(address.toLowerCase());
+      });
     });
     const addressessToProcess = Array.from(allAddresses).map(address => address.toLowerCase());
     
@@ -224,10 +258,10 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
     
     let promises: Promise<void>[] = [];
     // Process unmapped wallets in batches to avoid rate limiting
-    for (let i = 0; i < addressessToProcess.length; i += BATCH_SIZE) {
-      const batch = addressessToProcess.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < addressessToProcess.length; i += BATCH_SIZE_ARENA) {
+      const batch = addressessToProcess.slice(i, i + BATCH_SIZE_ARENA);
       
-      logger.verboseLog(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(addressessToProcess.length / BATCH_SIZE)}...`);
+      logger.verboseLog(`Processing batch ${i / BATCH_SIZE_ARENA + 1} of ${Math.ceil(addressessToProcess.length / BATCH_SIZE_ARENA)}...`);
       
       // Process wallets in parallel with rate limiting
       promises.push(...batch.map(async (walletAddress) => {
@@ -255,10 +289,11 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
         
       }));
 
-      await sleep(REQUEST_DELAY_MS);
+      await sleep(REQUEST_DELAY_MS_ARENA);
     }
     
     await Promise.all(promises);
+    logger.log(`Found ${userWallets.size} Twitter handles with token or NFT holdings`);
     // Step 9: Check eligibility for basic and upgraded badges
     logger.log('Checking eligibility for badges...');
     
