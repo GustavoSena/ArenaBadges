@@ -446,6 +446,20 @@ export async function fetchBadgeHolders(appConfig: AppConfig): Promise<HolderRes
       upgradedEligibleHandles.add(handle.toLowerCase());
     }
     
+    // Step 11b: Remove excluded accounts from both lists
+    const excludedAccounts = appConfig.badgeConfig.excludedAccounts || [];
+    logger.log(`Removing ${excludedAccounts.length} excluded accounts from badge lists...`);
+    for (const handle of excludedAccounts) {
+      if (basicEligibleHandles.has(handle.toLowerCase())) {
+        basicEligibleHandles.delete(handle.toLowerCase());
+        logger.verboseLog(`Removed excluded account ${handle} from basic list`);
+      }
+      if (upgradedEligibleHandles.has(handle.toLowerCase())) {
+        upgradedEligibleHandles.delete(handle.toLowerCase());
+        logger.verboseLog(`Removed excluded account ${handle} from upgraded list`);
+      }
+    }
+    
     // Step 12: Collect wallet addresses for eligible handles
     const basicEligibleAddresses = new Set<string>();
     const upgradedEligibleAddresses = new Set<string>();
